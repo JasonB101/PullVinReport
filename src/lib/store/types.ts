@@ -1,0 +1,76 @@
+import type { VehicleReport } from "@/lib/report";
+
+export type OrderStatus =
+  /** Checkout session created, payment not confirmed yet. */
+  | "pending"
+  /** Stripe confirmed payment; the VinAudit pull has not finished. */
+  | "paid"
+  /** Report retrieved and available to the customer. */
+  | "fulfilled"
+  /** Paid but the provider could not deliver — needs a retry or refund. */
+  | "failed"
+  /** Checkout abandoned or expired. */
+  | "expired";
+
+export type Order = {
+  id: string;
+  createdAt: string;
+  updatedAt: string;
+  vin: string;
+  email: string;
+  status: OrderStatus;
+  amountCents: number;
+  currency: string;
+  /** Unguessable token that gates access to the report page. */
+  accessToken: string;
+  stripeSessionId: string | null;
+  stripePaymentIntentId: string | null;
+  report: VehicleReport | null;
+  providerError: string | null;
+  fulfilledAt: string | null;
+  emailSentAt: string | null;
+};
+
+export type NewOrder = {
+  vin: string;
+  email: string;
+  amountCents: number;
+  currency: string;
+};
+
+export type OrderPatch = Partial<
+  Pick<
+    Order,
+    | "status"
+    | "email"
+    | "stripeSessionId"
+    | "stripePaymentIntentId"
+    | "report"
+    | "providerError"
+    | "fulfilledAt"
+    | "emailSentAt"
+  >
+>;
+
+export type OrderStats = {
+  total: number;
+  pending: number;
+  fulfilled: number;
+  failed: number;
+  revenueCents: number;
+};
+
+export interface OrderStore {
+  readonly kind: "postgres" | "file";
+  /** Human-readable description of where data is going, shown on /status. */
+  readonly description: string;
+  init(): Promise<void>;
+  create(input: NewOrder): Promise<Order>;
+  getById(id: string): Promise<Order | null>;
+  getByAccessToken(token: string): Promise<Order | null>;
+  getByStripeSessionId(sessionId: string): Promise<Order | null>;
+  update(id: string, patch: OrderPatch): Promise<Order>;
+  list(limit?: number): Promise<Order[]>;
+  stats(): Promise<OrderStats>;
+  ping(): Promise<{ ok: boolean; detail: string }>;
+}
