@@ -1,0 +1,36 @@
+{
+  "name": "pullvinreport",
+  "version": "0.1.0",
+  "private": true,
+  "description": "PullVinReport — consumer VIN history reports powered by the VinAudit Vehicle History API",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "node --experimental-strip-types --no-warnings --test tests/*.test.ts"
+  },
+  "dependencies": {
+    "next": "16.3.4",
+    "pg": "8.23.0",
+    "react": "19.2.0",
+    "react-dom": "19.2.0",
+    "resend": "6.26.0",
+    "stripe": "22.6.1"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "4.3.3",
+    "@types/node": "22.15.3",
+    "@types/pg": "8.15.5",
+    "@types/react": "19.2.0",
+    "@types/react-dom": "19.2.0",
+    "eslint": "9.39.0",
+    "eslint-config-next": "16.3.4",
+    "tailwindcss": "4.3.3",
+    "typescript": "5.9.3"
+  },
+  "engines": {
+    "node": ">=20.9.0"
+  }
+}
