@@ -12,9 +12,19 @@ function buckets(): Map<string, Bucket> {
 }
 
 /**
- * Best-effort in-process rate limiter. Enough to blunt casual abuse of the
- * checkout endpoint; a multi-instance deployment should front this with a
- * shared limiter at the edge.
+ * Best-effort in-process rate limiter.
+ *
+ * Known limitation — this counts per process, not per deployment. On a
+ * serverless or multi-instance host the effective limit is the configured
+ * limit times the number of live instances, and a cold start resets the count
+ * entirely, so it cannot be relied on as the only control on a public site.
+ * It also trusts `x-forwarded-for`, which only holds behind a proxy that
+ * overwrites the header.
+ *
+ * It is enough to blunt casual abuse and accidental double-submits. Before
+ * taking real traffic, put a shared limiter in front of `/api/checkout` and
+ * `/admin/login` — the host's edge/WAF rules, or a limiter backed by the same
+ * Postgres or a Redis instance the app already talks to.
  */
 export function rateLimit(
   key: string,

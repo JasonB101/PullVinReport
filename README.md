@@ -25,6 +25,7 @@ and by email.
 - [Stripe webhook setup](#stripe-webhook-setup)
 - [Admin console](#admin-console)
 - [Scripts](#scripts)
+- [Known limitations](#known-limitations)
 - [Continuous integration](#continuous-integration)
 - [Deploying](#deploying)
 
@@ -58,7 +59,9 @@ version:
 | `REPORT_PRICE_CENTS` | No (default `1499`) | Price per report in the smallest currency unit. |
 | `REPORT_CURRENCY` | No (default `usd`) | Stripe currency code. |
 | `AUTO_REFUND_FAILED_ORDERS` | No (default `false`) | Refund a charge automatically when its report pull fails, instead of waiting for an operator. |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL` | No | Receipt, refund and report-link email. |
+| `RESEND_API_KEY` | No | Receipt, refund and report-link email. |
+| `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. Stays on the PullVinReport domain — this product never sends as another brand. |
+| `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
@@ -236,6 +239,20 @@ report" message.
 | `npm run lint` | ESLint. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm test` | Node test runner over `tests/*.test.ts`. |
+
+## Known limitations
+
+- **Rate limiting is per process, not per deployment.** `src/lib/rate-limit.ts`
+  keeps its buckets in memory, so on a serverless or multi-instance host the
+  real limit is the configured limit times the number of live instances, and a
+  cold start resets it. It also trusts `x-forwarded-for`, which only holds
+  behind a proxy that overwrites the header. It is enough to blunt casual abuse
+  and double-submits, but before taking public traffic put a shared limiter in
+  front of `/api/checkout` and `/admin/login` — edge/WAF rules on the host, or
+  a limiter backed by the Postgres instance the app already uses.
+- **The file store is not durable.** Without `DATABASE_URL`, orders live in a
+  JSON file that a serverless filesystem will throw away. Production needs
+  Postgres.
 
 ## Continuous integration
 

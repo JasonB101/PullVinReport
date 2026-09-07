@@ -120,8 +120,12 @@ export const emailConfig = {
   get apiKey(): string | undefined {
     return env("RESEND_API_KEY");
   },
+  /**
+   * Outbound sender. Both defaults are derived from BRAND so an unset
+   * environment can only ever send as PullVinReport on its own domain.
+   */
   get from(): string {
-    return env("EMAIL_FROM") ?? `PullVinReport <reports@${BRAND.domain}>`;
+    return env("EMAIL_FROM") ?? `${BRAND.name} <orders@${BRAND.domain}>`;
   },
   get supportEmail(): string {
     return env("SUPPORT_EMAIL") ?? `support@${BRAND.domain}`;
