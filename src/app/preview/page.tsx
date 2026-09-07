@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { Suspense } from "react";
 
 import { CheckoutPanel } from "@/components/checkout-panel";
 import { SampleTeaser } from "@/components/sample-teaser";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { VinDecodeCard, VinDecodeSkeleton } from "@/components/vin-decode-card";
 import { VinForm } from "@/components/vin-form";
 import {
   formatPrice,
@@ -117,6 +119,11 @@ export default async function PreviewPage({
               </Link>
             </div>
 
+            {/* Streamed so a slow decode never delays the checkout panel. */}
+            <Suspense fallback={<VinDecodeSkeleton />}>
+              <VinDecodeCard vin={result.vin} />
+            </Suspense>
+
             {canceled && (
               <div
                 role="status"
@@ -174,8 +181,8 @@ export default async function PreviewPage({
                     onward. Imports and very new vehicles may return little.
                   </li>
                   <li>
-                    If the provider returns no usable report for your VIN, email
-                    support and we will refund you.
+                    If no usable report comes back for your VIN, email support
+                    and we will refund you.
                   </li>
                   <li>
                     A report is informational only and is not a substitute for
