@@ -25,6 +25,7 @@ and by email.
 - [Stripe webhook setup](#stripe-webhook-setup)
 - [Admin console](#admin-console)
 - [Scripts](#scripts)
+- [Reading `/status` honestly](#reading-status-honestly)
 - [Known limitations](#known-limitations)
 - [Continuous integration](#continuous-integration)
 - [Deploying](#deploying)
@@ -191,8 +192,8 @@ you" on its own.
 | `/report/[token]` | A purchased report, gated by an unguessable access token. |
 | `/lookup` | Re-open a report using the order reference plus the buyer's email. |
 | `/order/success` | Post-Stripe landing; finalises fulfillment and redirects. |
-| `/status` | Human-readable provider readiness. |
-| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. |
+| `/status` | Human-readable provider readiness, each check labelled *Checked live* or *Config only*. |
+| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. Each check carries a `verification` field. |
 | `/api/checkout` | Creates the order and the Stripe Checkout Session. |
 | `/api/stripe/webhook` | Signature-verified fulfillment webhook. |
 | `/admin`, `/admin/login` | Password-protected order console. |
@@ -253,6 +254,34 @@ report" message.
 | `npm run lint` | ESLint. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm test` | Node test runner over `tests/*.test.ts`. |
+
+## Reading `/status` honestly
+
+`/status` and `/api/status` mix two very different kinds of check, and every
+check carries a `verification` field saying which kind it is:
+
+- `probed` — we contacted the dependency while building the report. VinAudit
+  (credential probe) and order storage (`ping()`) are probed.
+- `config-only` — we found credentials and stopped there. Stripe, the webhook
+  secret, the admin password and **email** are config-only.
+
+**Email is presence-only and can read green while sending is broken.** A
+`RESEND_API_KEY` being set says nothing about whether the key is valid, still
+active, or whether the sending domain is verified in Resend — and on a
+multi-site Resend account it says nothing about which domain the key is scoped
+to. The status page reports "configured, not verified" for exactly this reason.
+There is deliberately no live send probe: it would cost a real email on every
+status check and every uptime poll.
+
+Prove sending the only way that proves anything — send one. Fulfil a test order
+end to end, or use the **Re-send email** button in `/admin` on a delivered
+order, and confirm it arrives from `orders@pullvinreport.com`. A failed send is
+reported honestly on the order (`emailSentAt` stays unset and the admin action
+returns the Resend error); it never blocks fulfillment, because the report is
+always delivered on screen regardless.
+
+The same caveat applies in smaller doses to Stripe: a well-formed secret key
+that Stripe would reject still shows as ready until the first Checkout Session.
 
 ## Known limitations
 
