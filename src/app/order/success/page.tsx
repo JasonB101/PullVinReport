@@ -4,7 +4,14 @@ import { redirect } from "next/navigation";
 
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { emailConfig, isStripeConfigured } from "@/lib/config";
+import { emailConfig, formatPrice, isStripeConfigured } from "@/lib/config";
+import {
+  CHECKOUT_UNAVAILABLE_REASON,
+  PAYMENT_PENDING_MESSAGE,
+  classifyFailure,
+  customerFailureMessage,
+  refundPromise,
+} from "@/lib/customer-copy";
 import { fulfillOrder } from "@/lib/fulfillment";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
@@ -84,11 +91,8 @@ export default async function OrderSuccessPage({
 
   if (!isStripeConfigured()) {
     return (
-      <Shell title="Payments are not connected">
-        <p>
-          This deployment has no Stripe credentials, so no order could have been
-          created here.
-        </p>
+      <Shell title="We can't look up that order right now">
+        <p>{CHECKOUT_UNAVAILABLE_REASON}</p>
         <SupportNote />
       </Shell>
     );
@@ -98,7 +102,9 @@ export default async function OrderSuccessPage({
   await store.init();
 
   let order: Order | null = null;
-  let failure: string | null = null;
+  /** What the buyer is told. The raw cause is logged, never rendered. */
+  let failure: "unmatched" | "pending-payment" | "fulfillment" | null = null;
+  let internalDetail: string | null = null;
 
   try {
     const session = await getStripe().checkout.sessions.retrieve(sessionId);
@@ -108,7 +114,8 @@ export default async function OrderSuccessPage({
         : null) ?? (await store.getByStripeSessionId(session.id));
 
     if (!order) {
-      failure = "We couldn't match that payment to an order.";
+      failure = "unmatched";
+      internalDetail = `No order matches Stripe session ${session.id}`;
     } else if (session.payment_status !== "paid") {
       failure = "pending-payment";
     } else {
@@ -130,7 +137,12 @@ export default async function OrderSuccessPage({
       }
     }
   } catch (error) {
-    failure = (error as Error).message;
+    failure = "fulfillment";
+    internalDetail = (error as Error).message;
+  }
+
+  if (internalDetail) {
+    console.error(`[order/success] ${sessionId}: ${internalDetail}`);
   }
 
   if (order && order.status === "fulfilled" && !failure) {
@@ -140,12 +152,26 @@ export default async function OrderSuccessPage({
   if (failure === "pending-payment") {
     return (
       <Shell title="Your payment is still processing">
-        <p>
-          Some payment methods take a little longer to clear. As soon as Stripe
-          confirms it we pull your report and email you the link — you do not
-          need to do anything.
-        </p>
+        <p>{PAYMENT_PENDING_MESSAGE}</p>
         <SupportNote order={order} />
+      </Shell>
+    );
+  }
+
+  if (failure === "unmatched") {
+    return (
+      <Shell title="We couldn't match that checkout to an order">
+        <p>{customerFailureMessage("unmatched-payment")}</p>
+        <p>
+          If you were charged, nothing is lost — send us the email address you
+          used and we will find the order, deliver the report or refund you.
+        </p>
+        <SupportNote />
+        <p>
+          <Link href="/" className="font-semibold text-brand-600 hover:underline">
+            Back to home
+          </Link>
+        </p>
       </Shell>
     );
   }
@@ -153,17 +179,21 @@ export default async function OrderSuccessPage({
   return (
     <Shell title="Your payment went through, but the report didn't">
       <p>
-        We charged you and then could not retrieve the vehicle history record.
-        We will not show you sample data in its place.
+        We took the payment and then no report came back for your VIN. We will
+        not show you sample data in its place.
       </p>
-      {failure && (
-        <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-mono text-xs text-red-700">
-          {failure}
-        </p>
-      )}
+      <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+        {customerFailureMessage(
+          classifyFailure(internalDetail ?? order?.providerError),
+        )}
+      </p>
       <p>
-        Our team can see this order and will retry it. If a retry doesn&apos;t
-        work we will refund you in full.
+        {refundPromise(
+          order
+            ? formatPrice(order.amountCents, order.currency)
+            : formatPrice(),
+          Boolean(order?.refundedAt),
+        )}
       </p>
       <SupportNote order={order} />
       <p>

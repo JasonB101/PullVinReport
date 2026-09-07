@@ -8,6 +8,7 @@ import {
   missingVinAuditKeys,
   pricing,
 } from "@/lib/config";
+import { ORDERING_PAUSED_REASON } from "@/lib/customer-copy";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { getStore } from "@/lib/store";
 import { getStripe } from "@/lib/stripe";
@@ -51,25 +52,18 @@ export async function POST(request: Request) {
   }
 
   // Never sell a report we cannot deliver. Without VinAudit credentials the
-  // paid path is closed — there is no sample fallback.
-  if (!isVinAuditConfigured()) {
-    return NextResponse.json(
-      {
-        error:
-          "Reports are temporarily unavailable because our vehicle-data provider is not connected. No payment has been taken.",
-        missing: missingVinAuditKeys(),
-      },
-      { status: 503 },
+  // paid path is closed — there is no sample fallback. Which credential is
+  // missing is logged for operators and shown on /status, never returned here.
+  if (!isVinAuditConfigured() || !isStripeConfigured()) {
+    console.error(
+      "[checkout] Blocked: missing",
+      [
+        ...missingVinAuditKeys(),
+        ...(isStripeConfigured() ? [] : ["STRIPE_SECRET_KEY"]),
+      ].join(", "),
     );
-  }
-
-  if (!isStripeConfigured()) {
     return NextResponse.json(
-      {
-        error:
-          "Checkout is temporarily unavailable because payments are not connected. No payment has been taken.",
-        missing: ["STRIPE_SECRET_KEY"],
-      },
+      { error: ORDERING_PAUSED_REASON },
       { status: 503 },
     );
   }
