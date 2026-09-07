@@ -60,8 +60,22 @@ version:
 | `REPORT_CURRENCY` | No (default `usd`) | Stripe currency code. |
 | `AUTO_REFUND_FAILED_ORDERS` | No (default `false`) | Refund a charge automatically when its report pull fails, instead of waiting for an operator. |
 | `RESEND_API_KEY` | No | Receipt, refund and report-link email. |
-| `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. Stays on the PullVinReport domain — this product never sends as another brand. |
+| `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
 | `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
+
+`EMAIL_FROM` uses the `Name <address>` display-name form, so it must be quoted
+in `.env.local`, in `.env.example` and in your host's environment UI. Unquoted
+angle brackets are redirection syntax to a shell and several `.env` parsers
+strip or truncate them:
+
+```bash
+EMAIL_FROM="PullVinReport <orders@pullvinreport.com>"
+SUPPORT_EMAIL=support@pullvinreport.com
+```
+
+If a parser hands the value back with its quotes still attached, or mangles it
+into something without an `@`, `emailConfig` falls back to the brand default
+rather than passing it to Resend.
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |

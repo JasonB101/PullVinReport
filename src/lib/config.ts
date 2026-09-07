@@ -116,19 +116,36 @@ export function autoRefundFailedOrders(): boolean {
   return boolEnv("AUTO_REFUND_FAILED_ORDERS", false);
 }
 
+/**
+ * Reads an address-valued variable.
+ *
+ * `EMAIL_FROM` uses the `Name <address>` display-name form, which has to be
+ * quoted in a .env file because unquoted angle brackets are shell redirection.
+ * Some hosts and parsers hand the wrapping quotes back to us, and some mangle
+ * the value on the way through, so the quotes are stripped here and anything
+ * that no longer looks like an address falls back to the brand default rather
+ * than being handed to Resend.
+ */
+function emailEnv(key: string, fallback: string): string {
+  const raw = env(key);
+  if (!raw) return fallback;
+  const unquoted = raw.replace(/^(['"])([\s\S]*)\1$/, "$2").trim();
+  return unquoted.includes("@") ? unquoted : fallback;
+}
+
 export const emailConfig = {
   get apiKey(): string | undefined {
     return env("RESEND_API_KEY");
   },
   /**
-   * Outbound sender. Both defaults are derived from BRAND so an unset
-   * environment can only ever send as PullVinReport on its own domain.
+   * Outbound sender. Both defaults are derived from BRAND so an unset or
+   * broken environment can only ever send as PullVinReport on its own domain.
    */
   get from(): string {
-    return env("EMAIL_FROM") ?? `${BRAND.name} <orders@${BRAND.domain}>`;
+    return emailEnv("EMAIL_FROM", `${BRAND.name} <orders@${BRAND.domain}>`);
   },
   get supportEmail(): string {
-    return env("SUPPORT_EMAIL") ?? `support@${BRAND.domain}`;
+    return emailEnv("SUPPORT_EMAIL", `support@${BRAND.domain}`);
   },
 };
 

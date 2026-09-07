@@ -34,6 +34,24 @@ describe("outbound email identity", () => {
     assert.equal(emailConfig.from, "PullVinReport <hello@pullvinreport.com>");
     assert.equal(emailConfig.supportEmail, "help@pullvinreport.com");
   });
+
+  it("survives a parser that keeps the quotes the display name needs", () => {
+    process.env.EMAIL_FROM = '"PullVinReport <orders@pullvinreport.com>"';
+    assert.equal(emailConfig.from, "PullVinReport <orders@pullvinreport.com>");
+
+    process.env.EMAIL_FROM = "'PullVinReport <orders@pullvinreport.com>'";
+    assert.equal(emailConfig.from, "PullVinReport <orders@pullvinreport.com>");
+  });
+
+  it("falls back to the brand default when a parser mangles the value", () => {
+    const fallback = `PullVinReport <orders@${BRAND.domain}>`;
+
+    // What an unquoted `Name <address>` can degrade into.
+    for (const mangled of ["PullVinReport", "PullVinReport <", '""', "   "]) {
+      process.env.EMAIL_FROM = mangled;
+      assert.equal(emailConfig.from, fallback, `mangled input: ${mangled}`);
+    }
+  });
 });
 
 describe("pricing", () => {
