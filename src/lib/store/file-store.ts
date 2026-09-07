@@ -141,8 +141,15 @@ export class FileOrderStore implements OrderStore {
         .length,
       fulfilled: orders.filter((o) => o.status === "fulfilled").length,
       failed: orders.filter((o) => o.status === "failed").length,
+      // Money actually taken, which includes paid orders the provider later
+      // failed to fulfil — those are refund candidates, not phantom revenue.
       revenueCents: orders
-        .filter((o) => o.status === "fulfilled" || o.status === "paid")
+        .filter(
+          (o) =>
+            o.status === "fulfilled" ||
+            o.status === "paid" ||
+            (o.status === "failed" && Boolean(o.stripePaymentIntentId)),
+        )
         .reduce((sum, o) => sum + o.amountCents, 0),
     };
   }

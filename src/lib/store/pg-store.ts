@@ -211,7 +211,10 @@ export class PostgresOrderStore implements OrderStore {
          COUNT(*) FILTER (WHERE status IN ('pending','paid'))::text AS pending,
          COUNT(*) FILTER (WHERE status = 'fulfilled')::text AS fulfilled,
          COUNT(*) FILTER (WHERE status = 'failed')::text AS failed,
-         COALESCE(SUM(amount_cents) FILTER (WHERE status IN ('paid','fulfilled')), 0)::text AS revenue
+         COALESCE(SUM(amount_cents) FILTER (
+           WHERE status IN ('paid','fulfilled')
+              OR (status = 'failed' AND stripe_payment_intent_id IS NOT NULL)
+         ), 0)::text AS revenue
        FROM ${TABLE}`,
     );
     const row = result.rows[0] ?? {};
