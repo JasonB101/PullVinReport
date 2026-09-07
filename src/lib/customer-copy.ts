@@ -11,6 +11,23 @@
  * test runner.
  */
 
+/**
+ * The standing disclaimer that travels with a finished report — on screen, in
+ * the PDF and in the receipt email. Deliberately says "third-party records"
+ * rather than naming a data supplier: who we buy from is our business, not a
+ * feature of the product, and naming them only teaches buyers to skip us.
+ */
+export const REPORT_DISCLAIMER =
+  "This report is compiled from third-party records and is provided for informational purposes only. Records are only as complete as what reporting agencies, insurers and states have submitted, so it is not a guarantee about the vehicle, nor a substitute for an independent inspection.";
+
+/** The same promise, trimmed for the site footer and email footer. */
+export const REPORT_DISCLAIMER_SHORT =
+  "Reports are compiled from third-party records and are provided for informational purposes only. They are not a guarantee about a vehicle's condition and are not a substitute for an in-person inspection.";
+
+/** Shown when a pre-purchase VIN decode returns nothing usable. */
+export const VIN_DECODE_UNAVAILABLE =
+  "We couldn't decode that VIN yet. It stays valid for checkout — the full report is pulled from a separate set of records after payment.";
+
 /** Shown on `/preview` when the paid path is closed on this deployment. */
 export const ORDERING_PAUSED_REASON =
   "We've paused new orders while we restore a service this report depends on. Nothing has been charged.";

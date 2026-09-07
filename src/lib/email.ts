@@ -1,7 +1,9 @@
 import { Resend } from "resend";
 
 import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from "@/lib/config";
+import { REPORT_DISCLAIMER_SHORT } from "@/lib/customer-copy";
 import { vehicleTitle } from "@/lib/report";
+import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
 import type { Order } from "@/lib/store";
 
 function escapeHtml(value: string): string {
@@ -12,9 +14,12 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function receiptHtml(order: Order, reportUrl: string): string {
+function receiptHtml(order: Order, reportUrl: string, hasPdf: boolean): string {
   const vehicle = order.report ? vehicleTitle(order.report.vehicle) : "Your vehicle";
   const amount = formatPrice(order.amountCents, order.currency);
+  const intro = hasPdf
+    ? "Thanks for your order. The full history report for your VIN has been pulled. A PDF copy is attached to this email — forward it to a seller, a mechanic or your insurer — and the live version is always at the link below."
+    : "Thanks for your order. The full history report for your VIN has been pulled and is ready to view.";
   return `<!doctype html>
 <html>
   <body style="margin:0;padding:24px;background:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
@@ -27,7 +32,7 @@ function receiptHtml(order: Order, reportUrl: string): string {
       </tr>
       <tr>
         <td style="padding:28px 24px;">
-          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Thanks for your order. The full history report for your VIN has been pulled and is ready to view.</p>
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">${intro}</p>
           <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;margin:0 0 24px;">
             <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;">Vehicle</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-weight:600;">${escapeHtml(vehicle)}</td></tr>
             <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">VIN</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border-top:1px solid #e2e8f0;">${escapeHtml(order.vin)}</td></tr>
@@ -36,7 +41,7 @@ function receiptHtml(order: Order, reportUrl: string): string {
           </table>
           <a href="${reportUrl}" style="display:block;background:#2563eb;color:#ffffff;text-decoration:none;text-align:center;padding:14px 20px;border-radius:10px;font-weight:600;font-size:15px;">View your report</a>
           <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#64748b;">Keep this link private — anyone with it can view the report. Questions? Reply to this email or write to ${escapeHtml(emailConfig.supportEmail)}.</p>
-          <p style="margin:12px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">Reports are compiled from third-party records supplied by VinAudit and are provided for informational purposes only. They are not a guarantee about the vehicle's condition and are not a substitute for an in-person inspection.</p>
+          <p style="margin:12px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">${escapeHtml(REPORT_DISCLAIMER_SHORT)}</p>
         </td>
       </tr>
     </table>
@@ -45,7 +50,7 @@ function receiptHtml(order: Order, reportUrl: string): string {
 </html>`;
 }
 
-function receiptText(order: Order, reportUrl: string): string {
+function receiptText(order: Order, reportUrl: string, hasPdf: boolean): string {
   return [
     `${BRAND.name} — your vehicle history report is ready`,
     "",
@@ -53,12 +58,13 @@ function receiptText(order: Order, reportUrl: string): string {
     `Order: ${order.id}`,
     `Amount paid: ${formatPrice(order.amountCents, order.currency)}`,
     "",
-    `View your report: ${reportUrl}`,
+    ...(hasPdf ? ["A PDF copy of the report is attached to this email."] : []),
+    `View it online: ${reportUrl}`,
     "",
     "Keep this link private — anyone with it can view the report.",
     `Support: ${emailConfig.supportEmail}`,
     "",
-    "Reports are compiled from third-party records supplied by VinAudit and are provided for informational purposes only.",
+    REPORT_DISCLAIMER_SHORT,
   ].join("\n");
 }
 
@@ -107,6 +113,40 @@ function refundText(order: Order, amount: string): string {
 
 export type EmailResult = { sent: boolean; detail: string };
 
+type ReportAttachment = {
+  filename: string;
+  content: Buffer;
+  contentType: string;
+};
+
+/**
+ * Renders the forwardable PDF copy of the report.
+ *
+ * Best-effort on purpose: the buyer has already paid and the receipt carries a
+ * working link either way, so a PDF that fails to render is logged for the
+ * operator and dropped rather than costing the customer their receipt. The PDF
+ * contains no link or token — a forwarded copy must not hand over access.
+ */
+async function reportAttachment(
+  order: Order,
+): Promise<{ attachment?: ReportAttachment; detail: string }> {
+  if (!order.report) return { detail: "no report to attach" };
+  try {
+    const content = await renderReportPdf(order.report);
+    return {
+      attachment: {
+        filename: reportPdfFilename(order.vin),
+        content,
+        contentType: "application/pdf",
+      },
+      detail: `PDF attached (${Math.round(content.byteLength / 1024)} KB)`,
+    };
+  } catch (error) {
+    console.error(`[email] PDF render failed for order ${order.id}`, error);
+    return { detail: `PDF skipped: ${(error as Error).message}` };
+  }
+}
+
 /**
  * Sends the receipt + report link. Email is best-effort: a delivery failure
  * must never block or reverse a successful fulfillment, so this returns a
@@ -122,6 +162,8 @@ export async function sendReportEmail(order: Order): Promise<EmailResult> {
     return { sent: false, detail: "No customer email on the order" };
   }
 
+  const pdf = await reportAttachment(order);
+
   try {
     const resend = new Resend(emailConfig.apiKey);
     const { data, error } = await resend.emails.send({
@@ -129,13 +171,14 @@ export async function sendReportEmail(order: Order): Promise<EmailResult> {
       to: order.email,
       replyTo: emailConfig.supportEmail,
       subject: `Your ${BRAND.name} report for VIN ${order.vin}`,
-      html: receiptHtml(order, reportUrl),
-      text: receiptText(order, reportUrl),
+      html: receiptHtml(order, reportUrl, Boolean(pdf.attachment)),
+      text: receiptText(order, reportUrl, Boolean(pdf.attachment)),
+      attachments: pdf.attachment ? [pdf.attachment] : undefined,
     });
     if (error) {
       return { sent: false, detail: `Resend error: ${error.message}` };
     }
-    return { sent: true, detail: `Sent (${data?.id ?? "no id"})` };
+    return { sent: true, detail: `Sent (${data?.id ?? "no id"}) · ${pdf.detail}` };
   } catch (error) {
     return { sent: false, detail: `Resend threw: ${(error as Error).message}` };
   }

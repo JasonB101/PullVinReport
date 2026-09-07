@@ -152,6 +152,18 @@ export default async function AdminPage() {
                         {order.providerError}
                       </span>
                     )}
+                    {/* The buyer's report no longer links out to VinAudit, so
+                        this is where support reaches the supplier's copy. */}
+                    {order.report?.providerReportUrl && (
+                      <a
+                        href={order.report.providerReportUrl}
+                        target="_blank"
+                        rel="noreferrer noopener"
+                        className="mt-1 block text-[11px] text-brand-600 hover:underline"
+                      >
+                        VinAudit copy ↗
+                      </a>
+                    )}
                   </span>
 
                   <span>

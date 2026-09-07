@@ -6,7 +6,7 @@ import { useState, type FormEvent } from "react";
 type Props = {
   vin: string;
   priceLabel: string;
-  /** False when Stripe or VinAudit credentials are missing on the server. */
+  /** False when payment or data-provider credentials are missing on the server. */
   available: boolean;
   unavailableReason?: string;
   /** True when Stripe Checkout sent the buyer back without taking payment. */

@@ -1,5 +1,12 @@
-import type { Field, ReportCheck, ReportSection, VehicleReport } from "@/lib/report";
-import { vehicleTitle } from "@/lib/report";
+import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
+import type {
+  Field,
+  ReportCheck,
+  ReportSection,
+  SectionTable,
+  VehicleReport,
+} from "@/lib/report";
+import { formatEventDate, sectionTable, vehicleTitle } from "@/lib/report";
 import { prettyVin } from "@/lib/vin";
 
 function formatDateTime(iso: string): string {
@@ -28,8 +35,7 @@ function SampleBanner() {
       <p className="mt-3 text-sm leading-relaxed text-amber-900/80">
         Every value below is fictional and shown only so you can see the layout
         and depth of a real report before you buy. A purchased report contains
-        live records pulled from the VinAudit Vehicle History API for the exact
-        VIN you enter.
+        live records pulled for the exact VIN you enter.
       </p>
     </div>
   );
@@ -91,7 +97,85 @@ function RecordCard({ fields }: { fields: Field[] }) {
   );
 }
 
+/** Yes/No columns read faster as a badge than as another word in a cell. */
+function Cell({ value }: { value: string }) {
+  if (value === "Yes" || value === "No") {
+    return (
+      <span
+        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
+          value === "Yes"
+            ? "bg-emerald-100 text-emerald-800"
+            : "bg-slate-100 text-slate-500"
+        }`}
+      >
+        {value}
+      </span>
+    );
+  }
+  return <>{value || "—"}</>;
+}
+
+function RecordTable({ table }: { table: SectionTable }) {
+  return (
+    <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
+      <table className="w-full border-collapse text-left text-sm">
+        <thead>
+          <tr className="bg-slate-50">
+            {table.columns.map((column) => (
+              <th
+                key={column}
+                scope="col"
+                className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
+              >
+                {column}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        {table.rows.map((row, index) => (
+          <tbody key={index} className="border-t border-slate-200">
+            <tr>
+              {row.cells.map((cell, cellIndex) => (
+                <td
+                  key={cellIndex}
+                  className={`px-4 pt-3 align-top ${
+                    row.extras.length > 0 ? "pb-1" : "pb-3"
+                  } ${
+                    cellIndex === 0
+                      ? "whitespace-nowrap font-medium text-slate-900"
+                      : "text-slate-700"
+                  }`}
+                >
+                  <Cell value={cell} />
+                </td>
+              ))}
+            </tr>
+            {row.extras.length > 0 && (
+              <tr>
+                <td
+                  colSpan={table.columns.length}
+                  className="px-4 pb-3 text-xs leading-relaxed text-slate-500"
+                >
+                  {row.extras.map((field, extraIndex) => (
+                    <span key={`${field.label}-${extraIndex}`}>
+                      {extraIndex > 0 && <span className="px-1.5 text-slate-300">·</span>}
+                      <span className="text-slate-400">{field.label}: </span>
+                      {field.value}
+                    </span>
+                  ))}
+                </td>
+              </tr>
+            )}
+          </tbody>
+        ))}
+      </table>
+    </div>
+  );
+}
+
 function SectionBlock({ section }: { section: ReportSection }) {
+  const table = sectionTable(section);
+
   return (
     <section
       id={section.key}
@@ -114,6 +198,8 @@ function SectionBlock({ section }: { section: ReportSection }) {
         <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
           {section.emptyLabel}
         </p>
+      ) : table ? (
+        <RecordTable table={table} />
       ) : (
         <div className="mt-4 space-y-3">
           {section.records.map((fields, index) => (
@@ -151,7 +237,9 @@ function OdometerTimeline({ report }: { report: VehicleReport }) {
       <ul className="mt-5 space-y-3">
         {report.odometer.map((reading, index) => (
           <li key={`${reading.date}-${index}`} className="grid grid-cols-[6.5rem_1fr] items-center gap-3 sm:grid-cols-[8rem_1fr_7rem]">
-            <span className="font-mono text-xs text-slate-500">{reading.date}</span>
+            <span className="text-xs text-slate-500">
+              {formatEventDate(reading.date)}
+            </span>
             <span className="h-2 rounded-full bg-slate-100">
               <span
                 className="block h-2 rounded-full bg-gradient-to-r from-brand-400 to-brand-600"
@@ -215,7 +303,7 @@ export function ReportView({ report }: { report: VehicleReport }) {
               </span>
             ) : (
               <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
-                Live provider data
+                Live records
               </span>
             )}
           </div>
@@ -238,10 +326,10 @@ export function ReportView({ report }: { report: VehicleReport }) {
             </div>
             <div>
               <dt className="text-[11px] uppercase tracking-wider text-slate-400">
-                Data source
+                Records
               </dt>
               <dd className="mt-1 text-lg font-semibold text-white">
-                {report.isSample ? "Sample" : "VinAudit"}
+                {report.isSample ? "Sample" : "Live"}
               </dd>
             </div>
             <div className="col-span-2">
@@ -268,9 +356,8 @@ export function ReportView({ report }: { report: VehicleReport }) {
           At a glance
         </h2>
         <p className="mt-1 text-sm text-slate-500">
-          Each check reflects what the provider returned for this VIN. A green
-          check means no matching record was found — not that an event never
-          happened.
+          Each check reflects the records we found for this VIN. A green check
+          means no matching record was found — not that an event never happened.
         </p>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {report.checks.map((check) => (
@@ -287,30 +374,10 @@ export function ReportView({ report }: { report: VehicleReport }) {
 
       <SpecGrid specifications={report.specifications} />
 
-      {report.providerReportUrl && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-          <h3 className="text-base font-semibold tracking-tight text-slate-900">
-            Provider copy
-          </h3>
-          <p className="mt-1 text-sm text-slate-500">
-            VinAudit also hosts a copy of this report.
-          </p>
-          <a
-            href={report.providerReportUrl}
-            target="_blank"
-            rel="noreferrer noopener"
-            className="mt-3 inline-flex items-center gap-1.5 text-sm font-semibold text-brand-600 hover:text-brand-700"
-          >
-            Open the VinAudit copy
-            <span aria-hidden="true">→</span>
-          </a>
-        </section>
-      )}
-
       <p className="px-1 text-xs leading-relaxed text-slate-500">
         {report.isSample
           ? "Sample report. All data shown is fictional and provided for illustration only."
-          : "This report is compiled from third-party records supplied by VinAudit. Records are only as complete as what reporting agencies, insurers and states have submitted. It is provided for informational purposes only and is not a guarantee about the vehicle, nor a substitute for an independent inspection."}
+          : REPORT_DISCLAIMER}
       </p>
     </article>
   );

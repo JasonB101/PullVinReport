@@ -38,8 +38,8 @@ export default function SamplePage() {
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               This is the exact layout of a purchased report, filled with
               fictional data. Nothing here describes a real vehicle. When you
-              buy, every field is replaced with live records pulled from the
-              VinAudit Vehicle History API for the VIN you enter.
+              buy, every field is replaced with live records pulled for the VIN
+              you enter.
             </p>
 
             <div className="mt-8 max-w-2xl">
