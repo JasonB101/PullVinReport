@@ -64,9 +64,15 @@ const styles = StyleSheet.create({
     borderLeftWidth: 3,
     borderLeftColor: BRAND_BLUE,
     padding: 10,
-    marginBottom: 18,
   },
 
+  /**
+   * Blocks lead with their spacing rather than trailing it. react-pdf counts a
+   * bottom margin as part of what has to fit on the page, so a table that fits
+   * but whose margin does not gets pushed whole onto the next page, stranding
+   * its heading above an empty half-page.
+   */
+  section: { marginTop: 16 },
   sectionTitle: { fontFamily: "Helvetica-Bold", fontSize: 11, marginBottom: 2 },
   sectionNote: { color: MUTED, marginBottom: 6, lineHeight: 1.4 },
 
@@ -90,8 +96,6 @@ const styles = StyleSheet.create({
   th: { fontFamily: "Helvetica-Bold", fontSize: 7, letterSpacing: 0.6, color: MUTED },
   tableRow: {
     flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: LINE,
     paddingVertical: 4,
     paddingHorizontal: 6,
   },
@@ -99,14 +103,14 @@ const styles = StyleSheet.create({
   // carries a `lineHeight`, and silently drops it when the View is
   // absolutely positioned.
   extras: {
-    borderTopWidth: 1,
-    borderTopColor: LINE,
     paddingHorizontal: 6,
-    paddingTop: 3,
     paddingBottom: 5,
   },
   extrasText: { color: MUTED, fontSize: 7, lineHeight: 1.25 },
-  table: { borderWidth: 1, borderColor: LINE, borderRadius: 3, marginBottom: 14 },
+  // Rules live on the rows, not on a box around them: a bordered container
+  // that spans a page break gets stretched to the page edge.
+  tableGroup: { borderBottomWidth: 1, borderBottomColor: LINE },
+  table: {},
 
   card: {
     borderWidth: 1,
@@ -116,7 +120,7 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardText: { color: MUTED, lineHeight: 1 },
-  empty: { color: MUTED, marginBottom: 14 },
+  empty: { color: MUTED },
 
   specGrid: { flexDirection: "row", flexWrap: "wrap" },
   spec: { width: "33.3%", paddingRight: 10, marginBottom: 8 },
@@ -172,13 +176,19 @@ function fieldList(fields: Field[]): string {
   return fields.map((field) => `${field.label}: ${field.value}`).join("  ·  ");
 }
 
+/** Record count below which a section is small enough to keep on one page. */
+const KEEP_TOGETHER = 3;
+
 function Section({ section }: { section: ReportSection }) {
   const table = sectionTable(section);
   const width = table ? `${(100 / table.columns.length).toFixed(3)}%` : "100%";
+  const wraps = section.records.length > KEEP_TOGETHER;
 
   return (
-    <View>
-      {/* Keeps a heading from being stranded at the foot of a page. */}
+    // A short section moves to the next page whole rather than leaving its
+    // heading stranded above the footer. A long one still flows, because
+    // holding a twenty-row table together would waste most of a page.
+    <View style={styles.section} wrap={wraps}>
       <View minPresenceAhead={96}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
         <Text style={styles.sectionNote}>{section.description}</Text>
@@ -188,7 +198,8 @@ function Section({ section }: { section: ReportSection }) {
         <Text style={styles.empty}>{section.emptyLabel}</Text>
       ) : table ? (
         <View style={styles.table}>
-          <View style={styles.tableHead} fixed>
+          {/* A table that spans a page break repeats its header there. */}
+          <View style={styles.tableHead} fixed={wraps}>
             {table.columns.map((column) => (
               <Text key={column} style={[styles.th, { width }]}>
                 {column.toUpperCase()}
@@ -196,7 +207,7 @@ function Section({ section }: { section: ReportSection }) {
             ))}
           </View>
           {table.rows.map((row, index) => (
-            <View key={index} wrap={false}>
+            <View key={index} style={styles.tableGroup} wrap={false}>
               <View style={styles.tableRow}>
                 {row.cells.map((cell, cellIndex) => (
                   <Text
@@ -220,7 +231,7 @@ function Section({ section }: { section: ReportSection }) {
           ))}
         </View>
       ) : (
-        <View style={{ marginBottom: 8 }}>
+        <View>
           {section.records.map((fields, index) => (
             <View key={index} style={styles.card} wrap={false}>
               <Text style={styles.cardText}>{fieldList(fields)}</Text>
@@ -265,17 +276,18 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
           <Text>{report.headline}</Text>
         </View>
 
-        <Text style={styles.sectionTitle}>At a glance</Text>
+        <Text style={[styles.sectionTitle, styles.section]}>At a glance</Text>
         <Text style={styles.sectionNote}>
           An unshaded box means no matching record was found — not that an event
           never happened.
         </Text>
-        <View style={{ marginBottom: 18 }}>
-          <Checks checks={report.checks} />
-        </View>
+        <Checks checks={report.checks} />
 
         {report.odometer.length > 0 && (
-          <View>
+          <View
+            style={styles.section}
+            wrap={report.odometer.length > KEEP_TOGETHER}
+          >
             <View minPresenceAhead={96}>
               <Text style={styles.sectionTitle}>Odometer readings</Text>
               <Text style={styles.sectionNote}>
@@ -289,7 +301,11 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
                 <Text style={[styles.th, { width: "33%" }]}>SOURCE</Text>
               </View>
               {report.odometer.map((reading, index) => (
-                <View key={index} style={styles.tableRow} wrap={false}>
+                <View
+                  key={index}
+                  style={[styles.tableRow, styles.tableGroup]}
+                  wrap={false}
+                >
                   <Text style={{ width: "34%", fontFamily: "Helvetica-Bold" }}>
                     {formatEventDate(reading.date)}
                   </Text>
@@ -308,7 +324,7 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
         ))}
 
         {report.specifications.length > 0 && (
-          <View>
+          <View style={styles.section} wrap={false}>
             <View minPresenceAhead={96}>
               <Text style={styles.sectionTitle}>Vehicle specifications</Text>
               <Text style={styles.sectionNote}>
