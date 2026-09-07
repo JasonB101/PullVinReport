@@ -18,11 +18,14 @@ and by email.
 - [Environment](#environment)
 - [How the paid path works](#how-the-paid-path-works)
 - [The sample report rule](#the-sample-report-rule)
+- [What customers see when something breaks](#what-customers-see-when-something-breaks)
+- [Refunds](#refunds)
 - [Routes](#routes)
 - [Data storage](#data-storage)
 - [Stripe webhook setup](#stripe-webhook-setup)
 - [Admin console](#admin-console)
 - [Scripts](#scripts)
+- [Continuous integration](#continuous-integration)
 - [Deploying](#deploying)
 
 ---
@@ -54,7 +57,8 @@ version:
 | `STRIPE_WEBHOOK_SECRET` | Strongly recommended | Verifies fulfillment webhooks. |
 | `REPORT_PRICE_CENTS` | No (default `1499`) | Price per report in the smallest currency unit. |
 | `REPORT_CURRENCY` | No (default `usd`) | Stripe currency code. |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL` | No | Receipt and report-link email. |
+| `AUTO_REFUND_FAILED_ORDERS` | No (default `false`) | Refund a charge automatically when its report pull fails, instead of waiting for an operator. |
+| `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL` | No | Receipt, refund and report-link email. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
@@ -87,7 +91,12 @@ POST /api/stripe/webhook   ← primary fulfillment path
 Fulfillment is idempotent, so the webhook and the return page can both run
 without double-pulling or double-charging. If VinAudit fails, the order is
 marked `failed` with the provider error recorded, the customer is told plainly
-what happened, and the order shows up in `/admin` with a **Retry pull** button.
+what happened, and the order shows up in `/admin` with **Retry pull** and
+**Refund** buttons.
+
+A buyer who abandons Stripe Checkout comes back to
+`/preview?vin=…&canceled=1`, which shows a "payment canceled — you have not
+been charged" banner and offers to restart checkout with the same VIN.
 
 ## The sample report rule
 
@@ -108,6 +117,52 @@ How it is enforced:
   provider is unconfigured, so the money is never taken in the first place.
 - Every sample surface renders a SAMPLE chip, an amber hatched border and an
   explanatory banner, keyed off `isSample`.
+
+## What customers see when something breaks
+
+The second rule: **buyers never read our internals.** No environment variable
+names, no provider names, no raw exception text, no stack of "missing
+`VINAUDIT_…`" strings on a page someone just paid on.
+
+- Every sentence a buyer reads about a failure comes from
+  `src/lib/customer-copy.ts`. `classifyFailure()` buckets a raw error into one
+  of a few kinds and anything unrecognised falls through to a generic message,
+  so a new error string cannot leak by default.
+- The raw cause is still recorded: it is written to `providerError` on the
+  order, shown in `/admin`, and logged to the server console.
+- Full diagnostics — which credential is missing, what the provider returned,
+  whether storage is reachable — live on `/status`, `/api/status` and `/admin`.
+- `/api/checkout` returns the same soft copy in its `503` body and logs the
+  missing credential names server-side instead of returning them.
+
+When you add a customer-facing error path, route the copy through
+`customer-copy.ts` rather than rendering the error you caught.
+`tests/customer-copy.test.ts` asserts that known raw errors never produce a
+message containing credentials or provider names.
+
+## Refunds
+
+We promise a refund before checkout for any VIN we cannot deliver, so the
+refund is part of the app rather than a trip to the Stripe dashboard.
+
+- **From `/admin`.** Any order with a Stripe payment on record gets a
+  **Refund** button, which confirms first because the action is irreversible.
+  It calls `refundOrder()` (`src/lib/refund.ts`), records `refundedAt` and
+  `stripeRefundId` on the order, and emails the customer if Resend is
+  configured.
+- **Automatically.** Set `AUTO_REFUND_FAILED_ORDERS=true` and a failed pull
+  refunds itself immediately. It is off by default because the documented flow
+  is retry-then-refund, and a refunded charge cannot be retried without asking
+  the customer to pay again.
+- **From the Stripe dashboard.** The `charge.refunded` webhook records refunds
+  issued outside the app, so `/admin` and the customer's report page stay in
+  step with Stripe.
+
+Refunds are idempotent: an order that already carries `refundedAt` is left
+alone, and the Stripe call is keyed on the order id. Refunded orders are
+excluded from **Collected** in `/admin` and counted under **Refunded**, and the
+customer's report page switches from "we will refund you" to "we've refunded
+you" on its own.
 
 ## Routes
 
@@ -155,15 +210,21 @@ subscribed to:
 - `checkout.session.async_payment_succeeded`
 - `checkout.session.async_payment_failed`
 - `checkout.session.expired`
+- `charge.refunded`
 
 ## Admin console
 
 Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
-The console shows order counts, collected revenue, and the full order list with
-the provider error for anything that failed. Failed or stuck orders can be
-retried, and a delivered report's email can be re-sent.
+The console shows order counts, collected revenue, refunded totals, and the
+full order list with the provider error for anything that failed. Failed or
+stuck orders can be retried, a delivered report's email can be re-sent, and any
+charged order can be refunded in place — see [Refunds](#refunds).
+
+This is the only surface that shows raw provider errors, so it is also the
+place to look when a customer reports the soft "we couldn't retrieve this
+report" message.
 
 ## Scripts
 
@@ -175,6 +236,14 @@ retried, and a delivered report's email can be re-sent.
 | `npm run lint` | ESLint. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm test` | Node test runner over `tests/*.test.ts`. |
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `lint`, `typecheck`, `test` and `build` on
+every pull request and on pushes to `main`, on Node 22 with the npm cache
+enabled. The build step runs with no credentials on purpose: it proves the app
+still compiles and prerenders with the paid path closed, which is the state a
+fresh clone starts in.
 
 ## Deploying
 
