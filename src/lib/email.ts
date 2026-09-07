@@ -1,0 +1,99 @@
+import { Resend } from "resend";
+
+import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from "@/lib/config";
+import { vehicleTitle } from "@/lib/report";
+import type { Order } from "@/lib/store";
+
+function escapeHtml(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function receiptHtml(order: Order, reportUrl: string): string {
+  const vehicle = order.report ? vehicleTitle(order.report.vehicle) : "Your vehicle";
+  const amount = formatPrice(order.amountCents, order.currency);
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+      <tr>
+        <td style="background:#0b1220;padding:24px;">
+          <div style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-0.02em;">${BRAND.name}</div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:4px;">Your vehicle history report is ready</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 24px;">
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">Thanks for your order. The full history report for your VIN has been pulled and is ready to view.</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;margin:0 0 24px;">
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;">Vehicle</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-weight:600;">${escapeHtml(vehicle)}</td></tr>
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">VIN</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border-top:1px solid #e2e8f0;">${escapeHtml(order.vin)}</td></tr>
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">Order</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border-top:1px solid #e2e8f0;">${escapeHtml(order.id)}</td></tr>
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">Amount paid</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-weight:600;border-top:1px solid #e2e8f0;">${escapeHtml(amount)}</td></tr>
+          </table>
+          <a href="${reportUrl}" style="display:block;background:#2563eb;color:#ffffff;text-decoration:none;text-align:center;padding:14px 20px;border-radius:10px;font-weight:600;font-size:15px;">View your report</a>
+          <p style="margin:20px 0 0;font-size:12px;line-height:1.6;color:#64748b;">Keep this link private — anyone with it can view the report. Questions? Reply to this email or write to ${escapeHtml(emailConfig.supportEmail)}.</p>
+          <p style="margin:12px 0 0;font-size:12px;line-height:1.6;color:#94a3b8;">Reports are compiled from third-party records supplied by VinAudit and are provided for informational purposes only. They are not a guarantee about the vehicle's condition and are not a substitute for an in-person inspection.</p>
+        </td>
+      </tr>
+    </table>
+    <p style="max-width:560px;margin:16px auto 0;font-size:11px;color:#94a3b8;text-align:center;">${BRAND.name} · ${BRAND.domain}</p>
+  </body>
+</html>`;
+}
+
+function receiptText(order: Order, reportUrl: string): string {
+  return [
+    `${BRAND.name} — your vehicle history report is ready`,
+    "",
+    `VIN: ${order.vin}`,
+    `Order: ${order.id}`,
+    `Amount paid: ${formatPrice(order.amountCents, order.currency)}`,
+    "",
+    `View your report: ${reportUrl}`,
+    "",
+    "Keep this link private — anyone with it can view the report.",
+    `Support: ${emailConfig.supportEmail}`,
+    "",
+    "Reports are compiled from third-party records supplied by VinAudit and are provided for informational purposes only.",
+  ].join("\n");
+}
+
+export type EmailResult = { sent: boolean; detail: string };
+
+/**
+ * Sends the receipt + report link. Email is best-effort: a delivery failure
+ * must never block or reverse a successful fulfillment, so this returns a
+ * result instead of throwing.
+ */
+export async function sendReportEmail(order: Order): Promise<EmailResult> {
+  const reportUrl = absoluteUrl(`/report/${order.accessToken}`);
+
+  if (!isEmailConfigured()) {
+    return { sent: false, detail: "RESEND_API_KEY not set — receipt email skipped" };
+  }
+  if (!order.email) {
+    return { sent: false, detail: "No customer email on the order" };
+  }
+
+  try {
+    const resend = new Resend(emailConfig.apiKey);
+    const { data, error } = await resend.emails.send({
+      from: emailConfig.from,
+      to: order.email,
+      replyTo: emailConfig.supportEmail,
+      subject: `Your ${BRAND.name} report for VIN ${order.vin}`,
+      html: receiptHtml(order, reportUrl),
+      text: receiptText(order, reportUrl),
+    });
+    if (error) {
+      return { sent: false, detail: `Resend error: ${error.message}` };
+    }
+    return { sent: true, detail: `Sent (${data?.id ?? "no id"})` };
+  } catch (error) {
+    return { sent: false, detail: `Resend threw: ${(error as Error).message}` };
+  }
+}

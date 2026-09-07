@@ -1,0 +1,174 @@
+import type { Metadata } from "next";
+import Link from "next/link";
+import { notFound } from "next/navigation";
+
+import { PrintButton } from "@/components/print-button";
+import { ReportView } from "@/components/report-view";
+import { SiteFooter } from "@/components/site-footer";
+import { SiteHeader } from "@/components/site-header";
+import { emailConfig, formatPrice } from "@/lib/config";
+import { getStore } from "@/lib/store";
+import type { Order } from "@/lib/store";
+import { prettyVin } from "@/lib/vin";
+
+export const dynamic = "force-dynamic";
+
+export const metadata: Metadata = {
+  title: "Your vehicle history report",
+  robots: { index: false, follow: false },
+};
+
+function Shell({
+  title,
+  order,
+  children,
+}: {
+  title: string;
+  order: Order;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="flex min-h-dvh flex-col bg-slate-50">
+      <SiteHeader />
+      <main className="container-page flex-1 py-16">
+        <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            {title}
+          </h1>
+          <p className="mt-2 font-mono text-sm tracking-wider text-slate-500">
+            {prettyVin(order.vin)}
+          </p>
+          <div className="mt-4 space-y-4 text-sm leading-relaxed text-slate-600">
+            {children}
+          </div>
+          <p className="mt-6 rounded-xl bg-slate-50 px-4 py-3 text-xs text-slate-500">
+            Order reference{" "}
+            <span className="font-mono text-slate-700">{order.id}</span> ·{" "}
+            <a
+              className="font-semibold text-brand-600 hover:underline"
+              href={`mailto:${emailConfig.supportEmail}`}
+            >
+              {emailConfig.supportEmail}
+            </a>
+          </p>
+        </div>
+      </main>
+      <SiteFooter />
+    </div>
+  );
+}
+
+export default async function ReportPage({
+  params,
+  searchParams,
+}: {
+  params: Promise<{ token: string }>;
+  searchParams: Promise<{ new?: string }>;
+}) {
+  const { token } = await params;
+  const { new: isNew } = await searchParams;
+
+  const store = getStore();
+  await store.init();
+  const order = await store.getByAccessToken(token);
+
+  if (!order) notFound();
+
+  if (order.status === "pending" || order.status === "expired") {
+    return (
+      <Shell title="This order hasn't been paid" order={order}>
+        <p>
+          We created this order but never received a completed payment, so no
+          report was pulled. Nothing has been charged.
+        </p>
+        <p>
+          <Link
+            href={`/preview?vin=${encodeURIComponent(order.vin)}`}
+            className="font-semibold text-brand-600 hover:underline"
+          >
+            Start again for this VIN
+          </Link>
+        </p>
+      </Shell>
+    );
+  }
+
+  if (order.status === "paid" && !order.report) {
+    return (
+      <Shell title="We're pulling your report" order={order}>
+        <p>
+          Your payment cleared and we are retrieving records from the provider
+          now. This normally takes a few seconds — refresh this page in a
+          moment. We will also email the link to {order.email}.
+        </p>
+      </Shell>
+    );
+  }
+
+  if (order.status === "failed" || !order.report) {
+    return (
+      <Shell title="We couldn't retrieve this report" order={order}>
+        <p>
+          Your payment went through but the vehicle-data provider did not return
+          a report. We will not substitute sample data for the report you paid
+          for.
+        </p>
+        {order.providerError && (
+          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-mono text-xs text-red-700">
+            {order.providerError}
+          </p>
+        )}
+        <p>
+          Our team can retry this order. If a retry doesn&apos;t work we will
+          refund the {formatPrice(order.amountCents, order.currency)} in full.
+        </p>
+      </Shell>
+    );
+  }
+
+  return (
+    <div className="flex min-h-dvh flex-col bg-slate-50">
+      <SiteHeader />
+
+      <main className="flex-1">
+        <div className="no-print border-b border-slate-200 bg-white">
+          <div className="container-page py-8">
+            {isNew && (
+              <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                <span className="font-semibold">Payment received.</span> Your
+                report is below and a private link is on its way to{" "}
+                {order.email}.
+              </div>
+            )}
+
+            <div className="flex flex-wrap items-end justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
+                  Your report
+                </p>
+                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
+                  Vehicle history for {prettyVin(order.vin)}
+                </h1>
+                <p className="mt-1.5 text-sm text-slate-500">
+                  Paid {formatPrice(order.amountCents, order.currency)} ·
+                  Delivered{" "}
+                  {order.fulfilledAt
+                    ? `${order.fulfilledAt.replace("T", " ").slice(0, 16)} UTC`
+                    : "just now"}{" "}
+                  · Keep this page&apos;s link private.
+                </p>
+              </div>
+              <PrintButton />
+            </div>
+          </div>
+        </div>
+
+        <div className="container-page py-10">
+          <ReportView report={order.report} />
+        </div>
+      </main>
+
+      <SiteFooter />
+    </div>
+  );
+}
