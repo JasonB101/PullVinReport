@@ -15,6 +15,7 @@ import { fulfillOrder } from "@/lib/fulfillment";
 import { headers } from "next/headers";
 
 import { rateLimit } from "@/lib/rate-limit";
+import { refundOrder } from "@/lib/refund";
 import { getStore } from "@/lib/store";
 
 export type LoginState = { error?: string };
@@ -103,4 +104,31 @@ export async function resendEmailAction(
     return { message: `Re-sent to ${order.email}.` };
   }
   return { error: result.detail };
+}
+
+/**
+ * Refunds a charge through Stripe and emails the customer.
+ *
+ * This is the in-app version of the refund we promise before checkout, so a
+ * failed pull no longer needs a trip to the Stripe dashboard.
+ */
+export async function refundOrderAction(
+  _previous: RetryState,
+  formData: FormData,
+): Promise<RetryState> {
+  if (!(await isAdminAuthenticated())) {
+    return { error: "Your session expired. Sign in again." };
+  }
+
+  const orderId = String(formData.get("orderId") ?? "");
+  if (!orderId) return { error: "Missing order id." };
+
+  try {
+    const result = await refundOrder(orderId);
+    revalidatePath("/admin");
+    return { message: result.detail };
+  } catch (error) {
+    revalidatePath("/admin");
+    return { error: (error as Error).message };
+  }
 }

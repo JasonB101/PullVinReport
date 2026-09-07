@@ -62,6 +62,49 @@ function receiptText(order: Order, reportUrl: string): string {
   ].join("\n");
 }
 
+function refundHtml(order: Order, amount: string): string {
+  return `<!doctype html>
+<html>
+  <body style="margin:0;padding:24px;background:#f4f6fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;color:#0f172a;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;margin:0 auto;background:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e2e8f0;">
+      <tr>
+        <td style="background:#0b1220;padding:24px;">
+          <div style="color:#ffffff;font-size:18px;font-weight:700;letter-spacing:-0.02em;">${BRAND.name}</div>
+          <div style="color:#94a3b8;font-size:13px;margin-top:4px;">Your ${escapeHtml(amount)} refund is on its way</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="padding:28px 24px;">
+          <p style="margin:0 0 16px;font-size:15px;line-height:1.6;">We couldn't deliver the history report you paid for, so we've refunded you in full. Refunds usually appear on your original payment method within 5–10 business days, depending on your bank.</p>
+          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e2e8f0;border-radius:12px;margin:0 0 24px;">
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;">VIN</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;">${escapeHtml(order.vin)}</td></tr>
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">Order</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;border-top:1px solid #e2e8f0;">${escapeHtml(order.id)}</td></tr>
+            <tr><td style="padding:12px 16px;font-size:13px;color:#64748b;border-top:1px solid #e2e8f0;">Refunded</td><td style="padding:12px 16px;font-size:13px;text-align:right;font-weight:600;border-top:1px solid #e2e8f0;">${escapeHtml(amount)}</td></tr>
+          </table>
+          <p style="margin:0;font-size:12px;line-height:1.6;color:#64748b;">Nothing else is needed from you. If the refund hasn't landed after 10 business days, reply to this email or write to ${escapeHtml(emailConfig.supportEmail)} with your order reference.</p>
+        </td>
+      </tr>
+    </table>
+    <p style="max-width:560px;margin:16px auto 0;font-size:11px;color:#94a3b8;text-align:center;">${BRAND.name} · ${BRAND.domain}</p>
+  </body>
+</html>`;
+}
+
+function refundText(order: Order, amount: string): string {
+  return [
+    `${BRAND.name} — your ${amount} refund is on its way`,
+    "",
+    `VIN: ${order.vin}`,
+    `Order: ${order.id}`,
+    `Refunded: ${amount}`,
+    "",
+    "We couldn't deliver the history report you paid for, so we've refunded you in full.",
+    "Refunds usually appear on your original payment method within 5-10 business days.",
+    "",
+    `Support: ${emailConfig.supportEmail}`,
+  ].join("\n");
+}
+
 export type EmailResult = { sent: boolean; detail: string };
 
 /**
@@ -93,6 +136,40 @@ export async function sendReportEmail(order: Order): Promise<EmailResult> {
       return { sent: false, detail: `Resend error: ${error.message}` };
     }
     return { sent: true, detail: `Sent (${data?.id ?? "no id"})` };
+  } catch (error) {
+    return { sent: false, detail: `Resend threw: ${(error as Error).message}` };
+  }
+}
+
+/**
+ * Tells the customer their money is on the way back. Best-effort for the same
+ * reason as the receipt: the refund has already happened at Stripe, and a mail
+ * failure must not look like a refund failure.
+ */
+export async function sendRefundEmail(order: Order): Promise<EmailResult> {
+  const amount = formatPrice(order.amountCents, order.currency);
+
+  if (!isEmailConfigured()) {
+    return { sent: false, detail: "RESEND_API_KEY not set — refund email skipped" };
+  }
+  if (!order.email) {
+    return { sent: false, detail: "No customer email on the order" };
+  }
+
+  try {
+    const resend = new Resend(emailConfig.apiKey);
+    const { data, error } = await resend.emails.send({
+      from: emailConfig.from,
+      to: order.email,
+      replyTo: emailConfig.supportEmail,
+      subject: `Refunded: your ${BRAND.name} order for VIN ${order.vin}`,
+      html: refundHtml(order, amount),
+      text: refundText(order, amount),
+    });
+    if (error) {
+      return { sent: false, detail: `Resend error: ${error.message}` };
+    }
+    return { sent: true, detail: `Refund email sent (${data?.id ?? "no id"})` };
   } catch (error) {
     return { sent: false, detail: `Resend threw: ${(error as Error).message}` };
   }

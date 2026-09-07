@@ -3,6 +3,7 @@ import type Stripe from "stripe";
 
 import { stripeConfig } from "@/lib/config";
 import { fulfillOrder } from "@/lib/fulfillment";
+import { recordExternalRefund } from "@/lib/refund";
 import { getStore } from "@/lib/store";
 import { getStripe } from "@/lib/stripe";
 
@@ -78,6 +79,24 @@ export async function POST(request: Request) {
         console.info(
           `[webhook] Fulfilled order ${order.id} (email: ${result.emailDetail})`,
         );
+        break;
+      }
+
+      case "charge.refunded": {
+        // Keeps /admin and the customer's report page in step with refunds
+        // issued straight from the Stripe dashboard.
+        const charge = event.data.object as Stripe.Charge;
+        const paymentIntentId =
+          typeof charge.payment_intent === "string"
+            ? charge.payment_intent
+            : (charge.payment_intent?.id ?? null);
+        if (paymentIntentId) {
+          const order = await recordExternalRefund(
+            paymentIntentId,
+            charge.refunds?.data[0]?.id ?? null,
+          );
+          if (order) console.info(`[webhook] Recorded refund for ${order.id}`);
+        }
         break;
       }
 

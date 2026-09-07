@@ -1,5 +1,10 @@
-import { isVinAuditConfigured, missingVinAuditKeys } from "@/lib/config";
+import {
+  autoRefundFailedOrders,
+  isVinAuditConfigured,
+  missingVinAuditKeys,
+} from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
+import { refundOrder } from "@/lib/refund";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
 import { pullVinAuditReport } from "@/lib/vinaudit";
@@ -9,6 +14,23 @@ export type FulfillmentResult = {
   alreadyFulfilled: boolean;
   emailDetail: string;
 };
+
+/**
+ * Gives the money back when AUTO_REFUND_FAILED_ORDERS is on.
+ *
+ * Never throws: the order is already recorded as failed, and a refund we could
+ * not issue is an operator problem to finish from `/admin`, not a reason to
+ * change what the caller sees.
+ */
+async function autoRefund(orderId: string): Promise<void> {
+  if (!autoRefundFailedOrders()) return;
+  try {
+    const result = await refundOrder(orderId);
+    console.info(`[fulfillment] Auto-refunded ${orderId}: ${result.detail}`);
+  } catch (error) {
+    console.error(`[fulfillment] Auto-refund failed for ${orderId}`, error);
+  }
+}
 
 /**
  * Turns a paid order into a delivered report.
@@ -35,6 +57,7 @@ export async function fulfillOrder(orderId: string): Promise<FulfillmentResult> 
   if (!isVinAuditConfigured()) {
     const detail = `VinAudit is not configured (missing ${missingVinAuditKeys().join(", ")}). This paid order cannot be fulfilled and must be refunded or retried once credentials are set.`;
     await store.update(order.id, { status: "failed", providerError: detail });
+    await autoRefund(order.id);
     throw new Error(detail);
   }
 
@@ -44,6 +67,7 @@ export async function fulfillOrder(orderId: string): Promise<FulfillmentResult> 
   } catch (error) {
     const detail = (error as Error).message;
     await store.update(order.id, { status: "failed", providerError: detail });
+    await autoRefund(order.id);
     throw error;
   }
 

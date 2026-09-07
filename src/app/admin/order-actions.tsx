@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useActionState } from "react";
 
 import {
+  refundOrderAction,
   resendEmailAction,
   retryFulfillmentAction,
   type RetryState,
@@ -16,9 +17,21 @@ type Props = {
   orderId: string;
   accessToken: string;
   status: OrderStatus;
+  /** Formatted amount, used in the refund confirmation prompt. */
+  amountLabel: string;
+  /** True when the order has a Stripe charge that has not been sent back. */
+  refundable: boolean;
+  refunded: boolean;
 };
 
-export function OrderActions({ orderId, accessToken, status }: Props) {
+export function OrderActions({
+  orderId,
+  accessToken,
+  status,
+  amountLabel,
+  refundable,
+  refunded,
+}: Props) {
   const [retryState, retry, retrying] = useActionState(
     retryFulfillmentAction,
     INITIAL,
@@ -27,9 +40,21 @@ export function OrderActions({ orderId, accessToken, status }: Props) {
     resendEmailAction,
     INITIAL,
   );
+  const [refundState, refund, refunding] = useActionState(
+    refundOrderAction,
+    INITIAL,
+  );
 
-  const feedback = retryState.error ?? emailState.error ?? retryState.message ?? emailState.message;
-  const isError = Boolean(retryState.error ?? emailState.error);
+  const feedback =
+    retryState.error ??
+    emailState.error ??
+    refundState.error ??
+    retryState.message ??
+    emailState.message ??
+    refundState.message;
+  const isError = Boolean(
+    retryState.error ?? emailState.error ?? refundState.error,
+  );
 
   return (
     <div className="space-y-2">
@@ -66,6 +91,35 @@ export function OrderActions({ orderId, accessToken, status }: Props) {
               className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               {resending ? "Sending…" : "Re-send email"}
+            </button>
+          </form>
+        )}
+
+        {refunded && (
+          <span className="rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs font-semibold text-slate-500">
+            Refunded
+          </span>
+        )}
+
+        {refundable && (
+          <form action={refund}>
+            <input type="hidden" name="orderId" value={orderId} />
+            <button
+              type="submit"
+              disabled={refunding}
+              // A refund cannot be undone, so make it a deliberate click.
+              onClick={(event) => {
+                if (
+                  !window.confirm(
+                    `Refund ${amountLabel} to this customer? This cannot be undone.`,
+                  )
+                ) {
+                  event.preventDefault();
+                }
+              }}
+              className="rounded-lg border border-red-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-red-700 transition hover:bg-red-50 disabled:opacity-60"
+            >
+              {refunding ? "Refunding…" : "Refund"}
             </button>
           </form>
         )}

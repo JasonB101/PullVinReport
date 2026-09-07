@@ -30,6 +30,8 @@ type Row = {
   provider_error: string | null;
   fulfilled_at: Date | string | null;
   email_sent_at: Date | string | null;
+  refunded_at: Date | string | null;
+  stripe_refund_id: string | null;
 };
 
 function iso(value: Date | string | null): string | null {
@@ -54,6 +56,8 @@ function toOrder(row: Row): Order {
     providerError: row.provider_error,
     fulfilledAt: iso(row.fulfilled_at),
     emailSentAt: iso(row.email_sent_at),
+    refundedAt: iso(row.refunded_at),
+    stripeRefundId: row.stripe_refund_id,
   };
 }
 
@@ -66,6 +70,8 @@ const PATCH_COLUMNS: Record<keyof OrderPatch, string> = {
   providerError: "provider_error",
   fulfilledAt: "fulfilled_at",
   emailSentAt: "email_sent_at",
+  refundedAt: "refunded_at",
+  stripeRefundId: "stripe_refund_id",
 };
 
 export class PostgresOrderStore implements OrderStore {
@@ -113,8 +119,16 @@ export class PostgresOrderStore implements OrderStore {
             report JSONB,
             provider_error TEXT,
             fulfilled_at TIMESTAMPTZ,
-            email_sent_at TIMESTAMPTZ
+            email_sent_at TIMESTAMPTZ,
+            refunded_at TIMESTAMPTZ,
+            stripe_refund_id TEXT
           );
+        `);
+        // Tables created before refunds existed need the new columns.
+        await this.getPool().query(`
+          ALTER TABLE ${TABLE}
+            ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ,
+            ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT;
         `);
         await this.getPool().query(
           `CREATE INDEX IF NOT EXISTS ${TABLE}_created_at_idx ON ${TABLE} (created_at DESC);`,
@@ -173,6 +187,16 @@ export class PostgresOrderStore implements OrderStore {
     return result.rows[0] ? toOrder(result.rows[0]) : null;
   }
 
+  async getByStripePaymentIntentId(
+    paymentIntentId: string,
+  ): Promise<Order | null> {
+    const result = await this.query<Row>(
+      `SELECT * FROM ${TABLE} WHERE stripe_payment_intent_id = $1`,
+      [paymentIntentId],
+    );
+    return result.rows[0] ? toOrder(result.rows[0]) : null;
+  }
+
   async update(id: string, patch: OrderPatch): Promise<Order> {
     const assignments: string[] = ["updated_at = now()"];
     const values: unknown[] = [];
@@ -212,9 +236,11 @@ export class PostgresOrderStore implements OrderStore {
          COUNT(*) FILTER (WHERE status = 'fulfilled')::text AS fulfilled,
          COUNT(*) FILTER (WHERE status = 'failed')::text AS failed,
          COALESCE(SUM(amount_cents) FILTER (
-           WHERE status IN ('paid','fulfilled')
-              OR (status = 'failed' AND stripe_payment_intent_id IS NOT NULL)
-         ), 0)::text AS revenue
+           WHERE refunded_at IS NULL
+             AND (status IN ('paid','fulfilled')
+              OR (status = 'failed' AND stripe_payment_intent_id IS NOT NULL))
+         ), 0)::text AS revenue,
+         COALESCE(SUM(amount_cents) FILTER (WHERE refunded_at IS NOT NULL), 0)::text AS refunded
        FROM ${TABLE}`,
     );
     const row = result.rows[0] ?? {};
@@ -224,6 +250,7 @@ export class PostgresOrderStore implements OrderStore {
       fulfilled: Number(row.fulfilled ?? 0),
       failed: Number(row.failed ?? 0),
       revenueCents: Number(row.revenue ?? 0),
+      refundedCents: Number(row.refunded ?? 0),
     };
   }
 

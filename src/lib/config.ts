@@ -19,6 +19,12 @@ function env(key: string): string | undefined {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+function boolEnv(key: string, fallback: boolean): boolean {
+  const raw = env(key)?.toLowerCase();
+  if (raw === undefined) return fallback;
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 function intEnv(key: string, fallback: number): number {
   const raw = env(key);
   if (!raw) return fallback;
@@ -97,6 +103,17 @@ export const stripeConfig = {
 
 export function isStripeConfigured(): boolean {
   return Boolean(stripeConfig.secretKey);
+}
+
+/**
+ * When true, a paid order whose report pull fails is refunded immediately
+ * instead of waiting for an operator to retry it in `/admin`.
+ *
+ * Off by default: the documented flow is retry-then-refund, and a refunded
+ * charge cannot be retried without asking the customer to pay again.
+ */
+export function autoRefundFailedOrders(): boolean {
+  return boolEnv("AUTO_REFUND_FAILED_ORDERS", false);
 }
 
 export const emailConfig = {
