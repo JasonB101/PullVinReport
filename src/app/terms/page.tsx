@@ -25,8 +25,12 @@ export default function TermsPage() {
       <LegalSection heading="1. What we sell">
         <p>
           We sell a single product: one vehicle history report for one VIN,
-          compiled from records supplied by the VinAudit Vehicle History API. The
-          current price is <strong className="text-slate-900">{price}</strong>{" "}
+          compiled from third-party records. The data processors we rely on to
+          produce it are named in our{" "}
+          <Link href="/privacy" className="font-semibold text-brand-600 hover:underline">
+            privacy policy
+          </Link>
+          . The current price is <strong className="text-slate-900">{price}</strong>{" "}
           per report. It is a one-time charge. There is no subscription, no
           recurring billing, and nothing to cancel.
         </p>

@@ -17,7 +17,7 @@ export const metadata: Metadata = {
     template: `%s · ${BRAND.name}`,
   },
   description:
-    "Pull a full vehicle history report for any VIN: title brands, salvage and junk records, odometer readings, accidents, liens, prior listings and open recalls. Powered by the VinAudit Vehicle History API.",
+    "Pull a full vehicle history report for any VIN: title brands, salvage and junk records, odometer readings, accidents, liens, prior listings and open recalls.",
   applicationName: BRAND.name,
   keywords: [
     "VIN history report",

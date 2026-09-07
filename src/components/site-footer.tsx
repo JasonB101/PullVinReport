@@ -39,8 +39,8 @@ export function SiteFooter() {
           <div className="space-y-4">
             <Logo variant="on-dark" />
             <p className="max-w-xs text-sm leading-relaxed">
-              Vehicle history reports for buyers, sellers and owners — powered by
-              the VinAudit Vehicle History API.
+              Vehicle history reports for buyers, sellers and owners — one VIN,
+              one price, pulled live.
             </p>
             <a
               href={`mailto:${emailConfig.supportEmail}`}
@@ -80,13 +80,13 @@ export function SiteFooter() {
             are not used here to imply any association.
           </p>
           <p>
-            Reports are compiled from third-party records supplied by VinAudit
-            and are provided for informational purposes only. They are not a
-            guarantee of a vehicle&apos;s condition, title status, or fitness for
-            purchase, and they are not a substitute for an independent
-            inspection. {BRAND.name} is not a consumer reporting agency and its
-            reports may not be used to make decisions about credit, insurance,
-            employment, or tenancy.
+            Reports are compiled from third-party records and are provided for
+            informational purposes only. They are not a guarantee of a
+            vehicle&apos;s condition, title status, or fitness for purchase, and
+            they are not a substitute for an independent inspection.{" "}
+            {BRAND.name} is not a consumer reporting agency and its reports may
+            not be used to make decisions about credit, insurance, employment,
+            or tenancy.
           </p>
           <p className="text-slate-500">
             © {new Date().getFullYear()} {BRAND.name} · {BRAND.domain}

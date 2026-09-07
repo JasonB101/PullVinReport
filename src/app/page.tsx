@@ -72,7 +72,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Where does the data come from?",
-    a: "Every purchased report is pulled live from the VinAudit Vehicle History API, which aggregates NMVTIS title and brand data along with insurance, salvage, auction and listing sources. We do not resell another retailer's report and we do not repackage the sample.",
+    a: "Every purchased report is pulled live at the moment you buy it, from national title and brand data reported to NMVTIS together with insurance, salvage, auction and listing records. We do not resell another retailer's report and we do not repackage the sample.",
   },
   {
     q: "How fast do I get it?",
@@ -87,7 +87,7 @@ const FAQ = [
     a: `No. One payment of ${formatPrice()} buys one report for one VIN. There is nothing to cancel and we never store your card — Stripe handles payment end to end.`,
   },
   {
-    q: "What if the provider has no records for my VIN?",
+    q: "What if there are no records for my VIN?",
     a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing. If we cannot deliver a report for your VIN, email support and we will refund you.",
   },
   {
@@ -132,7 +132,7 @@ export default function HomePage() {
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-brand-100 ring-1 ring-inset ring-white/15">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                Powered by the VinAudit Vehicle History API
+                NMVTIS title & brand data · pulled live per VIN
               </span>
 
               <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-6xl">
@@ -189,8 +189,8 @@ export default function HomePage() {
               Everything in one report, nothing held back for an upsell
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-600">
-              There is one product and one price. Whatever the provider returns
-              for your VIN, you see all of it.
+              There is one product and one price. Whatever comes back for your
+              VIN, you see all of it.
             </p>
           </div>
 

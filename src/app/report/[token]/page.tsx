@@ -102,9 +102,9 @@ export default async function ReportPage({
     return (
       <Shell title="We're pulling your report" order={order}>
         <p>
-          Your payment cleared and we are retrieving records from the provider
-          now. This normally takes a few seconds — refresh this page in a
-          moment. We will also email the link to {order.email}.
+          Your payment cleared and we are retrieving your records now. This
+          normally takes a few seconds — refresh this page in a moment. We will
+          also email the report to {order.email}.
         </p>
       </Shell>
     );
