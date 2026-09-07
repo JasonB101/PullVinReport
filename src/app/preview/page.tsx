@@ -11,8 +11,11 @@ import {
   formatPrice,
   isStripeConfigured,
   isVinAuditConfigured,
-  missingVinAuditKeys,
 } from "@/lib/config";
+import {
+  ORDERING_PAUSED_REASON,
+  PAYMENT_CANCELED_MESSAGE,
+} from "@/lib/customer-copy";
 import { modelYearFromVin, prettyVin, validateVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
@@ -24,31 +27,26 @@ export const metadata: Metadata = {
   robots: { index: false, follow: false },
 };
 
-/** Explains, in plain language, why ordering is disabled on this deployment. */
+/**
+ * Whether a customer can buy right now.
+ *
+ * Which credential is missing is an operator concern, so the buyer gets one
+ * calm sentence and a link to `/status` rather than our configuration.
+ */
 function orderingAvailability(): { available: boolean; reason?: string } {
-  const problems: string[] = [];
-  if (!isVinAuditConfigured()) {
-    problems.push(
-      `the vehicle-data provider is not connected (missing ${missingVinAuditKeys().join(", ")})`,
-    );
-  }
-  if (!isStripeConfigured()) {
-    problems.push("payments are not connected (missing STRIPE_SECRET_KEY)");
-  }
-  if (problems.length === 0) return { available: true };
-  return {
-    available: false,
-    reason: `On this deployment ${problems.join(" and ")}.`,
-  };
+  if (isVinAuditConfigured() && isStripeConfigured()) return { available: true };
+  return { available: false, reason: ORDERING_PAUSED_REASON };
 }
 
 export default async function PreviewPage({
   searchParams,
 }: {
-  searchParams: Promise<{ vin?: string }>;
+  searchParams: Promise<{ vin?: string; canceled?: string }>;
 }) {
   const params = await searchParams;
   const result = validateVin(params.vin ?? "");
+  // Stripe's cancel_url sends the buyer back here with canceled=1.
+  const canceled = params.canceled === "1";
 
   if (!result.valid) {
     return (
@@ -74,7 +72,9 @@ export default async function PreviewPage({
 
   // Keep the URL canonical so shared links always carry the normalized VIN.
   if (params.vin !== result.vin) {
-    redirect(`/preview?vin=${encodeURIComponent(result.vin)}`);
+    redirect(
+      `/preview?vin=${encodeURIComponent(result.vin)}${canceled ? "&canceled=1" : ""}`,
+    );
   }
 
   const { available, reason } = orderingAvailability();
@@ -116,6 +116,18 @@ export default async function PreviewPage({
                 Use a different VIN
               </Link>
             </div>
+
+            {canceled && (
+              <div
+                role="status"
+                className="mt-5 max-w-2xl rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-700"
+              >
+                <span className="font-semibold text-slate-900">
+                  Payment canceled — you have not been charged.
+                </span>{" "}
+                {PAYMENT_CANCELED_MESSAGE}
+              </div>
+            )}
 
             {result.warning && (
               <p className="mt-5 max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
@@ -183,6 +195,7 @@ export default async function PreviewPage({
                 priceLabel={formatPrice()}
                 available={available}
                 unavailableReason={reason}
+                canceled={canceled}
               />
             </div>
           </div>
