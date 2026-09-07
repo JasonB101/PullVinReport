@@ -45,12 +45,12 @@ export function SampleTeaser() {
                   : "border-emerald-200 bg-emerald-50/60"
               }`}
             >
-              <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-[11px] font-semibold text-slate-700">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-[11px] font-semibold leading-tight text-slate-700">
                   {check.label}
                 </span>
                 <span
-                  className={`h-2 w-2 shrink-0 rounded-full ${
+                  className={`mt-1 h-2 w-2 shrink-0 rounded-full ${
                     check.status === "found" ? "bg-amber-500" : "bg-emerald-500"
                   }`}
                 />

@@ -17,10 +17,14 @@ type Props = {
 
 export function SiteHeader({ variant = "on-light" }: Props) {
   const onDark = variant === "on-dark";
+  // The dark header sits above the hero rather than over it, so a translucent
+  // fill would read as grey against the white body behind it.
   return (
     <header
-      className={`no-print sticky top-0 z-40 border-b backdrop-blur-xl ${
-        onDark ? "border-white/10 bg-ink-950/70" : "border-slate-200 bg-white/85"
+      className={`no-print sticky top-0 z-40 border-b ${
+        onDark
+          ? "border-white/10 bg-ink-950"
+          : "border-slate-200 bg-white/85 backdrop-blur-xl"
       }`}
     >
       <div className="container-page flex h-16 items-center justify-between gap-4">

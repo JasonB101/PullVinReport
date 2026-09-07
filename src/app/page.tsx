@@ -125,9 +125,10 @@ export default function HomePage() {
         <section id="vin" className="relative overflow-hidden bg-ink-950">
           <div className="hero-aurora absolute inset-0" aria-hidden="true" />
           <div className="grid-lines absolute inset-0 opacity-40" aria-hidden="true" />
-          <div className="absolute inset-x-0 bottom-0 h-32 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
+          <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
 
-          <div className="container-page relative py-16 sm:py-24">
+          {/* Extra bottom padding keeps the trust row clear of the white fade. */}
+          <div className="container-page relative pb-32 pt-14 sm:pb-40 sm:pt-24">
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-brand-100 ring-1 ring-inset ring-white/15">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />

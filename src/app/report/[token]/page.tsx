@@ -153,7 +153,7 @@ export default async function ReportPage({
                   Paid {formatPrice(order.amountCents, order.currency)} ·
                   Delivered{" "}
                   {order.fulfilledAt
-                    ? new Date(order.fulfilledAt).toLocaleString("en-US")
+                    ? `${order.fulfilledAt.replace("T", " ").slice(0, 16)} UTC`
                     : "just now"}{" "}
                   · Keep this page&apos;s link private.
                 </p>
