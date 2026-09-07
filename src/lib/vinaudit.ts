@@ -11,6 +11,7 @@ import type {
   VehicleReport,
   VehicleSummary,
 } from "@/lib/report";
+import { dedupeConsecutiveRecords, formatEventDate, isoDate } from "@/lib/report";
 import { normalizeVin } from "@/lib/vin";
 
 export class ProviderNotConfiguredError extends Error {
@@ -75,6 +76,14 @@ const KEY_LABELS: Record<string, string> = {
   reportlink: "Provider report",
   nhtsa: "NHTSA",
   msrp: "MSRP",
+  reportingentity: "Reporting entity",
+  obtainedfrom: "Obtained from",
+  intendedforexport: "Intended for export",
+  sellertype: "Seller type",
+  listingprice: "Price",
+  saleprice: "Price",
+  lienholder: "Lienholder",
+  zipcode: "ZIP code",
 };
 
 export function humanizeKey(key: string): string {
@@ -87,10 +96,122 @@ export function humanizeKey(key: string): string {
   return spaced.charAt(0).toUpperCase() + spaced.slice(1);
 }
 
+/**
+ * Keys the buyer should never see on a record.
+ *
+ * The VIN heads the report already, and repeating it on every row is the main
+ * reason the raw feed reads like a database dump. The provider's own report
+ * link is an operator detail and stays out of the customer's copy.
+ */
+const HIDDEN_KEYS = new Set(["vin", "reportlink", "reportid", "id"]);
+
+const ODOMETER_KEYS = new Set(["meter", "odometer", "mileage"]);
+const ODOMETER_UNIT_KEYS = new Set(["meterunit", "odometerunit", "mileageunit"]);
+
+/** Keys whose values are flags, so they read as Yes/No rather than 1/Y/true. */
+const BOOLEAN_KEYS = new Set([
+  "current",
+  "recovered",
+  "released",
+  "active",
+  "intendedforexport",
+  "airbagdeployed",
+  "airbagsdeployed",
+]);
+
+function isDateKey(key: string): boolean {
+  return key === "date" || key.endsWith("date") || key.endsWith("_date");
+}
+
+function yesNo(value: unknown): string {
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  const text = stringify(value).toLowerCase();
+  if (["y", "yes", "true", "1"].includes(text)) return "Yes";
+  if (["n", "no", "false", "0"].includes(text)) return "No";
+  return stringify(value);
+}
+
+/** Turns a raw mileage plus its unit code into one readable value. */
+function formatOdometer(value: unknown, unit: unknown): string {
+  const numeric = Number.parseInt(stringify(value).replace(/[^0-9]/g, ""), 10);
+  if (!Number.isFinite(numeric) || numeric <= 0) return "";
+  const code = stringify(unit).toLowerCase();
+  return `${numeric.toLocaleString("en-US")} ${code.startsWith("k") ? "km" : "mi"}`;
+}
+
+/**
+ * Converts one provider record into the handful of fields worth reading.
+ *
+ * Empty values, the repeated VIN and split-up odometer columns are folded away
+ * so a record carries the event and nothing else.
+ */
 function toFields(record: Record<string, unknown>): Field[] {
-  return Object.entries(record)
-    .map(([key, value]) => ({ label: humanizeKey(key), value: stringify(value) }))
-    .filter((field) => field.value.length > 0);
+  const unit = Object.entries(record).find(([key]) =>
+    ODOMETER_UNIT_KEYS.has(key.toLowerCase()),
+  )?.[1];
+
+  const fields: Field[] = [];
+  let hasOdometer = false;
+
+  for (const [key, value] of Object.entries(record)) {
+    const lower = key.toLowerCase();
+    if (HIDDEN_KEYS.has(lower) || ODOMETER_UNIT_KEYS.has(lower)) continue;
+
+    if (ODOMETER_KEYS.has(lower)) {
+      const odometer = hasOdometer ? "" : formatOdometer(value, unit);
+      if (odometer) {
+        fields.push({ label: "Odometer", value: odometer });
+        hasOdometer = true;
+      }
+      continue;
+    }
+
+    const text = BOOLEAN_KEYS.has(lower)
+      ? yesNo(value)
+      : isDateKey(lower)
+        ? formatEventDate(stringify(value))
+        : stringify(value);
+    if (text.length === 0) continue;
+
+    fields.push({ label: humanizeKey(key), value: text });
+  }
+
+  return fields;
+}
+
+/** Puts a section's column fields first so a record reads in a fixed order. */
+function orderFields(fields: Field[], columns: string[]): Field[] {
+  const rank = (field: Field) => {
+    const index = columns.indexOf(field.label);
+    return index === -1 ? columns.length : index;
+  };
+  return fields
+    .map((field, index) => ({ field, index }))
+    .sort((a, b) => rank(a.field) - rank(b.field) || a.index - b.index)
+    .map((entry) => entry.field);
+}
+
+/** Newest event first, with undated records left in the order they arrived. */
+function sortByDateDesc(
+  records: { record: Record<string, unknown>; fields: Field[] }[],
+): Field[][] {
+  return records
+    .map((entry, index) => {
+      const dated = Object.entries(entry.record).find(
+        ([key, value]) => isDateKey(key.toLowerCase()) && isoDate(stringify(value)),
+      );
+      return {
+        index,
+        fields: entry.fields,
+        key: dated ? isoDate(stringify(dated[1])) : "",
+      };
+    })
+    .sort((a, b) => {
+      if (a.key && b.key && a.key !== b.key) return a.key < b.key ? 1 : -1;
+      if (Boolean(a.key) !== Boolean(b.key)) return a.key ? -1 : 1;
+      return a.index - b.index;
+    })
+    .map((entry) => entry.fields);
 }
 
 function pickAttribute(
@@ -114,15 +235,19 @@ function buildSection(
   description: string,
   emptyLabel: string,
   value: unknown,
+  columns?: string[],
 ): ReportSection {
+  const cleaned = asRecordArray(value)
+    .map((record) => ({ record, fields: orderFields(toFields(record), columns ?? []) }))
+    .filter((entry) => entry.fields.length > 0);
+
   return {
     key,
     title,
     description,
     emptyLabel,
-    records: asRecordArray(value)
-      .map(toFields)
-      .filter((fields) => fields.length > 0),
+    columns,
+    records: dedupeConsecutiveRecords(sortByDateDesc(cleaned)),
   };
 }
 
@@ -142,16 +267,21 @@ function check(
   };
 }
 
+/**
+ * Dates stay in sortable ISO form here — the chart is ordered by them, and the
+ * renderers format them for display.
+ */
 function parseOdometer(titles: Record<string, unknown>[]): OdometerReading[] {
   const readings: OdometerReading[] = [];
   for (const title of titles) {
     const raw = stringify(title.meter ?? title.odometer ?? title.mileage);
     const numeric = Number.parseInt(raw.replace(/[^0-9]/g, ""), 10);
     if (!Number.isFinite(numeric) || numeric <= 0) continue;
+    const date = stringify(title.date);
     readings.push({
-      date: stringify(title.date) || "Unknown date",
+      date: isoDate(date) || date || "Unknown date",
       value: numeric,
-      unit: stringify(title.meterunit) || "mi",
+      unit: stringify(title.meterunit).toLowerCase().startsWith("k") ? "km" : "mi",
       source: stringify(title.state) || "Title record",
     });
   }
@@ -263,64 +393,72 @@ export function normalizeVinAuditReport(
     buildSection(
       "titles",
       "Title & registration history",
-      "Every title and registration event the provider has on file, newest data as reported by the issuing state.",
-      "No title or registration events were returned for this VIN.",
+      "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
+      "No title or registration events came back for this VIN.",
       titles,
+      ["Date", "State", "Odometer", "Current"],
     ),
     buildSection(
       "jsi",
       "Junk, salvage & insurance records",
       "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
-      "No junk, salvage or insurance-loss records were returned.",
+      "No junk, salvage or insurance-loss records came back.",
       jsi,
+      ["Date", "State", "City", "Reporting entity", "Obtained from"],
     ),
     buildSection(
       "accidents",
       "Accident & damage records",
       "Reported collision and damage events.",
-      "No accident or damage records were returned.",
+      "No accident or damage records came back.",
       accidents,
+      ["Date", "State", "City", "Severity", "Damage", "Odometer"],
     ),
     buildSection(
       "thefts",
       "Theft records",
       "Reported thefts and recoveries.",
-      "No theft records were returned.",
+      "No theft records came back.",
       thefts,
+      ["Date", "State", "City", "Recovered"],
     ),
     buildSection(
       "liens",
       "Liens & repossessions",
       "Financial interests recorded against the vehicle.",
-      "No liens or repossessions were returned.",
+      "No liens or repossessions came back.",
       liens,
+      ["Date", "State", "Type", "Status", "Lienholder"],
     ),
     buildSection(
       "impounds",
       "Impound records",
       "Impound and towing events.",
-      "No impound records were returned.",
+      "No impound records came back.",
       impounds,
+      ["Date", "State", "City", "Reason"],
     ),
     buildSection(
       "exports",
       "Export records",
       "Records of the vehicle leaving the country.",
-      "No export records were returned.",
+      "No export records came back.",
       exports,
+      ["Date", "State", "Port", "Country"],
     ),
     buildSection(
       "sales",
       "Sales & listing history",
       "Prior retail and auction listings, including asking prices where available.",
-      "No prior sales listings were returned.",
+      "No prior sales listings came back.",
       sales,
+      ["Date", "Price", "Odometer", "Seller type", "City", "State"],
     ),
     buildSection(
       "recalls",
       "Safety recalls",
       "Manufacturer recall campaigns that apply to this vehicle.",
-      "No recall campaigns were returned.",
+      "No recall campaigns came back.",
       recalls,
     ),
   ];
