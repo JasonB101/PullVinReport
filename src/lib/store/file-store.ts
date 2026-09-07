@@ -86,6 +86,8 @@ export class FileOrderStore implements OrderStore {
       providerError: null,
       fulfilledAt: null,
       emailSentAt: null,
+      refundedAt: null,
+      stripeRefundId: null,
     };
     return this.run(async () => {
       const orders = await this.readAll();
@@ -108,6 +110,16 @@ export class FileOrderStore implements OrderStore {
   async getByStripeSessionId(sessionId: string): Promise<Order | null> {
     const orders = await this.readAll();
     return orders.find((order) => order.stripeSessionId === sessionId) ?? null;
+  }
+
+  async getByStripePaymentIntentId(
+    paymentIntentId: string,
+  ): Promise<Order | null> {
+    const orders = await this.readAll();
+    return (
+      orders.find((order) => order.stripePaymentIntentId === paymentIntentId) ??
+      null
+    );
   }
 
   async update(id: string, patch: OrderPatch): Promise<Order> {
@@ -135,21 +147,25 @@ export class FileOrderStore implements OrderStore {
 
   async stats(): Promise<OrderStats> {
     const orders = await this.readAll();
+    // Money actually taken, which includes paid orders the provider later
+    // failed to fulfil — those are refund candidates, not phantom revenue.
+    const charged = orders.filter(
+      (o) =>
+        o.status === "fulfilled" ||
+        o.status === "paid" ||
+        (o.status === "failed" && Boolean(o.stripePaymentIntentId)),
+    );
     return {
       total: orders.length,
       pending: orders.filter((o) => o.status === "pending" || o.status === "paid")
         .length,
       fulfilled: orders.filter((o) => o.status === "fulfilled").length,
       failed: orders.filter((o) => o.status === "failed").length,
-      // Money actually taken, which includes paid orders the provider later
-      // failed to fulfil — those are refund candidates, not phantom revenue.
-      revenueCents: orders
-        .filter(
-          (o) =>
-            o.status === "fulfilled" ||
-            o.status === "paid" ||
-            (o.status === "failed" && Boolean(o.stripePaymentIntentId)),
-        )
+      revenueCents: charged
+        .filter((o) => !o.refundedAt)
+        .reduce((sum, o) => sum + o.amountCents, 0),
+      refundedCents: orders
+        .filter((o) => Boolean(o.refundedAt))
         .reduce((sum, o) => sum + o.amountCents, 0),
     };
   }

@@ -18,11 +18,16 @@ and by email.
 - [Environment](#environment)
 - [How the paid path works](#how-the-paid-path-works)
 - [The sample report rule](#the-sample-report-rule)
+- [What customers see when something breaks](#what-customers-see-when-something-breaks)
+- [Refunds](#refunds)
 - [Routes](#routes)
 - [Data storage](#data-storage)
 - [Stripe webhook setup](#stripe-webhook-setup)
 - [Admin console](#admin-console)
 - [Scripts](#scripts)
+- [Reading `/status` honestly](#reading-status-honestly)
+- [Known limitations](#known-limitations)
+- [Continuous integration](#continuous-integration)
 - [Deploying](#deploying)
 
 ---
@@ -54,7 +59,24 @@ version:
 | `STRIPE_WEBHOOK_SECRET` | Strongly recommended | Verifies fulfillment webhooks. |
 | `REPORT_PRICE_CENTS` | No (default `1499`) | Price per report in the smallest currency unit. |
 | `REPORT_CURRENCY` | No (default `usd`) | Stripe currency code. |
-| `RESEND_API_KEY`, `EMAIL_FROM`, `SUPPORT_EMAIL` | No | Receipt and report-link email. |
+| `AUTO_REFUND_FAILED_ORDERS` | No (default `false`) | Refund a charge automatically when its report pull fails, instead of waiting for an operator. |
+| `RESEND_API_KEY` | No | Receipt, refund and report-link email. |
+| `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
+| `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
+
+`EMAIL_FROM` uses the `Name <address>` display-name form, so it must be quoted
+in `.env.local`, in `.env.example` and in your host's environment UI. Unquoted
+angle brackets are redirection syntax to a shell and several `.env` parsers
+strip or truncate them:
+
+```bash
+EMAIL_FROM="PullVinReport <orders@pullvinreport.com>"
+SUPPORT_EMAIL=support@pullvinreport.com
+```
+
+If a parser hands the value back with its quotes still attached, or mangles it
+into something without an `@`, `emailConfig` falls back to the brand default
+rather than passing it to Resend.
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
@@ -87,7 +109,12 @@ POST /api/stripe/webhook   ← primary fulfillment path
 Fulfillment is idempotent, so the webhook and the return page can both run
 without double-pulling or double-charging. If VinAudit fails, the order is
 marked `failed` with the provider error recorded, the customer is told plainly
-what happened, and the order shows up in `/admin` with a **Retry pull** button.
+what happened, and the order shows up in `/admin` with **Retry pull** and
+**Refund** buttons.
+
+A buyer who abandons Stripe Checkout comes back to
+`/preview?vin=…&canceled=1`, which shows a "payment canceled — you have not
+been charged" banner and offers to restart checkout with the same VIN.
 
 ## The sample report rule
 
@@ -109,6 +136,52 @@ How it is enforced:
 - Every sample surface renders a SAMPLE chip, an amber hatched border and an
   explanatory banner, keyed off `isSample`.
 
+## What customers see when something breaks
+
+The second rule: **buyers never read our internals.** No environment variable
+names, no provider names, no raw exception text, no stack of "missing
+`VINAUDIT_…`" strings on a page someone just paid on.
+
+- Every sentence a buyer reads about a failure comes from
+  `src/lib/customer-copy.ts`. `classifyFailure()` buckets a raw error into one
+  of a few kinds and anything unrecognised falls through to a generic message,
+  so a new error string cannot leak by default.
+- The raw cause is still recorded: it is written to `providerError` on the
+  order, shown in `/admin`, and logged to the server console.
+- Full diagnostics — which credential is missing, what the provider returned,
+  whether storage is reachable — live on `/status`, `/api/status` and `/admin`.
+- `/api/checkout` returns the same soft copy in its `503` body and logs the
+  missing credential names server-side instead of returning them.
+
+When you add a customer-facing error path, route the copy through
+`customer-copy.ts` rather than rendering the error you caught.
+`tests/customer-copy.test.ts` asserts that known raw errors never produce a
+message containing credentials or provider names.
+
+## Refunds
+
+We promise a refund before checkout for any VIN we cannot deliver, so the
+refund is part of the app rather than a trip to the Stripe dashboard.
+
+- **From `/admin`.** Any order with a Stripe payment on record gets a
+  **Refund** button, which confirms first because the action is irreversible.
+  It calls `refundOrder()` (`src/lib/refund.ts`), records `refundedAt` and
+  `stripeRefundId` on the order, and emails the customer if Resend is
+  configured.
+- **Automatically.** Set `AUTO_REFUND_FAILED_ORDERS=true` and a failed pull
+  refunds itself immediately. It is off by default because the documented flow
+  is retry-then-refund, and a refunded charge cannot be retried without asking
+  the customer to pay again.
+- **From the Stripe dashboard.** The `charge.refunded` webhook records refunds
+  issued outside the app, so `/admin` and the customer's report page stay in
+  step with Stripe.
+
+Refunds are idempotent: an order that already carries `refundedAt` is left
+alone, and the Stripe call is keyed on the order id. Refunded orders are
+excluded from **Collected** in `/admin` and counted under **Refunded**, and the
+customer's report page switches from "we will refund you" to "we've refunded
+you" on its own.
+
 ## Routes
 
 | Route | What it is |
@@ -119,8 +192,8 @@ How it is enforced:
 | `/report/[token]` | A purchased report, gated by an unguessable access token. |
 | `/lookup` | Re-open a report using the order reference plus the buyer's email. |
 | `/order/success` | Post-Stripe landing; finalises fulfillment and redirects. |
-| `/status` | Human-readable provider readiness. |
-| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. |
+| `/status` | Human-readable provider readiness, each check labelled *Checked live* or *Config only*. |
+| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. Each check carries a `verification` field. |
 | `/api/checkout` | Creates the order and the Stripe Checkout Session. |
 | `/api/stripe/webhook` | Signature-verified fulfillment webhook. |
 | `/admin`, `/admin/login` | Password-protected order console. |
@@ -155,15 +228,21 @@ subscribed to:
 - `checkout.session.async_payment_succeeded`
 - `checkout.session.async_payment_failed`
 - `checkout.session.expired`
+- `charge.refunded`
 
 ## Admin console
 
 Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
-The console shows order counts, collected revenue, and the full order list with
-the provider error for anything that failed. Failed or stuck orders can be
-retried, and a delivered report's email can be re-sent.
+The console shows order counts, collected revenue, refunded totals, and the
+full order list with the provider error for anything that failed. Failed or
+stuck orders can be retried, a delivered report's email can be re-sent, and any
+charged order can be refunded in place — see [Refunds](#refunds).
+
+This is the only surface that shows raw provider errors, so it is also the
+place to look when a customer reports the soft "we couldn't retrieve this
+report" message.
 
 ## Scripts
 
@@ -175,6 +254,56 @@ retried, and a delivered report's email can be re-sent.
 | `npm run lint` | ESLint. |
 | `npm run typecheck` | `tsc --noEmit`. |
 | `npm test` | Node test runner over `tests/*.test.ts`. |
+
+## Reading `/status` honestly
+
+`/status` and `/api/status` mix two very different kinds of check, and every
+check carries a `verification` field saying which kind it is:
+
+- `probed` — we contacted the dependency while building the report. VinAudit
+  (credential probe) and order storage (`ping()`) are probed.
+- `config-only` — we found credentials and stopped there. Stripe, the webhook
+  secret, the admin password and **email** are config-only.
+
+**Email is presence-only and can read green while sending is broken.** A
+`RESEND_API_KEY` being set says nothing about whether the key is valid, still
+active, or whether the sending domain is verified in Resend — and on a
+multi-site Resend account it says nothing about which domain the key is scoped
+to. The status page reports "configured, not verified" for exactly this reason.
+There is deliberately no live send probe: it would cost a real email on every
+status check and every uptime poll.
+
+Prove sending the only way that proves anything — send one. Fulfil a test order
+end to end, or use the **Re-send email** button in `/admin` on a delivered
+order, and confirm it arrives from `orders@pullvinreport.com`. A failed send is
+reported honestly on the order (`emailSentAt` stays unset and the admin action
+returns the Resend error); it never blocks fulfillment, because the report is
+always delivered on screen regardless.
+
+The same caveat applies in smaller doses to Stripe: a well-formed secret key
+that Stripe would reject still shows as ready until the first Checkout Session.
+
+## Known limitations
+
+- **Rate limiting is per process, not per deployment.** `src/lib/rate-limit.ts`
+  keeps its buckets in memory, so on a serverless or multi-instance host the
+  real limit is the configured limit times the number of live instances, and a
+  cold start resets it. It also trusts `x-forwarded-for`, which only holds
+  behind a proxy that overwrites the header. It is enough to blunt casual abuse
+  and double-submits, but before taking public traffic put a shared limiter in
+  front of `/api/checkout` and `/admin/login` — edge/WAF rules on the host, or
+  a limiter backed by the Postgres instance the app already uses.
+- **The file store is not durable.** Without `DATABASE_URL`, orders live in a
+  JSON file that a serverless filesystem will throw away. Production needs
+  Postgres.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs `lint`, `typecheck`, `test` and `build` on
+every pull request and on pushes to `main`, on Node 22 with the npm cache
+enabled. The build step runs with no credentials on purpose: it proves the app
+still compiles and prerenders with the paid path closed, which is the state a
+fresh clone starts in.
 
 ## Deploying
 

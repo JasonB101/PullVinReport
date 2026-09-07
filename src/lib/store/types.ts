@@ -29,6 +29,9 @@ export type Order = {
   providerError: string | null;
   fulfilledAt: string | null;
   emailSentAt: string | null;
+  /** Set once the charge has been sent back to the customer. */
+  refundedAt: string | null;
+  stripeRefundId: string | null;
 };
 
 export type NewOrder = {
@@ -49,6 +52,8 @@ export type OrderPatch = Partial<
     | "providerError"
     | "fulfilledAt"
     | "emailSentAt"
+    | "refundedAt"
+    | "stripeRefundId"
   >
 >;
 
@@ -57,7 +62,9 @@ export type OrderStats = {
   pending: number;
   fulfilled: number;
   failed: number;
+  /** Money taken and kept — refunded orders are excluded. */
   revenueCents: number;
+  refundedCents: number;
 };
 
 export interface OrderStore {
@@ -69,6 +76,7 @@ export interface OrderStore {
   getById(id: string): Promise<Order | null>;
   getByAccessToken(token: string): Promise<Order | null>;
   getByStripeSessionId(sessionId: string): Promise<Order | null>;
+  getByStripePaymentIntentId(paymentIntentId: string): Promise<Order | null>;
   update(id: string, patch: OrderPatch): Promise<Order>;
   list(limit?: number): Promise<Order[]>;
   stats(): Promise<OrderStats>;

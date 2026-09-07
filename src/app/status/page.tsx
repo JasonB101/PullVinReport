@@ -83,6 +83,17 @@ export default async function StatusPage() {
         </div>
 
         <div className="container-page py-10 sm:py-12">
+          <p className="mb-5 max-w-2xl text-sm leading-relaxed text-slate-600">
+            <span className="font-semibold text-slate-900">Checked live</span>{" "}
+            means we contacted the service while loading this page.{" "}
+            <span className="font-semibold text-slate-900">Config only</span>{" "}
+            means we found credentials and nothing more — a key can be present
+            and still be rejected, so a green chip there is not proof of
+            delivery. Email is the one to watch: we never test-send from this
+            page, so a bad Resend key or an unverified sending domain shows up
+            on the first real receipt, not here.
+          </p>
+
           <div className="space-y-3">
             {report.checks.map((check) => {
               const styles = STATE_STYLES[check.state];
@@ -102,6 +113,17 @@ export default async function StatusPage() {
                           Required
                         </span>
                       )}
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider ${
+                          check.verification === "probed"
+                            ? "bg-slate-100 text-slate-500"
+                            : "bg-amber-50 text-amber-700 ring-1 ring-amber-200"
+                        }`}
+                      >
+                        {check.verification === "probed"
+                          ? "Checked live"
+                          : "Config only"}
+                      </span>
                     </div>
                     <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-600">
                       {check.detail}

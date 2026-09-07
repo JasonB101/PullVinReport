@@ -16,6 +16,18 @@ import { probeVinAudit } from "@/lib/vinaudit";
 
 export type CheckState = "ready" | "degraded" | "down" | "optional";
 
+/**
+ * How much a green check actually proves.
+ *
+ * `probed` means we talked to the dependency while building this report.
+ * `config-only` means we saw credentials and nothing else — no request was
+ * made, so the first real use is still the first proof. Email is the one that
+ * bites: a present `RESEND_API_KEY` says nothing about whether the key is
+ * valid or the sending domain is verified, and we deliberately do not burn a
+ * live send to find out.
+ */
+export type CheckVerification = "probed" | "config-only";
+
 export type StatusCheck = {
   key: string;
   label: string;
@@ -23,6 +35,7 @@ export type StatusCheck = {
   detail: string;
   /** True when the paid path cannot run without this check passing. */
   required: boolean;
+  verification: CheckVerification;
 };
 
 export type StatusReport = {
@@ -61,6 +74,8 @@ export async function buildStatusReport(
       key: "vinaudit",
       label: "VinAudit Vehicle History API",
       required: true,
+      verification:
+        vinauditConfigured && probeProvider ? "probed" : "config-only",
       state: !vinauditConfigured ? "down" : providerProbe.ok ? "ready" : "degraded",
       detail: !vinauditConfigured
         ? `Not configured — missing ${missingVinAuditKeys().join(", ")}. Paid reports are disabled; sample data is never substituted.`
@@ -70,15 +85,17 @@ export async function buildStatusReport(
       key: "stripe",
       label: "Stripe payments",
       required: true,
+      verification: "config-only",
       state: isStripeConfigured() ? "ready" : "down",
       detail: isStripeConfigured()
-        ? `Connected in ${isStripeTestMode() ? "test" : "live"} mode`
+        ? `Secret key present for ${isStripeTestMode() ? "test" : "live"} mode. Not verified here — the first Checkout Session proves the key.`
         : "Not configured — missing STRIPE_SECRET_KEY. Checkout is disabled.",
     },
     {
       key: "stripe_webhook",
       label: "Stripe fulfillment webhook",
       required: false,
+      verification: "config-only",
       state: stripeConfig.webhookSecret ? "ready" : "degraded",
       detail: stripeConfig.webhookSecret
         ? "Signing secret present at POST /api/stripe/webhook"
@@ -88,6 +105,7 @@ export async function buildStatusReport(
       key: "storage",
       label: `Order storage · ${store.kind === "postgres" ? "PostgreSQL" : "file"}`,
       required: true,
+      verification: "probed",
       state: storagePing.ok ? (store.kind === "postgres" ? "ready" : "degraded") : "down",
       detail: storagePing.ok
         ? `${store.description}. ${storagePing.detail}`
@@ -97,15 +115,17 @@ export async function buildStatusReport(
       key: "email",
       label: "Resend receipt email",
       required: false,
+      verification: "config-only",
       state: isEmailConfigured() ? "ready" : "optional",
       detail: isEmailConfigured()
-        ? `Sending from ${emailConfig.from}`
+        ? `Configured, not verified — a key is present and mail would be sent as ${emailConfig.from}. Nothing here proves the key works or that the sending domain is verified in Resend; only a real send does. Reports are always delivered on screen regardless.`
         : "RESEND_API_KEY not set — reports are still delivered on screen, but no receipt email is sent.",
     },
     {
       key: "admin",
       label: "Admin console",
       required: false,
+      verification: "config-only",
       state: isAdminConfigured() ? "ready" : "optional",
       detail: isAdminConfigured()
         ? "Password protected at /admin"

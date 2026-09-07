@@ -7,6 +7,11 @@ import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { emailConfig, formatPrice } from "@/lib/config";
+import {
+  classifyFailure,
+  customerFailureMessage,
+  refundPromise,
+} from "@/lib/customer-copy";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
 import { prettyVin } from "@/lib/vin";
@@ -106,21 +111,23 @@ export default async function ReportPage({
   }
 
   if (order.status === "failed" || !order.report) {
+    // The raw provider error stays on the order for /admin; the buyer gets a
+    // plain-language version of it.
+    const failure = classifyFailure(order.providerError);
     return (
       <Shell title="We couldn't retrieve this report" order={order}>
         <p>
-          Your payment went through but the vehicle-data provider did not return
-          a report. We will not substitute sample data for the report you paid
-          for.
+          Your payment went through but no report came back for this VIN. We
+          will not substitute sample data for the report you paid for.
         </p>
-        {order.providerError && (
-          <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 font-mono text-xs text-red-700">
-            {order.providerError}
-          </p>
-        )}
+        <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          {customerFailureMessage(failure)}
+        </p>
         <p>
-          Our team can retry this order. If a retry doesn&apos;t work we will
-          refund the {formatPrice(order.amountCents, order.currency)} in full.
+          {refundPromise(
+            formatPrice(order.amountCents, order.currency),
+            Boolean(order.refundedAt),
+          )}
         </p>
       </Shell>
     );
@@ -150,8 +157,8 @@ export default async function ReportPage({
                   Vehicle history for {prettyVin(order.vin)}
                 </h1>
                 <p className="mt-1.5 text-sm text-slate-500">
-                  Paid {formatPrice(order.amountCents, order.currency)} ·
-                  Delivered{" "}
+                  {order.refundedAt ? "Refunded" : "Paid"}{" "}
+                  {formatPrice(order.amountCents, order.currency)} · Delivered{" "}
                   {order.fulfilledAt
                     ? `${order.fulfilledAt.replace("T", " ").slice(0, 16)} UTC`
                     : "just now"}{" "}

@@ -42,6 +42,7 @@ export default async function AdminPage() {
     { label: "Delivered", value: String(stats.fulfilled) },
     { label: "Needs attention", value: String(stats.failed) },
     { label: "Collected", value: formatPrice(stats.revenueCents) },
+    { label: "Refunded", value: formatPrice(stats.refundedCents) },
   ];
 
   return (
@@ -91,7 +92,7 @@ export default async function AdminPage() {
           )}
         </div>
 
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
+        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
           {cards.map((card) => (
             <div
               key={card.label}
@@ -164,6 +165,11 @@ export default async function AdminPage() {
                         emailed
                       </span>
                     )}
+                    {order.refundedAt && (
+                      <span className="mt-1 block text-[11px] text-slate-400">
+                        refunded {timestamp(order.refundedAt).slice(0, 10)}
+                      </span>
+                    )}
                   </span>
 
                   <span className="text-sm text-slate-800">
@@ -174,6 +180,11 @@ export default async function AdminPage() {
                     orderId={order.id}
                     accessToken={order.accessToken}
                     status={order.status}
+                    amountLabel={formatPrice(order.amountCents, order.currency)}
+                    refundable={Boolean(
+                      order.stripePaymentIntentId && !order.refundedAt,
+                    )}
+                    refunded={Boolean(order.refundedAt)}
                   />
                 </li>
               ))}

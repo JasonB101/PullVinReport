@@ -19,6 +19,12 @@ function env(key: string): string | undefined {
   return trimmed.length === 0 ? undefined : trimmed;
 }
 
+function boolEnv(key: string, fallback: boolean): boolean {
+  const raw = env(key)?.toLowerCase();
+  if (raw === undefined) return fallback;
+  return raw === "true" || raw === "1" || raw === "yes";
+}
+
 function intEnv(key: string, fallback: number): number {
   const raw = env(key);
   if (!raw) return fallback;
@@ -99,15 +105,47 @@ export function isStripeConfigured(): boolean {
   return Boolean(stripeConfig.secretKey);
 }
 
+/**
+ * When true, a paid order whose report pull fails is refunded immediately
+ * instead of waiting for an operator to retry it in `/admin`.
+ *
+ * Off by default: the documented flow is retry-then-refund, and a refunded
+ * charge cannot be retried without asking the customer to pay again.
+ */
+export function autoRefundFailedOrders(): boolean {
+  return boolEnv("AUTO_REFUND_FAILED_ORDERS", false);
+}
+
+/**
+ * Reads an address-valued variable.
+ *
+ * `EMAIL_FROM` uses the `Name <address>` display-name form, which has to be
+ * quoted in a .env file because unquoted angle brackets are shell redirection.
+ * Some hosts and parsers hand the wrapping quotes back to us, and some mangle
+ * the value on the way through, so the quotes are stripped here and anything
+ * that no longer looks like an address falls back to the brand default rather
+ * than being handed to Resend.
+ */
+function emailEnv(key: string, fallback: string): string {
+  const raw = env(key);
+  if (!raw) return fallback;
+  const unquoted = raw.replace(/^(['"])([\s\S]*)\1$/, "$2").trim();
+  return unquoted.includes("@") ? unquoted : fallback;
+}
+
 export const emailConfig = {
   get apiKey(): string | undefined {
     return env("RESEND_API_KEY");
   },
+  /**
+   * Outbound sender. Both defaults are derived from BRAND so an unset or
+   * broken environment can only ever send as PullVinReport on its own domain.
+   */
   get from(): string {
-    return env("EMAIL_FROM") ?? `PullVinReport <reports@${BRAND.domain}>`;
+    return emailEnv("EMAIL_FROM", `${BRAND.name} <orders@${BRAND.domain}>`);
   },
   get supportEmail(): string {
-    return env("SUPPORT_EMAIL") ?? `support@${BRAND.domain}`;
+    return emailEnv("SUPPORT_EMAIL", `support@${BRAND.domain}`);
   },
 };
 

@@ -9,6 +9,8 @@ type Props = {
   /** False when Stripe or VinAudit credentials are missing on the server. */
   available: boolean;
   unavailableReason?: string;
+  /** True when Stripe Checkout sent the buyer back without taking payment. */
+  canceled?: boolean;
 };
 
 export function CheckoutPanel({
@@ -16,6 +18,7 @@ export function CheckoutPanel({
   priceLabel,
   available,
   unavailableReason,
+  canceled = false,
 }: Props) {
   const [email, setEmail] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -69,6 +72,15 @@ export function CheckoutPanel({
       <div className="px-5 py-5 sm:px-6">
         {available ? (
           <form onSubmit={onSubmit} className="space-y-4" noValidate>
+            {canceled && (
+              <p className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                <span className="font-semibold text-slate-900">
+                  Checkout canceled.
+                </span>{" "}
+                Nothing was charged. Pick up where you left off below.
+              </p>
+            )}
+
             <div>
               <label
                 htmlFor="email"
@@ -103,7 +115,9 @@ export function CheckoutPanel({
               disabled={pending}
               className="w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-[0_16px_40px_-18px_rgba(37,99,235,1)] transition hover:bg-brand-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-70"
             >
-              {pending ? "Redirecting to Stripe…" : `Get the report · ${priceLabel}`}
+              {pending
+                ? "Redirecting to Stripe…"
+                : `${canceled ? "Restart checkout" : "Get the report"} · ${priceLabel}`}
             </button>
 
             <p className="text-center text-xs text-slate-500">
