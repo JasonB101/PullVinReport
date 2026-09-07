@@ -67,6 +67,11 @@ function titleCase(value: string): string {
     .replace(/\b[a-z]/g, (character) => character.toUpperCase());
 }
 
+/** vPIC writes countries as `UNITED STATES (USA)`; the code adds nothing. */
+function country(value: string | undefined): string | undefined {
+  return value ? titleCase(value.replace(/\s*\([^)]*\)\s*$/, "")) : undefined;
+}
+
 /**
  * Reads one vPIC result row. Exported so the shape the government sends can be
  * tested without hitting the network.
@@ -91,7 +96,7 @@ export function parseVpicRow(
     bodyStyle: field(row, "BodyClass"),
     engine: field(row, "EngineModel"),
     fuelType: field(row, "FuelTypePrimary"),
-    madeIn: field(row, "PlantCountry") && titleCase(field(row, "PlantCountry")!),
+    madeIn: country(field(row, "PlantCountry")),
   };
 
   const details = [

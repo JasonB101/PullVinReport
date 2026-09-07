@@ -106,9 +106,8 @@ export default async function PreviewPage({
                   {prettyVin(result.vin)}
                 </h1>
                 <p className="mt-2 text-sm text-slate-600">
-                  Valid 17-character VIN
-                  {modelYear ? ` · likely a ${modelYear} model year` : ""}. We
-                  pull the records only after payment clears.
+                  Valid 17-character VIN. We pull the records only after payment
+                  clears.
                 </p>
               </div>
               <Link
@@ -121,7 +120,7 @@ export default async function PreviewPage({
 
             {/* Streamed so a slow decode never delays the checkout panel. */}
             <Suspense fallback={<VinDecodeSkeleton />}>
-              <VinDecodeCard vin={result.vin} />
+              <VinDecodeCard vin={result.vin} fallbackYear={modelYear} />
             </Suspense>
 
             {canceled && (

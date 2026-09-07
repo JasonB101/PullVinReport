@@ -35,7 +35,14 @@ export function VinDecodeSkeleton() {
  * The decode comes from the public vPIC database rather than the records the
  * paid report is built from — nothing chargeable is pulled before checkout.
  */
-export async function VinDecodeCard({ vin }: { vin: string }) {
+export async function VinDecodeCard({
+  vin,
+  fallbackYear,
+}: {
+  vin: string;
+  /** Model year read straight out of the VIN, shown if the decode comes back empty. */
+  fallbackYear?: number;
+}) {
   const result = await decodeVin(vin);
 
   if (result.status !== "decoded") {
@@ -44,6 +51,9 @@ export async function VinDecodeCard({ vin }: { vin: string }) {
         <Kicker>Vehicle</Kicker>
         <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
           {VIN_DECODE_UNAVAILABLE}
+          {fallbackYear
+            ? ` The VIN's own year code puts it at a ${fallbackYear} model.`
+            : ""}
         </p>
       </Frame>
     );
