@@ -12,6 +12,7 @@ import {
   customerFailureMessage,
   refundPromise,
 } from "@/lib/customer-copy";
+import { cachedExtrasForReport } from "@/lib/model-extras";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
@@ -144,6 +145,12 @@ export default async function ReportPage({
   }
   const hero =
     isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
+  let modelExtras = null;
+  try {
+    modelExtras = await cachedExtrasForReport(report, store);
+  } catch (error) {
+    console.error("[extras] could not read cached model extras", error);
+  }
 
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
@@ -192,6 +199,8 @@ export default async function ReportPage({
             briefToken={token}
             heroSrc={hero?.src}
             heroToken={isFalConfigured() ? token : undefined}
+            modelExtras={modelExtras}
+            extrasToken={token}
           />
         </div>
       </main>

@@ -1,8 +1,10 @@
 import { AiBrief } from "@/components/ai-brief";
+import { ModelExtrasCard } from "@/components/model-extras";
 import { ReportHealthCard } from "@/components/report-health";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
+import type { ModelExtras } from "@/lib/model-extras";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -689,6 +691,8 @@ export function ReportView({
   briefToken,
   heroSrc = null,
   heroToken,
+  modelExtras = null,
+  extrasToken,
 }: {
   report: VehicleReport;
   /** A brief already written for this report, if there is one. */
@@ -699,6 +703,10 @@ export function ReportView({
   heroSrc?: string | null;
   /** Access token, given only when a missing hero may be requested. */
   heroToken?: string;
+  /** Public YMM extras already in hand (sample fixture or a cache hit). */
+  modelExtras?: ModelExtras | null;
+  /** Access token, given only when missing extras may be requested. */
+  extrasToken?: string;
 }) {
   const chips = reportChips(report);
   const specs = headerSpecSummary(report.specifications);
@@ -774,6 +782,8 @@ export function ReportView({
         flags={flags}
         clear={clear}
       />
+
+      <ModelExtrasCard extras={modelExtras} token={extrasToken} />
 
       {sections.map((section) => (
         <SectionBlock

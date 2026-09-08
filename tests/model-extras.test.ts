@@ -1,0 +1,315 @@
+import assert from "node:assert/strict";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { after, before, describe, it } from "node:test";
+
+import {
+  composeModelExtras,
+  displayComponent,
+  engineDisplacementHint,
+  extrasForReport,
+  hasModelExtras,
+  matchingEpaOptions,
+  modelExtrasSummaryLine,
+  parseComplaintsPayload,
+  parseEpaOptions,
+  parseEpaVehicle,
+  parseRecallsPayload,
+  pickMpg,
+  resetModelExtrasCacheForTests,
+  ymmCacheKey,
+  ymmFromVehicle,
+} from "@/lib/model-extras";
+import { buildSampleModelExtras, buildSampleReport, SAMPLE_VIN } from "@/lib/sample-report";
+import { FileOrderStore } from "@/lib/store/file-store";
+
+const RECALLS = {
+  Count: 2,
+  results: [
+    {
+      NHTSACampaignNumber: "13V014000",
+      Component: "AIR BAGS:FRONTAL:SENSOR/CONTROL MODULE-INACTIVE",
+      Consequence: "Airbags may not deploy.",
+      Remedy: "Dealers will recalibrate the sensors.",
+    },
+    {
+      NHTSACampaignNumber: "13V442000",
+      Component: "ELECTRICAL SYSTEM",
+      Consequence: "A short circuit may disable the air bags.",
+      Remedy: "Dealers will seal the condenser housing.",
+    },
+  ],
+};
+
+const COMPLAINTS = {
+  count: 10,
+  results: [
+    { components: "POWER TRAIN,ENGINE", vin: "4T1BF1FK9CU", summary: "Shudder" },
+    { components: "POWER TRAIN", vin: "4T1BF1FK1CU", summary: "Shift" },
+    { components: "AIR BAGS", vin: "JTDBE32K123", summary: "Light" },
+    { components: "UNKNOWN OR OTHER", vin: "IGNOREME", summary: "Noise" },
+    { components: "VEHICLE SPEED CONTROL", vin: "ABC", summary: "Surge" },
+  ],
+};
+
+const EPA_OPTIONS = {
+  menuItem: [
+    { text: "Auto (S6), 4 cyl, 2.5 L", value: "31765" },
+    { text: "Auto (S6), 6 cyl, 3.5 L", value: "31766" },
+  ],
+};
+
+const EPA_25 = {
+  city08: "24",
+  highway08: "34",
+  comb08: "28",
+  fuelType1: "Regular Gasoline",
+  displ: "2.5",
+};
+
+const EPA_35 = {
+  city08: 21,
+  highway08: 30,
+  comb08: 24,
+  fuelType1: "Regular Gasoline",
+  displ: "3.5",
+};
+
+describe("model extras parsers", () => {
+  it("summarises NHTSA recall campaigns without calling the network", () => {
+    const recalls = parseRecallsPayload(RECALLS);
+    assert.ok(recalls);
+    assert.equal(recalls.total, 2);
+    assert.equal(recalls.campaigns[0]?.campaign, "13V014000");
+    assert.match(recalls.campaigns[0]?.title ?? "", /Air Bags/i);
+    assert.match(recalls.campaigns[0]?.consequence ?? "", /not deploy/);
+    assert.match(recalls.campaigns[1]?.title ?? "", /Electrical/i);
+  });
+
+  it("counts owner complaints and names top components, never a complaint VIN", () => {
+    const complaints = parseComplaintsPayload(COMPLAINTS);
+    assert.ok(complaints);
+    assert.equal(complaints.total, 10);
+    assert.deepEqual(
+      complaints.themes.map((theme) => theme.component),
+      ["Power Train", "Air Bags", "Engine", "Vehicle Speed Control"],
+    );
+    assert.equal(
+      JSON.stringify(complaints).includes("4T1BF1FK"),
+      false,
+      "complaint VINs must not leak into the summary",
+    );
+  });
+
+  it("skips the UNKNOWN OR OTHER complaint bucket", () => {
+    const complaints = parseComplaintsPayload(COMPLAINTS);
+    assert.ok(complaints);
+    assert.equal(
+      complaints.themes.some((theme) => /unknown/i.test(theme.component)),
+      false,
+    );
+  });
+
+  it("reads EPA menu options as an array or a single item", () => {
+    assert.deepEqual(parseEpaOptions(EPA_OPTIONS), [
+      { text: "Auto (S6), 4 cyl, 2.5 L", id: "31765" },
+      { text: "Auto (S6), 6 cyl, 3.5 L", id: "31766" },
+    ]);
+    assert.deepEqual(
+      parseEpaOptions({ menuItem: { text: "Manual, 4 cyl, 2.0 L", value: "1" } }),
+      [{ text: "Manual, 4 cyl, 2.0 L", id: "1" }],
+    );
+  });
+
+  it("hides MPG when trims disagree and we cannot match an engine", () => {
+    const vehicles = [
+      parseEpaVehicle(EPA_25, "31765"),
+      parseEpaVehicle(EPA_35, "31766"),
+    ].filter((row): row is NonNullable<typeof row> => Boolean(row));
+    assert.equal(pickMpg(vehicles, ""), undefined);
+    assert.deepEqual(pickMpg(vehicles, "2.5"), {
+      city: 24,
+      highway: 34,
+      combined: 28,
+      fuelType: "Regular Gasoline",
+    });
+  });
+
+  it("uses MPG when every EPA option agrees", () => {
+    const one = parseEpaVehicle(EPA_25, "31765");
+    assert.ok(one);
+    assert.deepEqual(pickMpg([one, { ...one, id: "other" }], ""), {
+      city: 24,
+      highway: 34,
+      combined: 28,
+      fuelType: "Regular Gasoline",
+    });
+  });
+
+  it("matches EPA option text on litres", () => {
+    const options = parseEpaOptions(EPA_OPTIONS);
+    assert.deepEqual(
+      matchingEpaOptions(options, "2.5").map((row) => row.id),
+      ["31765"],
+    );
+  });
+
+  it("reads a 2.5L hint from the report engine line", () => {
+    assert.equal(
+      engineDisplacementHint({ engine: "2.5L L4 DOHC 16V" }),
+      "2.5",
+    );
+    assert.equal(engineDisplacementHint({}), "");
+  });
+
+  it("title-cases NHTSA component paths", () => {
+    assert.equal(
+      displayComponent("AIR BAGS:FRONTAL"),
+      "Air Bags · Frontal",
+    );
+  });
+
+  it("refuses to compose extras without a year, make and model", () => {
+    assert.equal(ymmFromVehicle({ make: "Toyota", model: "Camry" }), null);
+    assert.equal(ymmCacheKey("2012", "Toyota", "Camry"), "2012|toyota|camry");
+  });
+
+  it("hides the card when every slice is empty", () => {
+    const ymm = ymmFromVehicle({ year: "2012", make: "Toyota", model: "Camry" });
+    assert.ok(ymm);
+    assert.equal(composeModelExtras(ymm, {}), null);
+    assert.equal(hasModelExtras(null), false);
+  });
+});
+
+describe("model extras copy", () => {
+  it("names the model year and says the extras are not this VIN", () => {
+    const extras = buildSampleModelExtras();
+    assert.equal(extras.ymmLabel, "2012 Toyota Camry");
+    const line = modelExtrasSummaryLine(extras);
+    assert.match(line, /NHTSA recall campaigns for this model year/);
+    assert.match(line, /owner complaints for this model year/);
+    assert.match(line, /24 city \/ 34 hwy \/ 28 combined/);
+    assert.doesNotMatch(line, new RegExp(SAMPLE_VIN, "i"));
+    assert.doesNotMatch(JSON.stringify(extras), /this VIN has|on this VIN/i);
+  });
+
+  it("keeps the sample fixture free of complaint VINs", () => {
+    const extras = buildSampleModelExtras();
+    assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
+    assert.equal(extras.recalls?.total, 2);
+    assert.equal(extras.complaints?.total, 644);
+    assert.equal(extras.mpg?.combined, 28);
+  });
+});
+
+describe("model extras fetch and cache", () => {
+  const realFetch = globalThis.fetch;
+  let calls = 0;
+
+  before(() => {
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      calls += 1;
+      const href = String(input);
+      if (href.includes("recallsByVehicle")) {
+        return new Response(JSON.stringify(RECALLS), { status: 200 });
+      }
+      if (href.includes("complaintsByVehicle")) {
+        return new Response(JSON.stringify(COMPLAINTS), { status: 200 });
+      }
+      if (href.includes("menu/options")) {
+        return new Response(JSON.stringify(EPA_OPTIONS), { status: 200 });
+      }
+      if (href.endsWith("/31765")) {
+        return new Response(JSON.stringify(EPA_25), { status: 200 });
+      }
+      if (href.endsWith("/31766")) {
+        return new Response(JSON.stringify(EPA_35), { status: 200 });
+      }
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+  });
+
+  after(() => {
+    globalThis.fetch = realFetch;
+    resetModelExtrasCacheForTests();
+  });
+
+  it("fetches once per YMM and reuses that for another order of the same car", async () => {
+    resetModelExtrasCacheForTests();
+    calls = 0;
+    const report = buildSampleReport();
+    const first = await extrasForReport(report);
+    assert.ok(first);
+    assert.equal(first.recalls?.total, 2);
+    assert.equal(first.complaints?.total, 10);
+    assert.deepEqual(first.mpg, {
+      city: 24,
+      highway: 34,
+      combined: 28,
+      fuelType: "Regular Gasoline",
+    });
+    const afterFirst = calls;
+    assert.ok(afterFirst >= 4, `expected NHTSA + EPA calls, got ${afterFirst}`);
+
+    const second = await extrasForReport({
+      ...report,
+      vin: "4T1BF1FK8CU000001",
+    });
+    assert.deepEqual(second, first);
+    assert.equal(calls, afterFirst);
+  });
+
+  it("soft-fails a downed slice and still returns the others", async () => {
+    resetModelExtrasCacheForTests();
+    calls = 0;
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("complaintsByVehicle")) {
+        throw new Error("timeout");
+      }
+      return previous(input);
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.ok(extras);
+      assert.ok(extras.recalls);
+      assert.equal(extras.complaints, undefined);
+      assert.ok(extras.mpg);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("writes the YMM cache on the store so a new process does not re-hit the APIs", async () => {
+    resetModelExtrasCacheForTests();
+    calls = 0;
+    const dir = await mkdtemp(path.join(tmpdir(), "pvr-extras-"));
+    try {
+      const store = new FileOrderStore(dir);
+      await store.init();
+      const first = await extrasForReport(buildSampleReport(), store);
+      assert.ok(first);
+      const afterFirst = calls;
+      resetModelExtrasCacheForTests();
+      const second = await extrasForReport(buildSampleReport(), store);
+      assert.deepEqual(second, first);
+      assert.equal(calls, afterFirst);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it("returns nothing when the report cannot name a year, make and model", async () => {
+    resetModelExtrasCacheForTests();
+    const before = calls;
+    const extras = await extrasForReport({
+      ...buildSampleReport(),
+      vehicle: { year: "2012" },
+    });
+    assert.equal(extras, null);
+    assert.equal(calls, before);
+  });
+});

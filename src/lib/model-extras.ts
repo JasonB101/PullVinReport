@@ -1,0 +1,594 @@
+/**
+ * Public, model-level extras shown under What to know.
+ *
+ * NHTSA recalls, NHTSA owner complaints, and EPA fuel economy for the
+ * report's year/make/model — never for this VIN. A buyer who skims must not
+ * mistake a 2012 Camry complaint theme for something on the car in front of
+ * them, so every surface that prints this data names the YMM and says it is
+ * not this VIN.
+ *
+ * All three sources are free public APIs. Missing data, a timeout or an
+ * ambiguous EPA match hides that slice; the paid report is unchanged.
+ * Results are cached by YMM (and, for MPG, an engine hint) so two orders for
+ * the same Camry do not re-hit the government on every page view.
+ */
+import { exactYearMakeModel } from "@/lib/ai-brief";
+import type { Field, VehicleReport, VehicleSummary } from "@/lib/report";
+
+const RECALLS_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle";
+const COMPLAINTS_URL = "https://api.nhtsa.gov/complaints/complaintsByVehicle";
+const EPA_OPTIONS_URL = "https://www.fueleconomy.gov/ws/rest/vehicle/menu/options";
+const EPA_VEHICLE_URL = "https://www.fueleconomy.gov/ws/rest/vehicle";
+
+const TIMEOUT_MS = 8_000;
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const NEGATIVE_TTL_MS = 15 * 60 * 1000;
+const CACHE_LIMIT = 400;
+const MAX_CAMPAIGNS = 4;
+const MAX_THEMES = 4;
+const MAX_EPA_VEHICLES = 12;
+
+export type ModelRecall = {
+  campaign: string;
+  title: string;
+  consequence?: string;
+  remedy?: string;
+};
+
+export type ModelComplaintTheme = {
+  component: string;
+  count: number;
+};
+
+export type ModelMpg = {
+  city: number;
+  highway: number;
+  combined: number;
+  fuelType: string;
+};
+
+export type ModelRecalls = {
+  total: number;
+  campaigns: ModelRecall[];
+};
+
+export type ModelComplaints = {
+  total: number;
+  themes: ModelComplaintTheme[];
+};
+
+export type ModelExtras = {
+  year: string;
+  make: string;
+  model: string;
+  ymmLabel: string;
+  recalls?: ModelRecalls;
+  complaints?: ModelComplaints;
+  mpg?: ModelMpg;
+};
+
+export type ModelExtrasCacheRecord = {
+  cacheKey: string;
+  payload: unknown;
+  fetchedAt: string;
+};
+
+export type ModelExtrasCache = {
+  getModelExtras(cacheKey: string): Promise<ModelExtrasCacheRecord | null>;
+  saveModelExtras(record: ModelExtrasCacheRecord): Promise<void>;
+};
+
+type MemoryEntry = { expires: number; value: unknown };
+
+const memory = new Map<string, MemoryEntry>();
+
+type Ymm = { year: string; make: string; model: string; ymmLabel: string };
+
+export type EpaOption = { text: string; id: string };
+
+export type EpaVehicleMpg = {
+  id: string;
+  city: number;
+  highway: number;
+  combined: number;
+  fuelType: string;
+  displacement?: string;
+};
+
+/** Drops the in-process cache. Tests only. */
+export function resetModelExtrasCacheForTests(): void {
+  memory.clear();
+}
+
+export function ymmFromVehicle(vehicle: VehicleSummary): Ymm | null {
+  const year = vehicle.year?.trim() ?? "";
+  const make = vehicle.make?.trim() ?? "";
+  const model = vehicle.model?.trim() ?? "";
+  const ymmLabel = exactYearMakeModel(vehicle);
+  if (!year || !make || !model || !ymmLabel) return null;
+  return { year, make, model, ymmLabel };
+}
+
+export function ymmCacheKey(year: string, make: string, model: string): string {
+  const norm = (value: string) => value.trim().toLowerCase().replace(/\s+/g, " ");
+  return `${norm(year)}|${norm(make)}|${norm(model)}`;
+}
+
+/**
+ * Litres from the report's engine line, used to pick one EPA row when a
+ * model has more than one powertrain. `2.5L L4` → `2.5`. Empty when we
+ * cannot tell — then MPG is only shown if every EPA option agrees.
+ */
+export function engineDisplacementHint(
+  vehicle: VehicleSummary,
+  specifications: Field[] = [],
+): string {
+  const sources = [
+    vehicle.engine,
+    ...specifications.map((field) => field.value),
+  ];
+  for (const source of sources) {
+    if (!source) continue;
+    const match = /(\d+(?:\.\d+)?)\s*L\b/i.exec(source);
+    if (match) return trimDisplacement(match[1]);
+  }
+  return "";
+}
+
+function trimDisplacement(value: string): string {
+  const number = Number(value);
+  if (!Number.isFinite(number)) return value.trim();
+  return String(number);
+}
+
+export function hasModelExtras(extras: ModelExtras | null | undefined): extras is ModelExtras {
+  if (!extras) return false;
+  return Boolean(extras.recalls || extras.complaints || extras.mpg);
+}
+
+export function displayComponent(raw: string): string {
+  return raw
+    .split(":")
+    .map((part) =>
+      part
+        .trim()
+        .toLowerCase()
+        .replace(/\b[a-z0-9]/g, (character) => character.toUpperCase()),
+    )
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function clip(value: string, max = 280): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
+function text(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+function numberish(value: unknown): number | undefined {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim()) {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) return parsed;
+  }
+  return undefined;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Parsers — exported so the government shapes can be tested offline          */
+/* -------------------------------------------------------------------------- */
+
+export function parseRecallsPayload(payload: unknown): ModelRecalls | null {
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload as { Count?: unknown; count?: unknown; results?: unknown };
+  const rows = Array.isArray(body.results) ? body.results : [];
+  const total = numberish(body.Count) ?? numberish(body.count) ?? rows.length;
+  if (!total && rows.length === 0) return null;
+
+  const campaigns: ModelRecall[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const campaign = text(record.NHTSACampaignNumber);
+    if (!campaign || seen.has(campaign)) continue;
+    seen.add(campaign);
+    const title =
+      displayComponent(text(record.Component)) || `Campaign ${campaign}`;
+    const consequence = clip(text(record.Consequence));
+    const remedy = clip(text(record.Remedy));
+    campaigns.push({
+      campaign,
+      title,
+      ...(consequence ? { consequence } : {}),
+      ...(remedy ? { remedy } : {}),
+    });
+    if (campaigns.length >= MAX_CAMPAIGNS) break;
+  }
+
+  if (total === 0 && campaigns.length === 0) return null;
+  return { total: total || campaigns.length, campaigns };
+}
+
+function complaintComponents(row: Record<string, unknown>): string[] {
+  const raw = text(row.components) || text(row.Components);
+  if (!raw) return [];
+  return raw
+    .split(",")
+    .map((part) => part.trim())
+    .filter((part) => part && !/^unknown(\s+or\s+other)?$/i.test(part));
+}
+
+export function parseComplaintsPayload(payload: unknown): ModelComplaints | null {
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload as { count?: unknown; Count?: unknown; results?: unknown };
+  const rows = Array.isArray(body.results) ? body.results : [];
+  const total = numberish(body.count) ?? numberish(body.Count) ?? rows.length;
+  if (!total && rows.length === 0) return null;
+
+  const counts = new Map<string, number>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    for (const component of complaintComponents(row as Record<string, unknown>)) {
+      const key = component.toUpperCase();
+      counts.set(key, (counts.get(key) ?? 0) + 1);
+    }
+  }
+
+  const themes = [...counts.entries()]
+    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+    .slice(0, MAX_THEMES)
+    .map(([component, count]) => ({
+      component: displayComponent(component),
+      count,
+    }));
+
+  return { total: total || rows.length, themes };
+}
+
+export function parseEpaOptions(payload: unknown): EpaOption[] {
+  if (!payload || typeof payload !== "object") return [];
+  const menu = (payload as { menuItem?: unknown }).menuItem;
+  const items = Array.isArray(menu) ? menu : menu ? [menu] : [];
+  const options: EpaOption[] = [];
+  for (const item of items) {
+    if (!item || typeof item !== "object") continue;
+    const row = item as { text?: unknown; value?: unknown };
+    const id = text(row.value);
+    const label = text(row.text);
+    if (id) options.push({ text: label, id });
+  }
+  return options;
+}
+
+export function parseEpaVehicle(payload: unknown, id: string): EpaVehicleMpg | null {
+  if (!payload || typeof payload !== "object") return null;
+  const row = payload as Record<string, unknown>;
+  const city = numberish(row.city08);
+  const highway = numberish(row.highway08);
+  const combined = numberish(row.comb08);
+  if (city === undefined || highway === undefined || combined === undefined) {
+    return null;
+  }
+  const fuelType =
+    text(row.fuelType1) || text(row.fuelType) || text(row.fuelType2);
+  const displacement = row.displ !== undefined ? trimDisplacement(String(row.displ)) : "";
+  return {
+    id,
+    city,
+    highway,
+    combined,
+    fuelType,
+    ...(displacement ? { displacement } : {}),
+  };
+}
+
+export function matchingEpaOptions(options: EpaOption[], hint: string): EpaOption[] {
+  if (!hint) return options;
+  const needle = trimDisplacement(hint);
+  const pattern = new RegExp(`\\b${escapeRegExp(needle)}\\s*L\\b`, "i");
+  return options.filter((option) => pattern.test(option.text));
+}
+
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+export function pickMpg(vehicles: EpaVehicleMpg[], hint: string): ModelMpg | undefined {
+  if (vehicles.length === 0) return undefined;
+
+  let pool = vehicles;
+  if (hint) {
+    const needle = trimDisplacement(hint);
+    const matched = vehicles.filter(
+      (vehicle) =>
+        vehicle.displacement === needle ||
+        (vehicle.displacement !== undefined &&
+          trimDisplacement(vehicle.displacement) === needle),
+    );
+    if (matched.length === 0) return undefined;
+    pool = matched;
+  }
+
+  const first = pool[0];
+  const same = pool.every(
+    (vehicle) =>
+      vehicle.city === first.city &&
+      vehicle.highway === first.highway &&
+      vehicle.combined === first.combined &&
+      vehicle.fuelType === first.fuelType,
+  );
+  if (!same) return undefined;
+  return {
+    city: first.city,
+    highway: first.highway,
+    combined: first.combined,
+    fuelType: first.fuelType,
+  };
+}
+
+export function composeModelExtras(
+  ymm: Ymm,
+  slices: {
+    recalls?: ModelRecalls | null;
+    complaints?: ModelComplaints | null;
+    mpg?: ModelMpg | null;
+  },
+): ModelExtras | null {
+  const extras: ModelExtras = {
+    year: ymm.year,
+    make: ymm.make,
+    model: ymm.model,
+    ymmLabel: ymm.ymmLabel,
+  };
+  if (slices.recalls) extras.recalls = slices.recalls;
+  if (slices.complaints) extras.complaints = slices.complaints;
+  if (slices.mpg) extras.mpg = slices.mpg;
+  return hasModelExtras(extras) ? extras : null;
+}
+
+/** One printed line for the PDF — still names the model, not the VIN. */
+export function modelExtrasSummaryLine(extras: ModelExtras): string {
+  const bits: string[] = [];
+  if (extras.recalls) {
+    const n = extras.recalls.total;
+    bits.push(
+      `${n} NHTSA recall ${n === 1 ? "campaign" : "campaigns"} for this model year`,
+    );
+  }
+  if (extras.complaints) {
+    const n = extras.complaints.total;
+    bits.push(
+      `${n} owner ${n === 1 ? "complaint" : "complaints"} for this model year`,
+    );
+  }
+  if (extras.mpg) {
+    const fuel = extras.mpg.fuelType ? `, ${extras.mpg.fuelType}` : "";
+    bits.push(
+      `EPA ${extras.mpg.city} city / ${extras.mpg.highway} hwy / ${extras.mpg.combined} combined mpg${fuel}`,
+    );
+  }
+  return bits.join(" · ");
+}
+
+/* -------------------------------------------------------------------------- */
+/* Fetch + cache                                                              */
+/* -------------------------------------------------------------------------- */
+
+function remember(key: string, value: unknown, ttlMs: number): void {
+  if (memory.size >= CACHE_LIMIT) {
+    const oldest = memory.keys().next();
+    if (!oldest.done) memory.delete(oldest.value);
+  }
+  memory.set(key, { expires: Date.now() + ttlMs, value });
+}
+
+function recalled<T>(key: string): T | undefined {
+  const entry = memory.get(key);
+  if (!entry) return undefined;
+  if (entry.expires <= Date.now()) {
+    memory.delete(key);
+    return undefined;
+  }
+  return entry.value as T;
+}
+
+function isFresh(fetchedAt: string, ttlMs = CACHE_TTL_MS): boolean {
+  const then = Date.parse(fetchedAt);
+  if (!Number.isFinite(then)) return false;
+  return Date.now() - then < ttlMs;
+}
+
+async function cachedSlice<T>(
+  key: string,
+  store: ModelExtrasCache | undefined,
+  load: () => Promise<T | null>,
+): Promise<T | null> {
+  const hit = recalled<T | null>(key);
+  if (hit !== undefined) return hit;
+
+  if (store) {
+    try {
+      const stored = await store.getModelExtras(key);
+      if (stored && isFresh(stored.fetchedAt)) {
+        const value = stored.payload as T | null;
+        remember(key, value, CACHE_TTL_MS);
+        return value;
+      }
+    } catch {
+      /* Persist is a shortcut, not a requirement. */
+    }
+  }
+
+  const value = await load();
+  if (value == null) {
+    remember(key, null, NEGATIVE_TTL_MS);
+    return null;
+  }
+
+  remember(key, value, CACHE_TTL_MS);
+  if (store) {
+    try {
+      await store.saveModelExtras({
+        cacheKey: key,
+        payload: value,
+        fetchedAt: new Date().toISOString(),
+      });
+    } catch {
+      /* Same: a write failure must not hide a good fetch. */
+    }
+  }
+  return value;
+}
+
+async function getJson(url: string): Promise<unknown | null> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), TIMEOUT_MS);
+  try {
+    const response = await fetch(url, {
+      signal: controller.signal,
+      cache: "no-store",
+      headers: { Accept: "application/json" },
+    });
+    if (!response.ok) return null;
+    return await response.json();
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function nhtsaQuery(ymm: Ymm): string {
+  const params = new URLSearchParams({
+    make: ymm.make,
+    model: ymm.model,
+    modelYear: ymm.year,
+  });
+  return params.toString();
+}
+
+async function loadRecalls(ymm: Ymm): Promise<ModelRecalls | null> {
+  const payload = await getJson(`${RECALLS_URL}?${nhtsaQuery(ymm)}`);
+  return payload ? parseRecallsPayload(payload) : null;
+}
+
+async function loadComplaints(ymm: Ymm): Promise<ModelComplaints | null> {
+  const payload = await getJson(`${COMPLAINTS_URL}?${nhtsaQuery(ymm)}`);
+  return payload ? parseComplaintsPayload(payload) : null;
+}
+
+async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
+  const optionsPayload = await getJson(
+    `${EPA_OPTIONS_URL}?${new URLSearchParams({
+      year: ymm.year,
+      make: ymm.make,
+      model: ymm.model,
+    }).toString()}`,
+  );
+  if (!optionsPayload) return null;
+  const options = parseEpaOptions(optionsPayload);
+  if (options.length === 0) return [];
+
+  // Every option for this YMM is cached together so a 2.5L order and a 3.5L
+  // order share one EPA round-trip. The engine hint is applied later.
+  const slice = options.slice(0, MAX_EPA_VEHICLES);
+  const vehicles = (
+    await Promise.all(
+      slice.map(async (option) => {
+        const payload = await getJson(`${EPA_VEHICLE_URL}/${encodeURIComponent(option.id)}`);
+        return payload ? parseEpaVehicle(payload, option.id) : null;
+      }),
+    )
+  ).filter((row): row is EpaVehicleMpg => Boolean(row));
+
+  // Options existed but every vehicle fetch failed — do not cache that as
+  // "no MPG for this model" for a week.
+  if (vehicles.length === 0 && options.length > 0) return null;
+  return vehicles;
+}
+
+async function peekSlice<T>(
+  key: string,
+  store: ModelExtrasCache | undefined,
+): Promise<T | null | undefined> {
+  const hit = recalled<T | null>(key);
+  if (hit !== undefined) return hit;
+  if (!store) return undefined;
+  try {
+    const stored = await store.getModelExtras(key);
+    if (stored && isFresh(stored.fetchedAt)) {
+      remember(key, stored.payload, CACHE_TTL_MS);
+      return stored.payload as T | null;
+    }
+  } catch {
+    return undefined;
+  }
+  return undefined;
+}
+
+/**
+ * Assembles extras from the YMM cache only — no outbound calls.
+ *
+ * Used when rendering a paid report so a second view of the same Camry can
+ * paint the card with the first view's fetch. A miss leaves the client to ask.
+ */
+export async function cachedExtrasForReport(
+  report: VehicleReport,
+  store?: ModelExtrasCache,
+): Promise<ModelExtras | null> {
+  const ymm = ymmFromVehicle(report.vehicle);
+  if (!ymm) return null;
+  const hint = engineDisplacementHint(report.vehicle, report.specifications);
+  const base = `v1|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
+
+  const [recalls, complaints, vehicles] = await Promise.all([
+    peekSlice<ModelRecalls>(`${base}|recalls`, store),
+    peekSlice<ModelComplaints>(`${base}|complaints`, store),
+    peekSlice<EpaVehicleMpg[]>(`${base}|epa`, store),
+  ]);
+
+  if (recalls === undefined || complaints === undefined || vehicles === undefined) {
+    return null;
+  }
+
+  return composeModelExtras(ymm, {
+    recalls,
+    complaints,
+    mpg: vehicles ? pickMpg(vehicles, hint) : undefined,
+  });
+}
+
+/**
+ * Pulls the three public slices for one report's year/make/model.
+ *
+ * Never throws. A missing YMM, a downed API or an ambiguous MPG match all
+ * resolve to `null` or a partial extras object — the report page hides what
+ * it does not have.
+ */
+export async function extrasForReport(
+  report: VehicleReport,
+  store?: ModelExtrasCache,
+): Promise<ModelExtras | null> {
+  const ymm = ymmFromVehicle(report.vehicle);
+  if (!ymm) return null;
+
+  const hint = engineDisplacementHint(report.vehicle, report.specifications);
+  const base = `v1|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
+
+  const [recalls, complaints, vehicles] = await Promise.all([
+    cachedSlice<ModelRecalls>(`${base}|recalls`, store, () => loadRecalls(ymm)),
+    cachedSlice<ModelComplaints>(`${base}|complaints`, store, () => loadComplaints(ymm)),
+    cachedSlice<EpaVehicleMpg[]>(`${base}|epa`, store, () => loadEpaVehicles(ymm)),
+  ]);
+
+  return composeModelExtras(ymm, {
+    recalls,
+    complaints,
+    mpg: vehicles ? pickMpg(vehicles, hint) : undefined,
+  });
+}

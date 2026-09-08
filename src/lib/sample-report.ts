@@ -1,4 +1,5 @@
 import type { VehicleBrief } from "@/lib/ai-brief";
+import type { ModelExtras } from "@/lib/model-extras";
 import { LISTING_SECTION_NOTE, type VehicleReport } from "@/lib/report";
 
 /**
@@ -48,6 +49,58 @@ export function buildSampleBrief(): VehicleBrief {
       "Can you show maintenance records covering oil consumption checks?",
     ],
     model: "sample",
+  };
+}
+
+/**
+ * Public YMM extras for the sample Camry.
+ *
+ * Frozen so `/sample` never calls NHTSA or EPA. The numbers are a stable
+ * snapshot of the real 2012 Toyota Camry public records (not this fictional
+ * VIN): two NHTSA campaigns, complaint themes, and the 2.5L EPA listing.
+ */
+export function buildSampleModelExtras(): ModelExtras {
+  return {
+    year: "2012",
+    make: "Toyota",
+    model: "Camry",
+    ymmLabel: "2012 Toyota Camry",
+    recalls: {
+      total: 2,
+      campaigns: [
+        {
+          campaign: "13V014000",
+          title: "Air Bags · Frontal · Sensor/Control Module-Inactive",
+          consequence:
+            "If the front passenger seat occupant sensing system is out of calibration, the front passenger airbags may not deploy or they may deploy inappropriately for the passenger's size and position. This could increase the risk of personal injury during a crash necessitating airbag deployment.",
+          remedy:
+            "Southeast Toyota will notify owners, and dealers will test the sensitivity of the occupant detection sensors, and recalibrate them as necessary.",
+        },
+        {
+          campaign: "13V442000",
+          title: "Electrical System",
+          consequence:
+            "A short circuit may cause the air bags to become disabled or inadvertently deploy. The power steering assist could also become inoperable, increasing steering effort at low speeds.",
+          remedy:
+            "Toyota will notify owners, and dealers will seal the air conditioning condenser unit housing and install a protective cover on the airbag control module, free of charge.",
+        },
+      ],
+    },
+    complaints: {
+      total: 644,
+      themes: [
+        { component: "Power Train", count: 146 },
+        { component: "Air Bags", count: 83 },
+        { component: "Vehicle Speed Control", count: 73 },
+        { component: "Structure", count: 68 },
+      ],
+    },
+    mpg: {
+      city: 24,
+      highway: 34,
+      combined: 28,
+      fuelType: "Regular Gasoline",
+    },
   };
 }
 

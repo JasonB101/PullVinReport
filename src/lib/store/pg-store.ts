@@ -11,11 +11,13 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  ModelExtrasRecord,
   VehicleHeroRecord,
 } from "@/lib/store/types";
 
 const TABLE = "pullvinreport_orders";
 const HEROES = "pullvinreport_vehicle_heroes";
+const EXTRAS = "pullvinreport_model_extras";
 
 type Row = {
   id: string;
@@ -153,6 +155,13 @@ export class PostgresOrderStore implements OrderStore {
             content_type TEXT NOT NULL,
             model TEXT NOT NULL,
             created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+        `);
+        await this.getPool().query(`
+          CREATE TABLE IF NOT EXISTS ${EXTRAS} (
+            cache_key TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
           );
         `);
       })().catch((error) => {
@@ -311,6 +320,31 @@ export class PostgresOrderStore implements OrderStore {
       [`${keepPrefix}%`],
     );
     return result.rowCount ?? 0;
+  }
+
+  async getModelExtras(cacheKey: string): Promise<ModelExtrasRecord | null> {
+    const result = await this.query<{
+      cache_key: string;
+      payload: unknown;
+      fetched_at: Date | string;
+    }>(`SELECT * FROM ${EXTRAS} WHERE cache_key = $1`, [cacheKey]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      cacheKey: row.cache_key,
+      payload: row.payload,
+      fetchedAt: iso(row.fetched_at) as string,
+    };
+  }
+
+  async saveModelExtras(record: ModelExtrasRecord): Promise<void> {
+    await this.query(
+      `INSERT INTO ${EXTRAS} (cache_key, payload, fetched_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (cache_key) DO UPDATE
+         SET payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at`,
+      [record.cacheKey, JSON.stringify(record.payload), record.fetchedAt],
+    );
   }
 
   async ping(): Promise<{ ok: boolean; detail: string }> {

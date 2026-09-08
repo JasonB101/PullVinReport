@@ -101,4 +101,17 @@ export interface OrderStore {
   saveVehicleHero(hero: VehicleHeroRecord): Promise<void>;
   /** Drop cached drawings whose key does not start with `keepPrefix`. */
   clearStaleVehicleHeroes(keepPrefix: string): Promise<number>;
+  /**
+   * Public model extras (NHTSA / EPA), keyed by year/make/model — not by
+   * order or VIN. Payload is the already-summarised slice.
+   */
+  getModelExtras(cacheKey: string): Promise<ModelExtrasRecord | null>;
+  saveModelExtras(record: ModelExtrasRecord): Promise<void>;
+};
+
+/** Cached NHTSA/EPA slice for one year/make/model. */
+export type ModelExtrasRecord = {
+  cacheKey: string;
+  payload: unknown;
+  fetchedAt: string;
 };

@@ -5,7 +5,11 @@ import { fileURLToPath } from "node:url";
 
 import { sendReportEmail } from "@/lib/email";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
-import { buildSampleBrief, buildSampleReport } from "@/lib/sample-report";
+import {
+  buildSampleBrief,
+  buildSampleModelExtras,
+  buildSampleReport,
+} from "@/lib/sample-report";
 import type { Order } from "@/lib/store";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -85,10 +89,14 @@ describe("report PDF", () => {
       .filter((line) => /lineHeight:/.test(line));
     assert.deepEqual(declarations, []);
 
-    const pdf = await renderReportPdf(buildSampleReport(), buildSampleBrief());
+    const pdf = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      buildSampleModelExtras(),
+    );
     assert.ok(
       pageCount(pdf) <= 3,
-      `the sample and its brief should fit in 3 pages, got ${pageCount(pdf)}`,
+      `the sample, brief and model extras should fit in 3 pages, got ${pageCount(pdf)}`,
     );
   });
 

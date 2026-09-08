@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { sectionListingGroups } from "../src/lib/report.ts";
-import { buildSampleReport, SAMPLE_VIN } from "../src/lib/sample-report.ts";
+import {
+  buildSampleModelExtras,
+  buildSampleReport,
+  SAMPLE_VIN,
+} from "../src/lib/sample-report.ts";
 import { validateVin } from "../src/lib/vin.ts";
 
 describe("sample report", () => {
@@ -27,6 +31,15 @@ describe("sample report", () => {
   it("never claims VinAudit as its source", () => {
     const report = buildSampleReport();
     assert.notEqual(report.source, "vinaudit");
+  });
+
+  it("ships a stable Also-for-this-model fixture that is not this VIN", () => {
+    const extras = buildSampleModelExtras();
+    assert.equal(extras.ymmLabel, "2012 Toyota Camry");
+    assert.equal(extras.recalls?.total, 2);
+    assert.ok((extras.complaints?.total ?? 0) > 0);
+    assert.equal(extras.mpg?.city, 24);
+    assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
   });
 
   it("folds sister rooftops into listing chapters so the sample shows that layout", () => {

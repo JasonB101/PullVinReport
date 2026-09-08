@@ -8,6 +8,7 @@ import { VinForm } from "@/components/vin-form";
 import { formatPrice } from "@/lib/config";
 import {
   buildSampleBrief,
+  buildSampleModelExtras,
   buildSampleReport,
   SAMPLE_VEHICLE_LABEL,
 } from "@/lib/sample-report";
@@ -53,9 +54,13 @@ export default function SamplePage() {
         </div>
 
         <div className="container-page py-10 sm:py-14">
-          {/* The sample's brief is written by hand, so browsing the sample never
-              spends a token on a vehicle that does not exist. */}
-          <ReportView report={report} brief={buildSampleBrief()} />
+          {/* The sample's brief and model extras are fixtures, so browsing
+              `/sample` never spends a token or hits NHTSA/EPA. */}
+          <ReportView
+            report={report}
+            brief={buildSampleBrief()}
+            modelExtras={buildSampleModelExtras()}
+          />
         </div>
       </main>
 

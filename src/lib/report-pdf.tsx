@@ -25,6 +25,11 @@ import {
 
 import type { VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
+import type { ModelExtras } from "@/lib/model-extras";
+import {
+  hasModelExtras,
+  modelExtrasSummaryLine,
+} from "@/lib/model-extras";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
@@ -542,12 +547,27 @@ function Section({
   );
 }
 
+function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
+  if (!hasModelExtras(extras)) return null;
+  return (
+    <View style={styles.section} wrap={false}>
+      <Text style={styles.sectionTitle}>Also for this model</Text>
+      <Text style={styles.sectionNote}>
+        Public records for the {extras.ymmLabel} — not the history of this VIN.
+      </Text>
+      <Text style={styles.bullet}>{modelExtrasSummaryLine(extras)}</Text>
+    </View>
+  );
+}
+
 export function ReportDocument({
   report,
   brief = null,
+  modelExtras = null,
 }: {
   report: VehicleReport;
   brief?: VehicleBrief | null;
+  modelExtras?: ModelExtras | null;
 }) {
   const title = vehicleTitle(report.vehicle);
   const flags = foundIssueChecks(report);
@@ -597,6 +617,7 @@ export function ReportDocument({
         </View>
 
         <Brief report={report} brief={brief} flags={flags} clear={clear} />
+        <ModelExtrasBlock extras={modelExtras} />
 
         {sections.map((section) => (
           <Section
@@ -632,6 +653,9 @@ export function reportPdfFilename(vin: string): string {
 export async function renderReportPdf(
   report: VehicleReport,
   brief: VehicleBrief | null = null,
+  modelExtras: ModelExtras | null = null,
 ): Promise<Buffer> {
-  return renderToBuffer(<ReportDocument report={report} brief={brief} />);
+  return renderToBuffer(
+    <ReportDocument report={report} brief={brief} modelExtras={modelExtras} />,
+  );
 }
