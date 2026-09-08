@@ -75,6 +75,23 @@ function Chip({ chip }: { chip: ReportChip }) {
   );
 }
 
+const FINDING_LABEL: Record<string, string> = {
+  accidents: "Accidents",
+  liens: "Liens",
+  recalls: "Recalls",
+  thefts: "Thefts",
+  jsi: "Junk & salvage",
+  branded: "Branded title",
+  impounds: "Impounds",
+  exports: "Exports",
+  sales: "Listings",
+};
+
+function findingLabel(check: ReportCheck): string {
+  const name = FINDING_LABEL[check.key] ?? check.label;
+  return check.count > 0 ? `${name} · ${check.count}` : name;
+}
+
 /**
  * Compact found/clear strip inside What to know.
  *
@@ -95,10 +112,9 @@ function FindingsStrip({
           {flags.map((check) => (
             <li
               key={check.key}
-              className="inline-flex rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-200/90"
+              className="inline-flex max-w-full rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-200/90"
             >
-              {check.label}
-              {check.count > 0 ? ` · ${check.count}` : ""}
+              {findingLabel(check)}
             </li>
           ))}
         </ul>
