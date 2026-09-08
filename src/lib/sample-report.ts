@@ -29,11 +29,11 @@ export const SAMPLE_VEHICLE_LABEL = "2012 Toyota Camry SE";
 export function buildSampleBrief(): VehicleBrief {
   return {
     fromReport: [
-      "Five title records across Kentucky and Tennessee, with no salvage, junk or insurance-loss brand on any of them.",
-      "Mileage rises steadily from 12 miles in 2012 to 121,477 in 2024, and the 2020 re-registration reported the same reading as 2019.",
-      "One minor rear-bumper damage record from November 2018 in Knoxville, with no airbag deployment reported.",
-      "A lien recorded in Kentucky in 2015 is shown as released in February 2019.",
-      "One open recall campaign is listed for the air bag inflator.",
+      "Five title records across Kentucky and Tennessee, with no salvage, junk or insurance-loss brand on any of them — the clean-title history that lenders and insurers price normally.",
+      "Mileage rises steadily from 12 miles in 2012 to 121,477 in 2024, and the 2020 re-registration reported the same reading as 2019, which is normal for a car re-registered without being driven much.",
+      "One minor rear-bumper damage record from November 2018 in Knoxville, with no airbag deployment reported; light damage like this is usually repaired without ever reaching a title brand, but the quality of the repair is only visible in person.",
+      "A lien recorded in Kentucky in 2015 is shown as released in February 2019, meaning the loan behind it was settled and the seller should be able to hand over a clear title.",
+      "One open recall campaign is listed for the air bag inflator, which a dealer is required to fix free of charge and which stays open until someone books it in.",
     ],
     commonForModel: [
       "This generation of Camry is known for excessive oil consumption on some four-cylinder engines.",

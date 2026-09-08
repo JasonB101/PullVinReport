@@ -116,8 +116,14 @@ export const anthropic = {
   get baseUrl(): string {
     return env("ANTHROPIC_API_BASE") ?? "https://api.anthropic.com";
   },
+  /**
+   * How long a page view waits. Nothing the buyer paid for is behind it — the
+   * records are already on screen — so this can afford to be patient, and a
+   * brief that explains its findings is a longer answer than one that lists
+   * them.
+   */
   get timeoutMs(): number {
-    return intEnv("ANTHROPIC_TIMEOUT_MS", 20_000);
+    return intEnv("ANTHROPIC_TIMEOUT_MS", 30_000);
   },
 };
 

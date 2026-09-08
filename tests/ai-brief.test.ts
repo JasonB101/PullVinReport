@@ -119,11 +119,38 @@ describe("reading a brief out of a reply", () => {
           "Clean title history.",
           "Worth about $9,000 in this condition.",
           "Condition score of 82 out of 100.",
+          "Comparable trucks sell for 11,500 dollars.",
+          "Auction grade B on the last run.",
         ],
       }),
       "test-model",
     );
     assert.deepEqual(brief?.fromReport, ["Clean title history."]);
+  });
+
+  it("keeps a bullet that says what a record costs without naming a number", () => {
+    // The point of the brief is the clause after the record. An earlier guard
+    // matched the word "worth" and threw exactly this bullet away.
+    const kept = [
+      "A salvage yard reported taking possession in May 2026, which usually follows a total loss and often ends in a salvage or rebuilt title.",
+      "Lenders and insurers treat a branded title differently from a clean one, and it usually costs the owner at resale.",
+      "The 2015 lien is not shown as released, which can mean the seller does not yet own the car outright.",
+    ];
+    const brief = parseBrief(JSON.stringify({ fromReport: kept }), "test-model");
+    assert.deepEqual(brief?.fromReport, kept);
+  });
+
+  it("has room for a bullet that explains itself", () => {
+    // Long enough for the record and what it means, because a bullet over the
+    // limit is dropped rather than shortened.
+    const explained =
+      "There are junk and salvage records dated May 11, 2026 showing the vehicle passed through a salvage operator, which usually means an insurer declared it a total loss and sent it to auction rather than paying to repair it.";
+    assert.ok(explained.length > 200);
+    const brief = parseBrief(
+      JSON.stringify({ fromReport: [explained] }),
+      "test-model",
+    );
+    assert.deepEqual(brief?.fromReport, [explained]);
   });
 
   it("refuses a reply with nothing about this report in it", () => {
@@ -135,7 +162,7 @@ describe("reading a brief out of a reply", () => {
   it("keeps the bullets short enough to read", () => {
     const brief = parseBrief(
       JSON.stringify({
-        fromReport: ["Clean title history.", "x".repeat(400)],
+        fromReport: ["Clean title history.", "x".repeat(600)],
       }),
       "test-model",
     );
@@ -205,6 +232,35 @@ describe("generating a brief", () => {
     assert.match(body.system, /Never estimate a price, market value/);
     assert.doesNotMatch(String(sent.init.body), new RegExp(VIN, "i"));
     assert.doesNotMatch(String(sent.init.body), /test-key/);
+  });
+
+  it("asks for what a record means, not just what it says", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    let system = "";
+
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      system = JSON.parse(String(init.body)).system;
+      return new Response(
+        JSON.stringify({
+          content: [
+            { type: "text", text: JSON.stringify({ fromReport: ["Two titles."] }) },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    await generateBrief(paidReport());
+
+    // A disposition code and an auction house's name mean nothing to a buyer.
+    assert.match(system, /Never leave a trade term standing on its own/);
+    assert.match(system, /why that matters to someone about to hand over money/);
+    assert.match(system, /salvage or rebuilt title/);
+    // ...but a consequence is still what usually happens, not what happened here.
+    assert.match(system, /never as what has happened to this car/);
+    // The model-level list stays pinned to the vehicle we actually decoded.
+    assert.match(system, /exact year, make and model named in FACTS\.vehicle/);
+    assert.match(system, /Do not write about a different model year/);
   });
 
   it("sends no temperature, which current models reject outright", async () => {

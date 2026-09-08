@@ -114,35 +114,65 @@ export function briefFacts(report: VehicleReport): BriefFacts {
 /* The prompt                                                                  */
 /* -------------------------------------------------------------------------- */
 
-const SYSTEM_PROMPT = `You write a short brief for someone who has just paid for the vehicle history report described in FACTS. They are deciding whether to buy the car.
+const SYSTEM_PROMPT = `You write a short brief for someone who has just paid for the vehicle history report described in FACTS. They are deciding whether to buy the car. Most of them have never read a title record before.
 
 Rules, in order of importance:
 1. Never state an event, brand, mileage, date, state or owner that is not in FACTS. Do not infer events that FACTS does not record. If FACTS is thin, say the records are thin.
 2. Never say or imply that a problem common to this model was found on this vehicle. The model-level list is about the model in general, not this car.
 3. Never estimate a price, market value, condition grade, score or rating. That data does not exist here.
 4. Never mention data providers, databases, agencies or where the records came from.
-5. One plain-English sentence per bullet. No preamble, no marketing, no hedging boilerplate.
+5. Never leave a trade term standing on its own. A disposition code, a claim type, a salvage yard's name, an auction house's name and a brand code mean nothing to a buyer. Say what the record is in ordinary words.
 6. A report with nothing on file is good news. Say so plainly instead of manufacturing concern.
+7. Plain English. No preamble, no marketing, no hedging boilerplate.
+
+Explaining what a record means:
+
+When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an accident, a lien, an impound, an export or a mileage rollback, the bullet must also say — in one short clause — why that matters to someone about to hand over money. Draw on what such a record usually indicates and what it usually costs the owner. For example: a salvage yard or an insurer taking possession of a vehicle usually follows a total loss; a vehicle down that road often ends up with a salvage or rebuilt title; lenders and insurers treat a branded title differently from a clean one, and a later buyer will too; a lien that is not shown as released can mean the seller does not yet own the car outright.
+
+Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences at the outside.
+
+Records with nothing worrying in them do not need this. Do not manufacture a consequence for a routine registration renewal.
 
 Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
 fromReport: 2 to 5 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries. Use the actual counts and dates from FACTS.
-commonForModel: 0 to 4 bullets on well-known trouble spots for this year, make and model in general. Write them as tendencies of the model. Use an empty array if the vehicle is unknown or you are not confident about it.
-questions: 0 to 4 short questions for the seller, each one following from a bullet above.`;
+commonForModel: 0 to 4 bullets on well-known trouble spots for the exact year, make and model named in FACTS.vehicle, and nothing else. Do not write about a different model year, a different generation, or the make in general. Write them as tendencies of the model. Use an empty array if FACTS.vehicle does not name a year, make and model, or if you are not confident about that exact vehicle.
+questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
 
 /* -------------------------------------------------------------------------- */
 /* Reading the answer back                                                     */
 /* -------------------------------------------------------------------------- */
 
-const MAX_BULLET_LENGTH = 260;
+/**
+ * Long enough for a record and what it means for the buyer.
+ *
+ * A bullet that only names a disposition code fits in half this. The whole
+ * point of the brief is the clause after it, and a bullet cut off at the old
+ * limit was silently dropped rather than shortened.
+ */
+const MAX_BULLET_LENGTH = 400;
+
 const LIMITS = { fromReport: 5, commonForModel: 4, questions: 4 } as const;
 
 /** Claims about this specific car have no business in the model-level list. */
 const VIN_CLAIM = /\b(this|the)\s+(vin|vehicle|car|truck|suv)\b/i;
 
-/** A price, a market value or a letter grade: none of it is ours to state. */
-const INVENTED_NUMBER = /\$\s?\d|\bmarket value\b|\bworth\b|\bgrade [a-f]\b|\bscore\b/i;
+/**
+ * A stated amount, grade or score.
+ *
+ * We hold no valuation data, so nothing may put a number on this car. The
+ * guard is deliberately about the number rather than the vocabulary: telling a
+ * buyer that a branded title usually costs an owner at resale is true, useful
+ * and exactly what the brief is for, and the earlier version of this threw
+ * such a bullet away for containing the word "worth".
+ */
+const PRICED_CLAIMS = [
+  /\$\s?\d/,
+  /\b\d[\d,]{2,}(?:\.\d+)?\s*(?:dollars|usd)\b/i,
+  /\b(?:worth|market value|valued at|price of|resale value of|sells for)\s+(?:about|around|roughly|approximately|some|up to|at least|over|under)?\s*\$?\d/i,
+  /\b(?:grade|score|rating)\s+(?:of\s+)?(?:[a-f]\b|\d)/i,
+];
 
 function bullets(value: unknown, limit: number): string[] {
   if (!Array.isArray(value)) return [];
@@ -150,7 +180,7 @@ function bullets(value: unknown, limit: number): string[] {
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim().replace(/^[-•*]\s*/, ""))
     .filter((entry) => entry.length > 0 && entry.length <= MAX_BULLET_LENGTH)
-    .filter((entry) => !INVENTED_NUMBER.test(entry))
+    .filter((entry) => !PRICED_CLAIMS.some((pattern) => pattern.test(entry)))
     .slice(0, limit);
 }
 
@@ -251,7 +281,10 @@ export async function generateBrief(
       },
       body: JSON.stringify({
         model,
-        max_tokens: 1_000,
+        // Room for the clause that says why a record matters. At the old
+        // ceiling a brief that explained itself ran out mid-sentence, and an
+        // unterminated JSON string parses as nothing at all.
+        max_tokens: 2_000,
         // No `temperature`. Sonnet 5 rejects the whole request with a 400 when
         // it is present, and the guards below are what keep the output in line
         // anyway — a sampling knob was never what made the brief trustworthy.

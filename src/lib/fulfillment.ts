@@ -39,9 +39,11 @@ async function autoRefund(orderId: string): Promise<void> {
  * Shorter than a page view's budget on purpose. Fulfillment usually runs inside
  * a Stripe webhook, and Stripe gives the endpoint about 30 seconds before it
  * calls the delivery failed and retries — a report pull plus a full-length model
- * call can cross that line. Twelve seconds leaves room for both.
+ * call can cross that line. Fifteen seconds is what is left over from that
+ * window once a slow provider has had its turn, and missing it costs only the
+ * brief in the attached PDF: the page writes one on the first view regardless.
  */
-const BRIEF_BUDGET_MS = 12_000;
+const BRIEF_BUDGET_MS = 15_000;
 
 /**
  * Writes the brief before the receipt goes out.
