@@ -1,7 +1,9 @@
 import {
+  anthropic,
   emailConfig,
   formatPrice,
   isAdminConfigured,
+  isAnthropicConfigured,
   isEmailConfigured,
   isStripeConfigured,
   isVinAuditConfigured,
@@ -120,6 +122,16 @@ export async function buildStatusReport(
       detail: isEmailConfigured()
         ? `Configured, not verified — a key is present and mail would be sent as ${emailConfig.from}. Nothing here proves the key works or that the sending domain is verified in Resend; only a real send does. Reports are always delivered on screen regardless.`
         : "RESEND_API_KEY not set — reports are still delivered on screen, but no receipt email is sent.",
+    },
+    {
+      key: "brief",
+      label: "Written brief on the report",
+      required: false,
+      verification: "config-only",
+      state: isAnthropicConfigured() ? "ready" : "optional",
+      detail: isAnthropicConfigured()
+        ? `Key present — briefs are written by ${anthropic.model} and cached on the order, so a report costs one call however often it is read. Nothing here proves the key works; the next paid report does.`
+        : "ANTHROPIC_API_KEY not set — reports are delivered in full without the written brief, and no other behaviour changes.",
     },
     {
       key: "admin",

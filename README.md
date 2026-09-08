@@ -18,6 +18,7 @@ and by email.
 - [Environment](#environment)
 - [How the paid path works](#how-the-paid-path-works)
 - [The sample report rule](#the-sample-report-rule)
+- [The written brief](#the-written-brief)
 - [What customers see when something breaks](#what-customers-see-when-something-breaks)
 - [Refunds](#refunds)
 - [Routes](#routes)
@@ -63,6 +64,12 @@ version:
 | `RESEND_API_KEY` | No | Receipt, refund and report-link email. |
 | `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
 | `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
+| `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
+| `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
+| `ANTHROPIC_TIMEOUT_MS` | No (default `20000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
+| `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
+| `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
+| `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
 
 `EMAIL_FROM` uses the `Name <address>` display-name form, so it must be quoted
 in `.env.local`, in `.env.example` and in your host's environment UI. Unquoted
@@ -77,9 +84,6 @@ SUPPORT_EMAIL=support@pullvinreport.com
 If a parser hands the value back with its quotes still attached, or mangles it
 into something without an `@`, `emailConfig` falls back to the brand default
 rather than passing it to Resend.
-| `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
-| `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
-| `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
 
 ## How the paid path works
 
@@ -98,8 +102,9 @@ Stripe Checkout (hosted)
 POST /api/stripe/webhook   ← primary fulfillment path
   · verifies the signature
   · marks the order `paid`
-  · pulls the report from VinAudit
-  · marks it `fulfilled` and emails the private link
+  · pulls the report from VinAudit and marks it `fulfilled`
+  · writes the brief, if a key is set and it arrives inside the budget
+  · emails the private link with the report attached as a PDF
   ↓
 /order/success?session_id=…   ← fallback fulfillment path
   · runs the same idempotent fulfillment if the webhook was late or absent
@@ -135,6 +140,40 @@ How it is enforced:
   provider is unconfigured, so the money is never taken in the first place.
 - Every sample surface renders a SAMPLE chip, an amber hatched border and an
   explanatory banner, keyed off `isSample`.
+
+## The written brief
+
+With `ANTHROPIC_API_KEY` set, a paid report opens with a short brief in three
+parts:
+
+- **From this report** — written only from the records on that order.
+- **Common for this model — not confirmed on this VIN** — general knowledge for
+  the year, make and model. The disclaimer is in the heading rather than in
+  small print, because a forwarded PDF is read by people who never saw the page.
+  Omitted entirely when the vehicle is unknown.
+- **Questions to ask the seller** — each one following from a bullet above.
+
+What keeps it honest:
+
+- What is sent is the report's own summary — vehicle, checks, odometer
+  readings, record rows with values clipped and rows capped. Not the VIN, the
+  buyer, the order, or the stored provider payload. Tests assert each absence.
+- The prompt forbids stating events the records do not contain, implying that a
+  model-level problem was found on this VIN, and inventing prices or grades.
+  `parseBrief()` then re-checks the output and drops bullets that break those
+  rules, so a drifting model cannot put a claim in front of a buyer.
+- It is written **once per order** and cached on the order row (`ai_brief`).
+  A page view always reuses the cached brief; rewriting one is an explicit
+  **Rewrite brief** action in `/admin`. That is why the default model is Sonnet
+  rather than something cheaper — the cost is paid once and read every time.
+- Fulfillment writes the brief before the receipt goes out, so the attached PDF
+  says what the page says. It waits at most 12 seconds, comfortably inside
+  Stripe's webhook window; a brief that misses that window is written on the
+  first page view instead.
+- Everything soft-fails. No key, a timeout, a refusal or unparsable output all
+  end the same way: no brief, and a report that reads exactly as it did before
+  the brief existed. The records are never made to wait on it.
+- The sample's brief is written by hand, so browsing `/sample` spends nothing.
 
 ## What customers see when something breaks
 
