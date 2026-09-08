@@ -80,7 +80,11 @@ describe("what the brief is allowed to see", () => {
     assert.equal(withSales.sales.groups[0].listingCount, 3);
     assert.equal(withSales.sales.groups[0].price, "$11,450.00");
     const serialized = JSON.stringify(withSales.sales);
-    assert.doesNotMatch(serialized, /listing campaign|did not sell|advertised more than once/i);
+    assert.match(withSales.sales.notes.join(" "), /listing rows show the \$11,450/);
+    assert.doesNotMatch(
+      serialized,
+      /later listing total|failed to sell|same car advertised|listing campaign/i,
+    );
     assert.equal(
       withSales.records.some((entry) => /sales/i.test(entry.section)),
       false,
@@ -216,6 +220,7 @@ describe("reading a brief out of a reply", () => {
           "Five title records, no brands.",
           "The listing history shows several dealer postings at the same price, which usually means the same car advertised more than once rather than separate sales.",
           "The asking price also dropped over time, typical of a car that didn't sell right away.",
+          "The same car listed twice and wouldn't sell at the first ask.",
           "Three August 2024 dealer listings show an asking total of $11,450.",
         ],
       }),
@@ -371,9 +376,14 @@ describe("generating a brief", () => {
     assert.match(system, /Every bullet MUST name that full year, make and model/);
     assert.match(system, /Never name a sibling/);
     assert.match(system, /FACTS\.sales/);
-    assert.match(system, /Do not interpret the listings/);
+    assert.match(system, /observable listing facts/);
+    assert.match(system, /often repeat or vary asking totals without that meaning/);
+    assert.match(system, /FORBIDDEN unless FACTS explicitly records sold vs unsold/);
+    assert.doesNotMatch(
+      system,
+      /usually one car advertised|did not find a buyer at the first price|shopping path/,
+    );
     assert.match(system, /stated as facts only/);
-    assert.match(system, /Do not say the same car was advertised more than once/);
     assert.match(system, /two sentences and 400 characters/);
   });
 

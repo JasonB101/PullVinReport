@@ -73,7 +73,7 @@ export type BriefFacts = {
    * Null when the feed sent no listings — the brief must not invent any.
    * Groups are facts only: dates, totals, labels, locations, explicit status.
    */
-  sales: { groups: BriefSaleGroup[] } | null;
+  sales: { groups: BriefSaleGroup[]; notes: string[] } | null;
   records: { section: string; rows: string[] }[];
 };
 
@@ -153,12 +153,34 @@ function saleGroupFact(group: ListingGroup): BriefSaleGroup {
   };
 }
 
+/**
+ * Observable notes only. Never a campaign, a re-list or a failed sale.
+ *
+ * A later lower total used to be written here as if the car had not sold.
+ * That is not what a listing feed records, so it is not a note.
+ */
+function salePatterns(groups: ListingGroup[]): string[] {
+  const notes: string[] = [];
+  for (const group of groups) {
+    if (group.listings.length > 1 && group.price) {
+      notes.push(
+        `${group.listings.length} listing rows show the ${group.price} total`,
+      );
+    }
+  }
+  return notes;
+}
+
 function briefSales(report: VehicleReport): BriefFacts["sales"] {
   const section = report.sections.find(
     (entry) => entry.key === "sales" && entry.records.length > 0,
   );
   if (!section) return null;
-  return { groups: sectionListingGroups(section).map(saleGroupFact) };
+  const groups = sectionListingGroups(section);
+  return {
+    groups: groups.map(saleGroupFact),
+    notes: salePatterns(groups),
+  };
 }
 
 export function briefFacts(report: VehicleReport): BriefFacts {
@@ -235,7 +257,7 @@ When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an
 
 Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences and 400 characters at the outside.
 
-When FACTS.sales is present, include one fromReport bullet that states only what the listings show: dates, listed totals, dealer or auction labels, locations, and an explicit Sold or TBD status when FACTS.sales records that status. Do not interpret the listings. Do not say the same car was advertised more than once, re-listed, or failed to sell. Do not treat a later lower total as a price drop that means the car did not find a buyer. Do not invent a shopping path or a listing campaign. Two listings at the same total are two listings. An auction-house name is a label on that listing — name the label, not a story about the car's path. Cite only dates, totals, places and statuses that appear in FACTS.sales.
+When FACTS.sales is present, include one fromReport bullet that states only observable listing facts: dates, listed totals, locations, and seller or channel labels (dealer, auction). Name an explicit Sold or TBD status only when FACTS.sales records that status. Listing feeds often repeat or vary asking totals without that meaning anything about whether the car sold or was advertised again. FORBIDDEN unless FACTS explicitly records sold vs unsold: that the car was advertised more than once, that the same car was listed twice, that it did not sell, that it didn't find a buyer, or that a later lower ask means it failed to sell. Do not invent a cause. Two rows at the same total are two rows. Cite only dates, totals, places and statuses that appear in FACTS.sales.
 
 Records with nothing worrying in them do not need a consequence. Do not manufacture one for a routine registration renewal.
 
@@ -294,8 +316,11 @@ const AMOUNT_CLAIMS = [
 const LISTING_FICTION = [
   /didn['’]t sell/i,
   /did not sell/i,
+  /wouldn['’]t sell/i,
+  /would not sell/i,
   /advertised more than once/i,
   /same car advertised/i,
+  /same car listed/i,
   /didn['’]t find a buyer/i,
   /did not find a buyer/i,
   /listing campaign/i,
