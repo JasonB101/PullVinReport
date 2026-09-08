@@ -256,8 +256,6 @@ describe("reading a brief out of a reply", () => {
   });
 
   it("has room for a bullet that explains itself", () => {
-    // Long enough for the record and what it means, because a bullet over the
-    // limit is dropped rather than shortened.
     const explained =
       "There are junk and salvage records dated May 11, 2026 showing the vehicle passed through a salvage operator, which usually means an insurer declared it a total loss and sent it to auction rather than paying to repair it.";
     assert.ok(explained.length > 200);
@@ -274,14 +272,25 @@ describe("reading a brief out of a reply", () => {
     assert.equal(parseBrief("{ not json", "m"), null);
   });
 
-  it("keeps the bullets short enough to read", () => {
+  it("shortens a bullet that ran on, instead of dropping the brief", () => {
+    const long =
+      "There are junk and salvage records dated May 11, 2026 showing the vehicle passed through a salvage operator, which usually means an insurer declared it a total loss and sent it to auction rather than paying to repair it. " +
+      "x".repeat(400);
+    assert.ok(long.length > 520);
     const brief = parseBrief(
       JSON.stringify({
-        fromReport: ["Clean title history.", "x".repeat(600)],
+        fromReport: [long, "Mileage rises steadily and no rollback is shown."],
       }),
       "test-model",
     );
-    assert.deepEqual(brief?.fromReport, ["Clean title history."]);
+    assert.ok(brief);
+    assert.equal(brief.fromReport.length, 2);
+    assert.ok(brief.fromReport[0].endsWith("…"));
+    assert.equal(brief.fromReport[0].length, 520);
+    assert.equal(
+      brief.fromReport[1],
+      "Mileage rises steadily and no rollback is shown.",
+    );
   });
 });
 
@@ -379,6 +388,7 @@ describe("generating a brief", () => {
     assert.match(system, /Never name a sibling/);
     assert.match(system, /FACTS\.sales/);
     assert.match(system, /sales and listing story/);
+    assert.match(system, /two sentences and 400 characters/);
   });
 
   it("sends no temperature, which current models reject outright", async () => {

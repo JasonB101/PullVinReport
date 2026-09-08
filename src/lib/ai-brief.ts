@@ -336,7 +336,7 @@ Explaining what a record means:
 
 When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an accident, a lien, an impound, an export or a mileage rollback, the bullet must also say — in one short clause — why that matters to someone about to hand over money. Draw on what such a record usually indicates and what it usually costs the owner. For example: a salvage yard or an insurer taking possession of a vehicle usually follows a total loss; a vehicle down that road often ends up with a salvage or rebuilt title; lenders and insurers treat a branded title differently from a clean one, and a later buyer will too; a lien that is not shown as released can mean the seller does not yet own the car outright.
 
-Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences at the outside.
+Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences and 400 characters at the outside.
 
 When FACTS.sales is present, at least one fromReport bullet MUST cover the sales and listing story. Use the grouped totals, dates, locations, seller types, sources and channels in FACTS.sales. Say why the pattern matters: several near-identical cards at the same total are usually one car advertised in more than one place, not several sales; an auction sold result next to a TBD / to-be-determined or unsold the same day is often the same run, not two sales; a later lower ask is often a car that did not find a buyer at the first price; a mix of auction and dealer listings is the shopping path, not two unrelated lives. An auction-house name (Copart, IAA, Manheim) is a place the car was offered — say that in ordinary words. Cite only dates, totals and places that appear in FACTS.sales. Do not invent a sale.
 
@@ -345,7 +345,7 @@ Records with nothing worrying in them do not need a consequence. Do not manufact
 Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
-fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the sales/listing story when FACTS.sales is present. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth.
+fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the sales/listing story when FACTS.sales is present. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
 commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
 questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
 
@@ -356,11 +356,11 @@ questions: 0 to 4 short questions for the seller, each one following from a bull
 /**
  * Long enough for a record and what it means for the buyer.
  *
- * A bullet that only names a disposition code fits in half this. The whole
- * point of the brief is the clause after it, and a bullet cut off at the old
- * limit was silently dropped rather than shortened.
+ * The prompt asks for 400 characters. This ceiling is a little higher so a
+ * why-it-matters clause that ran on is shortened rather than thrown away —
+ * dropping it used to empty fromReport and hide the whole brief.
  */
-const MAX_BULLET_LENGTH = 400;
+const MAX_BULLET_LENGTH = 520;
 
 const LIMITS = { fromReport: 6, commonForModel: 4, questions: 4 } as const;
 
@@ -467,6 +467,11 @@ export function pinCommonForModel(
   return `On the ${ymm}: ${bullet}`;
 }
 
+function clipBullet(text: string): string {
+  if (text.length <= MAX_BULLET_LENGTH) return text;
+  return `${text.slice(0, MAX_BULLET_LENGTH - 1)}…`;
+}
+
 function bullets(
   value: unknown,
   limit: number,
@@ -475,8 +480,8 @@ function bullets(
   if (!Array.isArray(value)) return [];
   return value
     .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => entry.trim().replace(/^[-•*]\s*/, ""))
-    .filter((entry) => entry.length > 0 && entry.length <= MAX_BULLET_LENGTH)
+    .map((entry) => clipBullet(entry.trim().replace(/^[-•*]\s*/, "")))
+    .filter((entry) => entry.length > 0)
     .filter((entry) => !VALUATION_CLAIMS.some((pattern) => pattern.test(entry)))
     .filter(
       (entry) =>
