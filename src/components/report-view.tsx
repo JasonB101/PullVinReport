@@ -15,11 +15,15 @@ import type {
 } from "@/lib/report";
 import {
   LEAD_FIELDS,
-  currentEvent,
+  formatGeneratedAt,
+  foundIssueChecks,
   hasOdometerRollback,
+  headerSpecSummary,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionCountLabel,
+  sectionLead,
   sectionListingGroups,
   sectionTable,
   sectionsWithRecords,
@@ -27,16 +31,6 @@ import {
 } from "@/lib/report";
 import { heroAlt, heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
-
-function formatDateTime(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return new Intl.DateTimeFormat("en-US", {
-    dateStyle: "medium",
-    timeStyle: "short",
-    timeZone: "UTC",
-  }).format(date);
-}
 
 /* -------------------------------------------------------------------------- */
 
@@ -63,32 +57,104 @@ function SampleBanner() {
 /** Header chips. Each one restates a record we hold — never a score or a price. */
 function Chip({ chip }: { chip: ReportChip }) {
   const tone = {
-    clear: "bg-emerald-400/15 text-emerald-200 ring-emerald-400/30",
-    flag: "bg-amber-400/20 text-amber-100 ring-amber-300/40",
-    neutral: "bg-white/10 text-slate-200 ring-white/15",
+    clear: "bg-emerald-50 text-emerald-800 ring-emerald-200/80",
+    flag: "bg-amber-50 text-amber-900 ring-amber-200/90",
+    neutral: "bg-white text-slate-600 ring-slate-200",
   }[chip.tone];
 
   return (
-    <span
-      className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${tone}`}
-    >
-      {chip.label}
-    </span>
+    <li>
+      <span
+        className={`inline-flex rounded-full px-3 py-1.5 text-xs font-medium ring-1 ring-inset ${tone}`}
+      >
+        {chip.label}
+      </span>
+    </li>
   );
 }
 
-/** Only checks that actually fired get a tile; the rest are one line of text. */
-function FlagTile({ check }: { check: ReportCheck }) {
+/**
+ * Compact found/clear strip inside What to know.
+ *
+ * Labels only — the brief already writes the story, and repeating each
+ * check's detail next to those bullets was the same flag twice.
+ */
+function FindingsStrip({
+  flags,
+  clear,
+}: {
+  flags: ReportCheck[];
+  clear: string[];
+}) {
   return (
-    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-sm font-semibold text-amber-900">{check.label}</span>
-        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
-      </div>
-      <p className="mt-1.5 text-xs leading-relaxed text-amber-900/80">
-        {check.detail}
+    <div>
+      {flags.length > 0 ? (
+        <ul className="flex flex-wrap gap-2">
+          {flags.map((check) => (
+            <li
+              key={check.key}
+              className="inline-flex rounded-full bg-amber-50 px-3 py-1.5 text-xs font-medium text-amber-900 ring-1 ring-inset ring-amber-200/90"
+            >
+              {check.label}
+              {check.count > 0 ? ` · ${check.count}` : ""}
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+          None of the issue checks came back with a record for this VIN.
+        </p>
+      )}
+
+      {clear.length > 0 && (
+        <p className="mt-3 text-sm leading-relaxed text-slate-500">
+          <span className="font-medium text-slate-600">
+            Searched, nothing on file:{" "}
+          </span>
+          {clear.join(" · ")}
+        </p>
+      )}
+
+      <p className="mt-2 text-xs leading-relaxed text-slate-400">
+        Nothing on file means no matching record was found — not that an event
+        never happened.
       </p>
     </div>
+  );
+}
+
+/** One summary surface: findings plus the written brief. */
+function WhatToKnow({
+  brief,
+  briefToken,
+  flags,
+  clear,
+}: {
+  brief?: VehicleBrief | null;
+  briefToken?: string;
+  flags: ReportCheck[];
+  clear: string[];
+}) {
+  return (
+    <section
+      id="brief"
+      className="scroll-mt-32 rounded-2xl border border-brand-200 bg-brand-50/50 p-5 sm:p-6"
+    >
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <h2 className="text-base font-semibold tracking-tight text-slate-900">
+          What to know
+        </h2>
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
+          From the records below
+        </span>
+      </div>
+
+      <div className="mt-4">
+        <FindingsStrip flags={flags} clear={clear} />
+      </div>
+
+      <AiBrief brief={brief} token={briefToken} />
+    </section>
   );
 }
 
@@ -374,8 +440,8 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
           className="scroll-mt-32 border-t border-slate-100"
           summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden"
           summary={
-            <span className="font-medium text-brand-600">
-              {group.listings.length} listing snapshots
+            <span className="when-closed font-medium text-brand-600">
+              Show {group.listings.length} listing snapshots
             </span>
           }
         >
@@ -407,23 +473,18 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
   );
 }
 
-function SectionBlock({
+function SectionFace({
   section,
-  odometerRollback = false,
+  odometerRollback,
 }: {
   section: ReportSection;
-  odometerRollback?: boolean;
+  odometerRollback: boolean;
 }) {
-  const listings =
-    section.layout === "listings" ? sectionListingGroups(section) : null;
-  const table = listings ? null : sectionTable(section);
-  const current = currentEvent(section);
+  const lead = sectionLead(section);
+  const count = sectionCountLabel(section);
 
   return (
-    <section
-      id={section.key}
-      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6"
-    >
+    <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
           {section.title}
@@ -435,23 +496,34 @@ function SectionBlock({
             </span>
           )}
           <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-            {listings && listings.length > 0
-              ? `${listings.length} chapter${listings.length === 1 ? "" : "s"} · ${section.records.length} snapshot${section.records.length === 1 ? "" : "s"}`
-              : `${section.records.length} record${section.records.length === 1 ? "" : "s"}`}
+            {count}
           </span>
         </div>
       </div>
+      {lead && (
+        <p className="mt-2 text-sm text-slate-700">
+          <span className="font-semibold text-slate-900">{lead.label}: </span>
+          {lead.text}
+        </p>
+      )}
       <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">
         {section.description}
       </p>
+    </>
+  );
+}
 
-      {current && (
-        <p className="mt-3 text-sm text-slate-700">
-          <span className="font-semibold text-slate-900">{current.label}: </span>
-          {current.fields.map((field) => field.value).join(" · ")}
-        </p>
-      )}
-
+function SectionRecords({
+  section,
+  listings,
+  table,
+}: {
+  section: ReportSection;
+  listings: ListingGroup[] | null;
+  table: SectionTable | null;
+}) {
+  return (
+    <>
       {section.shared && section.shared.length > 0 && (
         <SharedFields fields={section.shared} count={section.records.length} />
       )}
@@ -470,6 +542,50 @@ function SectionBlock({
             <RecordCard key={index} fields={fields} />
           ))}
         </div>
+      )}
+    </>
+  );
+}
+
+function SectionBlock({
+  section,
+  odometerRollback = false,
+}: {
+  section: ReportSection;
+  odometerRollback?: boolean;
+}) {
+  const listings =
+    section.layout === "listings" ? sectionListingGroups(section) : null;
+  const table = listings ? null : sectionTable(section);
+  const count = sectionCountLabel(section);
+
+  return (
+    <section
+      id={section.key}
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6"
+    >
+      {listings && listings.length > 0 ? (
+        <>
+          <SectionFace section={section} odometerRollback={odometerRollback} />
+          <SectionRecords section={section} listings={listings} table={null} />
+        </>
+      ) : (
+        <ScrollOpenDetails
+          className="scroll-mt-32"
+          summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+          summary={
+            <>
+              <SectionFace section={section} odometerRollback={odometerRollback} />
+              <span className="when-closed mt-3 flex text-sm font-medium text-brand-600">
+                Show {count}
+              </span>
+            </>
+          }
+        >
+          <div className="border-t border-slate-200/80 pt-1">
+            <SectionRecords section={section} listings={null} table={table} />
+          </div>
+        </ScrollOpenDetails>
       )}
     </section>
   );
@@ -516,14 +632,8 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
 }
 
 /** Outline of the report. Only parts that came back with something are listed. */
-function JumpNav({
-  report,
-  hasBrief,
-}: {
-  report: VehicleReport;
-  hasBrief: boolean;
-}) {
-  const items = reportNavItems(report, { hasBrief });
+function JumpNav({ report }: { report: VehicleReport }) {
+  const items = reportNavItems(report);
   if (items.length < 2) return null;
 
   return (
@@ -567,11 +677,12 @@ export function ReportView({
   heroToken?: string;
 }) {
   const chips = reportChips(report);
+  const specs = headerSpecSummary(report.specifications);
   const facts = heroFacts(report);
   const illustrationAlt = facts
     ? heroAlt(facts)
     : "Illustrated vehicle";
-  const flags = report.checks.filter((check) => check.status === "found");
+  const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
 
@@ -582,40 +693,32 @@ export function ReportView({
       {report.isSample && <SampleBanner />}
 
       <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-        <div className="hero-aurora bg-ink-950 px-5 py-7 sm:px-7 sm:py-8">
-          <div className="flex flex-col gap-6 md:flex-row md:items-center md:gap-8">
+        <div className="bg-[radial-gradient(36rem_22rem_at_100%_0%,rgba(37,99,235,0.07),transparent_58%),radial-gradient(28rem_18rem_at_0%_110%,rgba(14,165,233,0.05),transparent_52%)] bg-slate-50 px-5 py-6 sm:px-7 sm:py-7">
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:gap-10">
             <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-200 ring-1 ring-inset ring-white/15">
-                  Vehicle history report
-                </span>
-                {report.isSample ? (
-                  <span className="rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-950">
-                    Sample data
-                  </span>
-                ) : (
-                  <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
-                    Live records
-                  </span>
-                )}
-              </div>
-
               {/* The vehicle and its VIN are stated here and nowhere else. */}
-              <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+              <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
                 {vehicleTitle(report.vehicle)}
               </h1>
-              <p className="mt-2 font-mono text-sm tracking-wider text-brand-200">
+              <p className="mt-2 font-mono text-sm tracking-wider text-slate-500">
                 {prettyVin(report.vin)}
               </p>
+              {specs.length > 0 && (
+                <p className="mt-2 text-sm text-slate-500">
+                  {specs.map((spec) => spec.value).join(" · ")}
+                </p>
+              )}
 
-              <div className="mt-5 flex flex-wrap gap-2">
-                {chips.map((chip) => (
-                  <Chip key={chip.key} chip={chip} />
-                ))}
-              </div>
+              {chips.length > 0 && (
+                <ul className="mt-5 flex flex-wrap gap-2.5">
+                  {chips.map((chip) => (
+                    <Chip key={chip.key} chip={chip} />
+                  ))}
+                </ul>
+              )}
 
-              <p className="mt-5 border-t border-white/10 pt-4 text-xs text-slate-400">
-                Generated {formatDateTime(report.generatedAt)} UTC
+              <p className="mt-5 text-xs text-slate-400">
+                Generated {formatGeneratedAt(report.generatedAt)}
               </p>
             </div>
 
@@ -638,51 +741,14 @@ export function ReportView({
         <HeaderSpecs specifications={report.specifications} />
       </header>
 
-      <JumpNav report={report} hasBrief={Boolean(brief || briefToken)} />
+      <JumpNav report={report} />
 
-      <AiBrief brief={brief} token={briefToken} />
-
-      <section
-        id="summary"
-        className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
-      >
-        <h2 className="text-base font-semibold tracking-tight text-slate-900">
-          What we found
-        </h2>
-
-        {flags.length > 0 ? (
-          <>
-            <p className="mt-1.5 text-sm text-slate-500">
-              {flags.length === 1
-                ? "One of the checks we run came back with records."
-                : `${flags.length} of the checks we run came back with records.`}
-            </p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-              {flags.map((check) => (
-                <FlagTile key={check.key} check={check} />
-              ))}
-            </div>
-          </>
-        ) : (
-          <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
-            None of the checks we run came back with a record for this VIN.
-          </p>
-        )}
-
-        {clear.length > 0 && (
-          <p className="mt-4 text-sm leading-relaxed text-slate-500">
-            <span className="font-medium text-slate-600">
-              Searched, nothing on file:{" "}
-            </span>
-            {clear.join(" · ")}
-          </p>
-        )}
-
-        <p className="mt-3 text-xs leading-relaxed text-slate-400">
-          Nothing on file means no matching record was found — not that an event
-          never happened.
-        </p>
-      </section>
+      <WhatToKnow
+        brief={brief}
+        briefToken={briefToken}
+        flags={flags}
+        clear={clear}
+      />
 
       {sections.map((section) => (
         <SectionBlock

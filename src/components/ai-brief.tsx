@@ -74,19 +74,19 @@ export function AiBrief({ brief: cached = null, token }: Props) {
   if (!brief) {
     if (pending) {
       return (
-        <section className="rounded-2xl border border-brand-100 bg-brand-50/50 p-5 sm:p-6">
+        <div className="mt-5 border-t border-brand-100 pt-5">
           <p className="text-sm font-medium text-brand-900">
             Writing your brief…
           </p>
           <p className="mt-1 text-xs text-brand-900/60">
-            The records below are complete and do not depend on it.
+            The findings above are complete and do not depend on it.
           </p>
-        </section>
+        </div>
       );
     }
     if (failed) {
       return (
-        <p className="px-1 text-xs text-slate-400">
+        <p className="mt-5 text-xs text-slate-400">
           A written brief isn&apos;t available for this report. Every record is
           below.
         </p>
@@ -96,20 +96,8 @@ export function AiBrief({ brief: cached = null, token }: Props) {
   }
 
   return (
-    <section
-      id="brief"
-      className="scroll-mt-32 rounded-2xl border border-brand-200 bg-brand-50/50 p-5 sm:p-6"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h2 className="text-base font-semibold tracking-tight text-slate-900">
-          What to know
-        </h2>
-        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
-          Written from the records below
-        </span>
-      </div>
-
-      <div className="mt-4">
+    <div className="mt-5 border-t border-brand-100 pt-5">
+      <div>
         <h3 className="text-xs font-semibold uppercase tracking-wider text-slate-500">
           From this report
         </h3>
@@ -139,6 +127,6 @@ export function AiBrief({ brief: cached = null, token }: Props) {
         summarise what those records say — read them for yourself before you
         decide, and treat the model-level notes as things to check, not findings.
       </p>
-    </section>
+    </div>
   );
 }

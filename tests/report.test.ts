@@ -8,6 +8,8 @@ import {
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
+  formatGeneratedAt,
+  foundIssueChecks,
   groupListings,
   hasOdometerRollback,
   isoDate,
@@ -15,6 +17,8 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionCountLabel,
+  sectionLead,
   sectionListingGroups,
   sectionListings,
   sectionTable,
@@ -698,10 +702,10 @@ function report(overrides: Partial<VehicleReport> = {}): VehicleReport {
 describe("the header of a report", () => {
   it("states the title brand, the mileage direction and the flags that fired", () => {
     assert.deepEqual(reportChips(report()), [
-      { key: "branded", label: "No title brand reported", tone: "clear" },
-      { key: "odometer", label: "Odometer reads consistently", tone: "clear" },
-      { key: "accidents", label: "Accident records: 2", tone: "flag" },
-      { key: "titles", label: "Title records: 4", tone: "neutral" },
+      { key: "branded", label: "Clean title", tone: "clear" },
+      { key: "odometer", label: "Odometer consistent", tone: "clear" },
+      { key: "accidents", label: "2 accidents", tone: "flag" },
+      { key: "titles", label: "4 title records", tone: "neutral" },
     ]);
   });
 
@@ -726,8 +730,8 @@ describe("the header of a report", () => {
     );
 
     assert.deepEqual(chips.slice(0, 2), [
-      { key: "branded", label: "Title brand reported", tone: "flag" },
-      { key: "odometer", label: "Odometer rollback indicated", tone: "flag" },
+      { key: "branded", label: "Branded title", tone: "flag" },
+      { key: "odometer", label: "Odometer rollback", tone: "flag" },
     ]);
   });
 
@@ -739,7 +743,7 @@ describe("the header of a report", () => {
 
   it("puts nothing in the outline that has nothing to show", () => {
     assert.deepEqual(reportNavItems(report()), [
-      { href: "#summary", label: "Summary" },
+      { href: "#brief", label: "What to know" },
       { href: "#titles", label: "Titles" },
     ]);
   });
@@ -773,5 +777,68 @@ describe("the header of a report", () => {
       items.some((item) => item.href === "#odometer" || /odometer/i.test(item.label)),
       false,
     );
+  });
+
+  it("prints the generated time in Mountain Time, not UTC", () => {
+    assert.equal(formatGeneratedAt("2026-01-14T15:04:00.000Z"), "Jan 14, 2026, 8:04 AM MST");
+    assert.match(formatGeneratedAt("2026-07-14T15:04:00.000Z"), /MDT$/);
+    assert.doesNotMatch(formatGeneratedAt("2026-01-14T15:04:00.000Z"), /UTC/);
+  });
+
+  it("treats title counts as routine, not a finding in What to know", () => {
+    assert.deepEqual(
+      foundIssueChecks(report()).map((check) => check.key),
+      ["accidents"],
+    );
+  });
+});
+
+describe("section summary cards", () => {
+  it("leads a title section with the current title, not the whole table", () => {
+    const titles = section({
+      key: "titles",
+      columns: ["Date", "State", "Mileage", "Event", "Current"],
+      records: [
+        [
+          { label: "Date", value: "Sep 27, 2024" },
+          { label: "State", value: "TN" },
+          { label: "Mileage", value: "121,477 mi" },
+          { label: "Event", value: "Title transfer" },
+          { label: "Current", value: "Yes" },
+        ],
+      ],
+    });
+
+    assert.equal(sectionCountLabel(titles), "1 record");
+    assert.deepEqual(sectionLead(titles), {
+      label: "Current title",
+      text: "Sep 27, 2024 · TN · 121,477 mi · Title transfer",
+    });
+  });
+
+  it("counts sales as chapters and snapshots", () => {
+    const sales = section({
+      key: "sales",
+      layout: "listings",
+      records: [
+        [
+          { label: "Date", value: "Aug 14, 2024" },
+          { label: "Seller", value: "Music City Toyota" },
+          { label: "City", value: "Nashville" },
+          { label: "State", value: "TN" },
+          { label: "Price", value: "$11,450" },
+        ],
+        [
+          { label: "Date", value: "Feb 22, 2019" },
+          { label: "Seller", value: "Bowling Green Motors" },
+          { label: "City", value: "Bowling Green" },
+          { label: "State", value: "KY" },
+          { label: "Price", value: "$9,995" },
+        ],
+      ],
+    });
+
+    assert.match(sectionCountLabel(sales), /chapter/);
+    assert.equal(sectionLead(sales)?.label, "Latest chapter");
   });
 });

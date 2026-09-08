@@ -36,6 +36,8 @@ import type {
 } from "@/lib/report";
 import {
   currentEvent,
+  formatGeneratedAt,
+  foundIssueChecks,
   hasOdometerRollback,
   reportChips,
   reportNavItems,
@@ -78,7 +80,7 @@ const styles = StyleSheet.create({
   },
   vehicle: { fontFamily: "Helvetica-Bold", fontSize: 17, marginTop: 12 },
   vin: { fontFamily: "Courier", fontSize: 10, color: MUTED, marginTop: 3 },
-  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 10 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
   chip: {
     borderWidth: 1,
     borderRadius: 8,
@@ -242,23 +244,6 @@ function Chips({ report }: { report: VehicleReport }) {
   );
 }
 
-/** Only the checks that fired get a box. A wall of "clear" boxes says nothing. */
-function Flags({ checks }: { checks: ReportCheck[] }) {
-  return (
-    <View style={styles.checkGrid}>
-      {checks.map((check) => (
-        <View
-          key={check.key}
-          style={[styles.check, { backgroundColor: "#fffbeb", borderColor: "#fde68a" }]}
-        >
-          <Text style={styles.checkLabel}>{check.label}</Text>
-          <Text style={styles.checkDetail}>{check.detail}</Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
 /**
  * The written brief, carried into the forwarded copy.
  *
@@ -266,28 +251,70 @@ function Flags({ checks }: { checks: ReportCheck[] }) {
  * the web report: a PDF gets forwarded to people who never saw the page, and a
  * tendency of the model must not read as a finding about the car.
  */
-function Brief({ brief }: { brief: VehicleBrief }) {
+function Findings({
+  flags,
+  clear,
+}: {
+  flags: ReportCheck[];
+  clear: string[];
+}) {
+  return (
+    <View>
+      {flags.length > 0 ? (
+        <Text style={styles.sectionNote}>
+          {flags
+            .map((check) =>
+              check.count > 0 ? `${check.label} (${check.count})` : check.label,
+            )
+            .join("  ·  ")}
+        </Text>
+      ) : (
+        <Text style={styles.sectionNote}>
+          None of the issue checks came back with a record for this VIN.
+        </Text>
+      )}
+      {clear.length > 0 && (
+        <Text style={styles.clearNote}>
+          Searched, nothing on file: {clear.join("  ·  ")}
+        </Text>
+      )}
+      <Text style={styles.caveat}>
+        Nothing on file means no matching record was found — not that an event
+        never happened.
+      </Text>
+    </View>
+  );
+}
+
+function Brief({
+  brief,
+  flags,
+  clear,
+}: {
+  brief: VehicleBrief | null;
+  flags: ReportCheck[];
+  clear: string[];
+}) {
   return (
     <View style={styles.section} wrap>
       <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>What to know</Text>
-        <Text style={styles.sectionNote}>
-          Written automatically from the records in this report.
-        </Text>
+        <Text style={styles.sectionNote}>From the records in this report.</Text>
+        <Findings flags={flags} clear={clear} />
       </View>
 
-      {/* Each list is short enough to move whole. Splitting one strands a
-          bullet at the top of the next page, under a heading it has lost. */}
-      <View wrap={false}>
-        <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
-        {brief.fromReport.map((item, index) => (
-          <Text key={index} style={styles.bullet}>
-            • {item}
-          </Text>
-        ))}
-      </View>
+      {brief && (
+        <View wrap={false}>
+          <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
+          {brief.fromReport.map((item, index) => (
+            <Text key={index} style={styles.bullet}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      )}
 
-      {brief.commonForModel.length > 0 && (
+      {brief && brief.commonForModel.length > 0 && (
         <View style={styles.briefAside} wrap={false}>
           <Text style={styles.briefAsideHeading}>
             COMMON FOR THIS MODEL — NOT CONFIRMED ON THIS VIN
@@ -300,7 +327,7 @@ function Brief({ brief }: { brief: VehicleBrief }) {
         </View>
       )}
 
-      {brief.questions.length > 0 && (
+      {brief && brief.questions.length > 0 && (
         <View wrap={false}>
           <Text style={styles.briefHeading}>QUESTIONS TO ASK THE SELLER</Text>
           {brief.questions.map((item, index) => (
@@ -493,8 +520,7 @@ export function ReportDocument({
   brief?: VehicleBrief | null;
 }) {
   const title = vehicleTitle(report.vehicle);
-  const generated = report.generatedAt.replace("T", " ").slice(0, 16);
-  const flags = report.checks.filter((check) => check.status === "found");
+  const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
   const contents = reportNavItems(report).map((item) => item.label);
@@ -532,7 +558,7 @@ export function ReportDocument({
           </View>
         )}
         <View style={styles.metaRow}>
-          <Meta label="Generated" value={`${generated} UTC`} />
+          <Meta label="Generated" value={formatGeneratedAt(report.generatedAt)} />
         </View>
         <Text style={styles.contents}>In this report: {contents.join("  ·  ")}</Text>
 
@@ -540,34 +566,7 @@ export function ReportDocument({
           <Text>{report.headline}</Text>
         </View>
 
-        {brief && <Brief brief={brief} />}
-
-        <View style={styles.section} wrap={false}>
-          <Text style={styles.sectionTitle}>What we found</Text>
-          {flags.length > 0 ? (
-            <>
-              <Text style={styles.sectionNote}>
-                {flags.length === 1
-                  ? "One of the checks we run came back with records."
-                  : `${flags.length} of the checks we run came back with records.`}
-              </Text>
-              <Flags checks={flags} />
-            </>
-          ) : (
-            <Text style={styles.sectionNote}>
-              None of the checks we run came back with a record for this VIN.
-            </Text>
-          )}
-          {clear.length > 0 && (
-            <Text style={styles.clearNote}>
-              Searched, nothing on file: {clear.join("  ·  ")}
-            </Text>
-          )}
-          <Text style={styles.caveat}>
-            Nothing on file means no matching record was found — not that an
-            event never happened.
-          </Text>
-        </View>
+        <Brief brief={brief} flags={flags} clear={clear} />
 
         {sections.map((section) => (
           <Section

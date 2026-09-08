@@ -258,6 +258,7 @@ Rules, in order of importance:
 5. Never leave a trade term standing on its own. A disposition code, a claim type, a salvage yard's name, an auction house's name and a brand code mean nothing to a buyer. Say what the record is in ordinary words.
 6. A report with nothing on file is good news. Say so plainly instead of manufacturing concern.
 7. Plain English. No preamble, no marketing, no hedging boilerplate.
+8. When FACTS include junk, salvage, rebuilt, a total loss, or a salvage auction house (Copart, IAA, Insurance Auto Auctions), never say there were no accidents, that the picture is clean, or that nothing is worrying on the accident, theft or lien fronts. Those records already mean the vehicle entered the total-loss or salvage channel — even when a separate accident row is absent. You may say no separate accident, theft or lien row appears; do not call that clean.
 
 Explaining what a record means:
 
@@ -321,6 +322,57 @@ const AMOUNT_CLAIMS = [
  * sale unless the feed said so. The prompt forbids that; this is the last
  * place it can be caught.
  */
+/**
+ * A "clean accident picture" claim that cannot stand next to junk, salvage
+ * or a Copart/IAA record. Those already mean the car entered the total-loss
+ * channel, even when a separate accident row is absent.
+ */
+const CLEAN_ACCIDENT_FRONT = [
+  /\bno accidents?\b/i,
+  /\bclean picture\b/i,
+  /\bnothing worrying\b/i,
+  /\bclean (?:on )?(?:all )?(?:of )?those fronts\b/i,
+  /\bno accident, theft, lien/i,
+  /\bnothing on (?:the )?(?:accident|theft|lien)/i,
+];
+
+const SALVAGE_CHANNEL = [
+  /\bjunk\b/i,
+  /\bsalvage\b/i,
+  /\brebuilt\b/i,
+  /\btotal(?:ed|led)? loss\b/i,
+  /\bcopart\b/i,
+  /\binsurance auto auctions\b/i,
+  /\biaa\b/i,
+];
+
+/** True when the records already put this car in the salvage / total-loss channel. */
+export function factsIndicateSalvageChannel(facts: BriefFacts): boolean {
+  const haystack = [
+    ...facts.checks.map((check) => `${check.check} ${check.result}`),
+    ...facts.records.flatMap((entry) => [entry.section, ...entry.rows]),
+    ...(facts.sales
+      ? [
+          ...facts.sales.notes,
+          ...facts.sales.groups.flatMap((group) => [
+            group.headline,
+            ...group.channels,
+            ...group.sellers,
+            ...group.listings,
+          ]),
+        ]
+      : []),
+  ].join("\n");
+  return SALVAGE_CHANNEL.some((pattern) => pattern.test(haystack));
+}
+
+function dropCleanFrontWhenSalvage(fromReport: string[], salvage: boolean): string[] {
+  if (!salvage) return fromReport;
+  return fromReport.filter(
+    (bullet) => !CLEAN_ACCIDENT_FRONT.some((pattern) => pattern.test(bullet)),
+  );
+}
+
 const LISTING_FICTION = [
   /didn['’]t sell/i,
   /did not sell/i,
@@ -457,6 +509,7 @@ export function parseBrief(
   text: string,
   model: string,
   vehicle?: VehicleSummary,
+  facts?: BriefFacts,
 ): VehicleBrief | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
@@ -471,10 +524,13 @@ export function parseBrief(
   if (typeof parsed !== "object" || parsed === null) return null;
 
   const payload = parsed as Record<string, unknown>;
-  const fromReport = bullets(payload.fromReport, LIMITS.fromReport, {
-    allowAmounts: true,
-    rejectListingFiction: true,
-  });
+  const fromReport = dropCleanFrontWhenSalvage(
+    bullets(payload.fromReport, LIMITS.fromReport, {
+      allowAmounts: true,
+      rejectListingFiction: true,
+    }),
+    Boolean(facts && factsIndicateSalvageChannel(facts)),
+  );
   if (fromReport.length === 0) return null;
 
   const common = bullets(payload.commonForModel, LIMITS.commonForModel)
@@ -545,6 +601,7 @@ export async function generateBrief(
   // Callers on a deadline of their own — fulfillment answers a Stripe webhook
   // — can ask for less time than the page view is willing to wait.
   const timeoutMs = options.timeoutMs ?? anthropic.timeoutMs;
+  const facts = briefFacts(report);
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -571,7 +628,7 @@ export async function generateBrief(
         messages: [
           {
             role: "user",
-            content: `FACTS\n${JSON.stringify(briefFacts(report), null, 1)}`,
+            content: `FACTS\n${JSON.stringify(facts, null, 1)}`,
           },
         ],
       }),
@@ -595,7 +652,7 @@ export async function generateBrief(
       .join("\n")
       .trim();
 
-    const brief = parseBrief(text, model, report.vehicle);
+    const brief = parseBrief(text, model, report.vehicle, facts);
     if (!brief) {
       // The reply that failed to parse is the only way to tell a cut-off
       // JSON string from a refusal. 428 characters of unterminated JSON is

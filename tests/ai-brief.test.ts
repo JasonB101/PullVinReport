@@ -4,6 +4,7 @@ import { afterEach, describe, it } from "node:test";
 import {
   briefFacts,
   exactYearMakeModel,
+  factsIndicateSalvageChannel,
   generateBrief,
   parseBrief,
 } from "@/lib/ai-brief";
@@ -233,6 +234,60 @@ describe("reading a brief out of a reply", () => {
     ]);
   });
 
+  it("drops a clean-accident bullet when junk, salvage or Copart is already on file", () => {
+    const report = normalizeVinAuditReport(
+      {
+        attributes: { Year: "2021", Make: "Subaru", Model: "Outback" },
+        jsi: [
+          {
+            date: "2023-04-12",
+            disposition: "Sold",
+            obtainedfrom: "Copart",
+          },
+          {
+            date: "2023-04-18",
+            disposition: "TBD",
+            obtainedfrom: "Copart",
+          },
+        ],
+      },
+      VIN,
+    );
+    const facts = briefFacts(report);
+    assert.equal(factsIndicateSalvageChannel(facts), true);
+
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "Copart junk-and-salvage rows from April 2023 show Sold and TBD, which usually follows a total loss and a rebuilt path.",
+          "No accident, theft, lien — that's a clean picture on all of those fronts.",
+        ],
+      }),
+      "test-model",
+      report.vehicle,
+      facts,
+    );
+    assert.deepEqual(brief?.fromReport, [
+      "Copart junk-and-salvage rows from April 2023 show Sold and TBD, which usually follows a total loss and a rebuilt path.",
+    ]);
+  });
+
+  it("keeps a nothing-on-file accident bullet when there is no salvage channel", () => {
+    const facts = briefFacts(paidReport());
+    assert.equal(factsIndicateSalvageChannel(facts), false);
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "No accident, theft or lien records came back — a clean picture on those fronts.",
+        ],
+      }),
+      "test-model",
+      paidReport().vehicle,
+      facts,
+    );
+    assert.equal(brief?.fromReport.length, 1);
+  });
+
   it("keeps a bullet that says what a record costs without naming a number", () => {
     // The point of the brief is the clause after the record. An earlier guard
     // matched the word "worth" and threw exactly this bullet away.
@@ -381,6 +436,8 @@ describe("generating a brief", () => {
     assert.match(system, /listing chapters/);
     assert.match(system, /often repeat or vary asking totals without that meaning/);
     assert.match(system, /FORBIDDEN unless FACTS explicitly records sold vs unsold/);
+    assert.match(system, /never say there were no accidents/);
+    assert.match(system, /Copart, IAA/);
     assert.doesNotMatch(
       system,
       /usually one car advertised|did not find a buyer at the first price|shopping path/,

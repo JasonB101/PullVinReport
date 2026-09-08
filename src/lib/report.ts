@@ -135,6 +135,28 @@ export function formatEventDate(value: string): string {
   return `${MONTHS[Number(month) - 1]} ${Number(day)}, ${year}`;
 }
 
+const GENERATED_ZONE = "America/Denver";
+
+/**
+ * When this report was built, in Mountain Time.
+ *
+ * The business reads reports in Denver. UTC on the card looked like a
+ * timestamp from another planet; MST/MDT says which clock it is.
+ */
+export function formatGeneratedAt(iso: string): string {
+  const date = new Date(iso);
+  if (Number.isNaN(date.getTime())) return iso;
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    timeZone: GENERATED_ZONE,
+    timeZoneName: "short",
+  }).format(date);
+}
+
 /** One record laid out against a section's columns. */
 export type TableRow = {
   /** Same length and order as the resolved column list. Empty means no value. */
@@ -890,6 +912,25 @@ export type ReportChip = {
  * Nothing here is scored, graded or valued: we do not hold the data that would
  * make a grade or a price honest.
  */
+const CHIP_NOUN: Record<string, [string, string]> = {
+  titles: ["title record", "title records"],
+  accidents: ["accident", "accidents"],
+  liens: ["lien", "liens"],
+  recalls: ["recall", "recalls"],
+  thefts: ["theft record", "theft records"],
+  jsi: ["junk/salvage record", "junk/salvage records"],
+  branded: ["branded title", "branded titles"],
+  impounds: ["impound", "impounds"],
+  exports: ["export record", "export records"],
+  sales: ["listing snapshot", "listing snapshots"],
+};
+
+function countChipLabel(key: string, label: string, count: number): string {
+  const pair = CHIP_NOUN[key];
+  if (pair) return `${count} ${count === 1 ? pair[0] : pair[1]}`;
+  return `${count} ${label.toLowerCase()}`;
+}
+
 export function reportChips(report: VehicleReport): ReportChip[] {
   const chips: ReportChip[] = [];
   const check = (key: string) => report.checks.find((entry) => entry.key === key);
@@ -898,16 +939,16 @@ export function reportChips(report: VehicleReport): ReportChip[] {
   const branded = check("branded");
 
   if (branded?.status === "found") {
-    chips.push({ key: "branded", label: "Title brand reported", tone: "flag" });
+    chips.push({ key: "branded", label: "Branded title", tone: "flag" });
   } else if (branded && titles && titles.count > 0) {
-    chips.push({ key: "branded", label: "No title brand reported", tone: "clear" });
+    chips.push({ key: "branded", label: "Clean title", tone: "clear" });
   }
 
   if (report.odometer.length > 0) {
     chips.push(
       hasOdometerRollback(report.odometer)
-        ? { key: "odometer", label: "Odometer rollback indicated", tone: "flag" }
-        : { key: "odometer", label: "Odometer reads consistently", tone: "clear" },
+        ? { key: "odometer", label: "Odometer rollback", tone: "flag" }
+        : { key: "odometer", label: "Odometer consistent", tone: "clear" },
     );
   }
 
@@ -916,7 +957,7 @@ export function reportChips(report: VehicleReport): ReportChip[] {
     if (entry.key === "titles" || entry.key === "branded") continue;
     chips.push({
       key: entry.key,
-      label: `${entry.label}: ${entry.count}`,
+      label: countChipLabel(entry.key, entry.label, entry.count),
       tone: "flag",
     });
   }
@@ -924,7 +965,10 @@ export function reportChips(report: VehicleReport): ReportChip[] {
   if (titles) {
     chips.push({
       key: "titles",
-      label: titles.count > 0 ? `Title records: ${titles.count}` : "No title records",
+      label:
+        titles.count > 0
+          ? countChipLabel("titles", titles.label, titles.count)
+          : "No title records",
       tone: "neutral",
     });
   }
@@ -935,13 +979,8 @@ export function reportChips(report: VehicleReport): ReportChip[] {
 export type ReportNavItem = { href: string; label: string };
 
 /** Outline of the report, listing only the parts that came back with content. */
-export function reportNavItems(
-  report: VehicleReport,
-  options: { hasBrief?: boolean } = {},
-): ReportNavItem[] {
-  const items: ReportNavItem[] = [];
-  if (options.hasBrief) items.push({ href: "#brief", label: "What to know" });
-  items.push({ href: "#summary", label: "Summary" });
+export function reportNavItems(report: VehicleReport): ReportNavItem[] {
+  const items: ReportNavItem[] = [{ href: "#brief", label: "What to know" }];
   for (const section of report.sections) {
     if (section.records.length === 0) continue;
     items.push({
@@ -967,6 +1006,21 @@ export function searchedAndEmpty(report: VehicleReport): string[] {
   return report.sections
     .filter((section) => section.records.length === 0)
     .map((section) => section.navLabel ?? section.title);
+}
+
+/**
+ * Checks that came back with something other than a routine title count.
+ *
+ * Title records almost always exist; they are not a finding. The issue
+ * checks — brand, accident, salvage, lien, recall — are what belongs in
+ * the brief's summary strip.
+ */
+const ROUTINE_CHECK_KEYS = new Set(["titles"]);
+
+export function foundIssueChecks(report: VehicleReport): ReportCheck[] {
+  return report.checks.filter(
+    (check) => check.status === "found" && !ROUTINE_CHECK_KEYS.has(check.key),
+  );
 }
 
 /**
@@ -1007,6 +1061,62 @@ export function currentEvent(
     label: section.key === "titles" ? "Current title" : "Current record",
     fields,
   };
+}
+
+/** Record / chapter count shown on a section's closed face. */
+export function sectionCountLabel(section: ReportSection): string {
+  if (section.layout === "listings") {
+    const groups = sectionListingGroups(section);
+    if (groups.length > 0) {
+      const chapters = groups.length === 1 ? "chapter" : "chapters";
+      const snapshots = section.records.length === 1 ? "snapshot" : "snapshots";
+      return `${groups.length} ${chapters} · ${section.records.length} ${snapshots}`;
+    }
+  }
+  return `${section.records.length} record${section.records.length === 1 ? "" : "s"}`;
+}
+
+/**
+ * The one line a closed section card leads with — current title, latest
+ * listing chapter, or the newest row — so the table can stay folded away.
+ */
+export function sectionLead(
+  section: ReportSection,
+): { label: string; text: string } | null {
+  const current = currentEvent(section);
+  if (current) {
+    return {
+      label: current.label,
+      text: current.fields.map((field) => field.value).join(" · "),
+    };
+  }
+
+  if (section.layout === "listings") {
+    const latest = sectionListingGroups(section)[0];
+    if (!latest) return null;
+    const text = [latest.identity, latest.date, latest.price]
+      .filter((part) => part.length > 0)
+      .join(" · ");
+    return text ? { label: "Latest chapter", text } : null;
+  }
+
+  const table = sectionTable(section);
+  if (table?.rows[0]) {
+    const text = table.rows[0].cells
+      .filter((cell) => cell.length > 0)
+      .slice(0, 4)
+      .join(" · ");
+    if (text) return { label: "Latest record", text };
+  }
+
+  const first = section.records[0];
+  if (!first) return null;
+  const text = first
+    .slice(0, LEAD_FIELDS)
+    .map((field) => field.value)
+    .filter((value) => value.length > 0)
+    .join(" · ");
+  return text ? { label: "Latest record", text } : null;
 }
 
 /** Specs worth stating on the vehicle card before anyone opens the rest. */
