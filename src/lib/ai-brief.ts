@@ -71,8 +71,9 @@ export type BriefFacts = {
   /**
    * Sales and listing history, already grouped by shared sale total.
    * Null when the feed sent no listings — the brief must not invent any.
+   * Groups are facts only: dates, totals, labels, locations, explicit status.
    */
-  sales: { groups: BriefSaleGroup[]; patterns: string[] } | null;
+  sales: { groups: BriefSaleGroup[] } | null;
   records: { section: string; rows: string[] }[];
 };
 
@@ -128,28 +129,6 @@ function listingLine(listing: Listing): string {
     .join(" · ");
 }
 
-function listingBlob(listing: Listing): string {
-  return [
-    listing.headline,
-    listing.price,
-    listing.date,
-    ...listing.summary.map((field) => `${field.label} ${field.value}`),
-    ...listing.detail.map((field) => `${field.label} ${field.value}`),
-  ].join(" ");
-}
-
-function listingAmount(price: string): number | null {
-  const cleaned = price.replace(/[^\d.]/g, "");
-  if (!cleaned) return null;
-  const amount = Number(cleaned);
-  return Number.isFinite(amount) && amount > 0 ? amount : null;
-}
-
-function listingTime(date: string): number {
-  const parsed = Date.parse(date);
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function saleGroupFact(group: ListingGroup): BriefSaleGroup {
   const channels = [...new Set(group.listings.map((listing) => listing.headline))];
   const sellers = [
@@ -174,94 +153,12 @@ function saleGroupFact(group: ListingGroup): BriefSaleGroup {
   };
 }
 
-function salePatterns(groups: ListingGroup[]): string[] {
-  const patterns: string[] = [];
-
-  for (const group of groups) {
-    if (group.listings.length > 1 && group.price) {
-      patterns.push(
-        `${group.listings.length} listings share the ${group.price} total${
-          group.date ? ` around ${group.date}` : ""
-        }${group.location ? ` in ${group.location}` : ""}`,
-      );
-    }
-  }
-
-  const byDate = new Map<string, Listing[]>();
-  for (const group of groups) {
-    for (const listing of group.listings) {
-      if (!listing.date) continue;
-      const bucket = byDate.get(listing.date) ?? [];
-      bucket.push(listing);
-      byDate.set(listing.date, bucket);
-    }
-  }
-  for (const [date, listings] of byDate) {
-    if (listings.length < 2) continue;
-    const text = listings.map(listingBlob).join(" | ");
-    // The feed writes SOLD / TO BE DETERMINED; after unshout that is
-    // "Sold" / "To be determined". TBD as a price is the same idea.
-    const sold = /\bsold\b/i.test(text);
-    const open =
-      /\b(tbd|pending|unsold|no sale)\b/i.test(text) ||
-      /to be determined/i.test(text) ||
-      /not sold|did not sell/i.test(text);
-    if (sold && open) {
-      patterns.push(
-        `Same-day ${date} listings include both a sold result and a TBD or unsold result`,
-      );
-    }
-  }
-
-  const dated = groups
-    .map((group) => ({
-      group,
-      amount: listingAmount(group.price),
-      time: listingTime(group.date),
-    }))
-    .filter(
-      (entry): entry is typeof entry & { amount: number } =>
-        entry.amount !== null && entry.time > 0,
-    )
-    .sort((a, b) => a.time - b.time);
-  for (let index = 1; index < dated.length; index += 1) {
-    const earlier = dated[index - 1];
-    const later = dated[index];
-    if (later.amount < earlier.amount) {
-      patterns.push(
-        `Later listing total ${later.group.price} (${later.group.date}) is lower than the earlier ${earlier.group.price} (${earlier.group.date})`,
-      );
-      break;
-    }
-  }
-
-  const channels = groups.flatMap((group) =>
-    group.listings.flatMap((listing) => [
-      listing.headline,
-      listingField(listing, "Source"),
-      listingField(listing, "Seller"),
-    ]),
-  );
-  if (
-    channels.some((channel) => /auction|copart|iaai|manheim/i.test(channel)) &&
-    channels.some((channel) => /dealer/i.test(channel))
-  ) {
-    patterns.push("History includes both auction and dealer listings");
-  }
-
-  return patterns;
-}
-
 function briefSales(report: VehicleReport): BriefFacts["sales"] {
   const section = report.sections.find(
     (entry) => entry.key === "sales" && entry.records.length > 0,
   );
   if (!section) return null;
-  const groups = sectionListingGroups(section);
-  return {
-    groups: groups.map(saleGroupFact),
-    patterns: salePatterns(groups),
-  };
+  return { groups: sectionListingGroups(section).map(saleGroupFact) };
 }
 
 export function briefFacts(report: VehicleReport): BriefFacts {
@@ -338,14 +235,14 @@ When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an
 
 Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences and 400 characters at the outside.
 
-When FACTS.sales is present, at least one fromReport bullet MUST cover the sales and listing story. Use the grouped totals, dates, locations, seller types, sources and channels in FACTS.sales. Say why the pattern matters: several near-identical cards at the same total are usually one car advertised in more than one place, not several sales; an auction sold result next to a TBD / to-be-determined or unsold the same day is often the same run, not two sales; a later lower ask is often a car that did not find a buyer at the first price; a mix of auction and dealer listings is the shopping path, not two unrelated lives. An auction-house name (Copart, IAA, Manheim) is a place the car was offered — say that in ordinary words. Cite only dates, totals and places that appear in FACTS.sales. Do not invent a sale.
+When FACTS.sales is present, include one fromReport bullet that states only what the listings show: dates, listed totals, dealer or auction labels, locations, and an explicit Sold or TBD status when FACTS.sales records that status. Do not interpret the listings. Do not say the same car was advertised more than once, re-listed, or failed to sell. Do not treat a later lower total as a price drop that means the car did not find a buyer. Do not invent a shopping path or a listing campaign. Two listings at the same total are two listings. An auction-house name is a label on that listing — name the label, not a story about the car's path. Cite only dates, totals, places and statuses that appear in FACTS.sales.
 
 Records with nothing worrying in them do not need a consequence. Do not manufacture one for a routine registration renewal.
 
 Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
-fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the sales/listing story when FACTS.sales is present. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
+fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the listings when FACTS.sales is present, stated as facts only. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
 commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
 questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
 
@@ -385,6 +282,26 @@ const VALUATION_CLAIMS = [
 const AMOUNT_CLAIMS = [
   /\$\s?\d/,
   /\b\d[\d,]{2,}(?:\.\d+)?\s*(?:dollars|usd)\b/i,
+];
+
+/**
+ * Shopping-path stories the listings feed does not support.
+ *
+ * Same totals and later lower asks are not a campaign, a re-list or a failed
+ * sale unless the feed said so. The prompt forbids that; this is the last
+ * place it can be caught.
+ */
+const LISTING_FICTION = [
+  /didn['’]t sell/i,
+  /did not sell/i,
+  /advertised more than once/i,
+  /same car advertised/i,
+  /didn['’]t find a buyer/i,
+  /did not find a buyer/i,
+  /listing campaign/i,
+  /advertised in more than one place/i,
+  /failed to sell/i,
+  /re-?list(?:ed|ing)?/i,
 ];
 
 function escapeRe(value: string): string {
@@ -475,7 +392,7 @@ function clipBullet(text: string): string {
 function bullets(
   value: unknown,
   limit: number,
-  options: { allowAmounts?: boolean } = {},
+  options: { allowAmounts?: boolean; rejectListingFiction?: boolean } = {},
 ): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -486,6 +403,11 @@ function bullets(
     .filter(
       (entry) =>
         options.allowAmounts || !AMOUNT_CLAIMS.some((pattern) => pattern.test(entry)),
+    )
+    .filter(
+      (entry) =>
+        !options.rejectListingFiction ||
+        !LISTING_FICTION.some((pattern) => pattern.test(entry)),
     )
     .slice(0, limit);
 }
@@ -518,6 +440,7 @@ export function parseBrief(
   const payload = parsed as Record<string, unknown>;
   const fromReport = bullets(payload.fromReport, LIMITS.fromReport, {
     allowAmounts: true,
+    rejectListingFiction: true,
   });
   if (fromReport.length === 0) return null;
 

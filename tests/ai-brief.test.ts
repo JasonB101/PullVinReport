@@ -79,15 +79,15 @@ describe("what the brief is allowed to see", () => {
     assert.equal(withSales.sales.groups.length, 2);
     assert.equal(withSales.sales.groups[0].listingCount, 3);
     assert.equal(withSales.sales.groups[0].price, "$11,450.00");
-    assert.match(withSales.sales.patterns.join(" "), /3 listings share/);
-    assert.match(withSales.sales.patterns.join(" "), /auction and dealer/);
+    const serialized = JSON.stringify(withSales.sales);
+    assert.doesNotMatch(serialized, /listing campaign|did not sell|advertised more than once/i);
     assert.equal(
       withSales.records.some((entry) => /sales/i.test(entry.section)),
       false,
     );
   });
 
-  it("flags a same-day auction sold next to a to-be-determined card", () => {
+  it("sends sold and TBD as labels on the listings, not as a story", () => {
     const facts = briefFacts(
       normalizeVinAuditReport(
         {
@@ -127,45 +127,11 @@ describe("what the brief is allowed to see", () => {
     );
 
     assert.ok(facts.sales);
-    const told = [
-      ...facts.sales.patterns,
-      ...facts.sales.groups.flatMap((group) => group.listings),
-    ].join(" ");
+    const told = facts.sales.groups.flatMap((group) => group.listings).join(" ");
     assert.match(told, /Copart/i);
-    assert.match(facts.sales.patterns.join(" "), /sold result and a TBD/i);
-    assert.match(facts.sales.patterns.join(" "), /auction and dealer/i);
-  });
-
-  it("notes when a later listing total is lower than an earlier one", () => {
-    const facts = briefFacts(
-      normalizeVinAuditReport(
-        {
-          attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
-          titles: [{ date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" }],
-          sales: [
-            {
-              date: "2019-02-22",
-              listing_type: "Dealer classified",
-              listingprice: "14500",
-              city: "Nashville",
-              state: "TN",
-            },
-            {
-              date: "2024-08-14",
-              listing_type: "Dealer classified",
-              listingprice: "9950",
-              city: "Nashville",
-              state: "TN",
-            },
-          ],
-        },
-        VIN,
-      ),
-    );
-
-    assert.ok(facts.sales);
-    assert.match(facts.sales.patterns.join(" "), /lower than the earlier/);
-    assert.match(facts.sales.patterns.join(" "), /\$9,950/);
+    assert.match(told, /Sold/i);
+    assert.match(told, /To be determined/i);
+    assert.doesNotMatch(JSON.stringify(facts.sales), /same run|failed to sell|campaign/i);
   });
 
   it("never sends the stored provider payload", () => {
@@ -234,13 +200,31 @@ describe("reading a brief out of a reply", () => {
     const brief = parseBrief(
       JSON.stringify({
         fromReport: [
-          "Three dealer cards share the same $11,450 asking price, which is usually one listing campaign rather than three sales.",
+          "Three August 2024 dealer listings in Nashville show an asking total of $11,450.",
         ],
       }),
       "test-model",
     );
     assert.equal(brief?.fromReport.length, 1);
     assert.match(brief?.fromReport[0] ?? "", /\$11,450/);
+  });
+
+  it("drops a listing bullet that invents a campaign or a failed sale", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "Five title records, no brands.",
+          "The listing history shows several dealer postings at the same price, which usually means the same car advertised more than once rather than separate sales.",
+          "The asking price also dropped over time, typical of a car that didn't sell right away.",
+          "Three August 2024 dealer listings show an asking total of $11,450.",
+        ],
+      }),
+      "test-model",
+    );
+    assert.deepEqual(brief?.fromReport, [
+      "Five title records, no brands.",
+      "Three August 2024 dealer listings show an asking total of $11,450.",
+    ]);
   });
 
   it("keeps a bullet that says what a record costs without naming a number", () => {
@@ -387,7 +371,9 @@ describe("generating a brief", () => {
     assert.match(system, /Every bullet MUST name that full year, make and model/);
     assert.match(system, /Never name a sibling/);
     assert.match(system, /FACTS\.sales/);
-    assert.match(system, /sales and listing story/);
+    assert.match(system, /Do not interpret the listings/);
+    assert.match(system, /stated as facts only/);
+    assert.match(system, /Do not say the same car was advertised more than once/);
     assert.match(system, /two sentences and 400 characters/);
   });
 
@@ -558,7 +544,7 @@ describe("the sample's brief", () => {
     const brief = buildSampleBrief();
     assert.match(brief.fromReport.join(" "), /Five title records/);
     assert.match(brief.fromReport.join(" "), /\$11,450/);
-    assert.match(brief.fromReport.join(" "), /listing campaign/);
+    assert.doesNotMatch(brief.fromReport.join(" "), /listing campaign|advertised more than once/i);
     // The model-level notes must not read as findings about the sample car.
     for (const bullet of brief.commonForModel) {
       assert.doesNotMatch(bullet, /\bthis (vehicle|car|vin)\b/i);
