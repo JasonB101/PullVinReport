@@ -87,6 +87,87 @@ describe("what the brief is allowed to see", () => {
     );
   });
 
+  it("flags a same-day auction sold next to a to-be-determined card", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+          titles: [{ date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" }],
+          sales: [
+            {
+              date: "2026-05-11",
+              listing_type: "Auction",
+              source: "Copart",
+              saleprice: "0",
+              city: "Nashville",
+              state: "TN",
+              status: "SOLD",
+            },
+            {
+              date: "2026-05-11",
+              listing_type: "Auction",
+              source: "Copart",
+              saleprice: "TBD",
+              city: "Nashville",
+              state: "TN",
+              status: "TO BE DETERMINED",
+            },
+            {
+              date: "2024-08-14",
+              listing_type: "Dealer classified",
+              listingprice: "11450",
+              sellertype: "Franchise dealer",
+              city: "Nashville",
+              state: "TN",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+
+    assert.ok(facts.sales);
+    const told = [
+      ...facts.sales.patterns,
+      ...facts.sales.groups.flatMap((group) => group.listings),
+    ].join(" ");
+    assert.match(told, /Copart/i);
+    assert.match(facts.sales.patterns.join(" "), /sold result and a TBD/i);
+    assert.match(facts.sales.patterns.join(" "), /auction and dealer/i);
+  });
+
+  it("notes when a later listing total is lower than an earlier one", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+          titles: [{ date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" }],
+          sales: [
+            {
+              date: "2019-02-22",
+              listing_type: "Dealer classified",
+              listingprice: "14500",
+              city: "Nashville",
+              state: "TN",
+            },
+            {
+              date: "2024-08-14",
+              listing_type: "Dealer classified",
+              listingprice: "9950",
+              city: "Nashville",
+              state: "TN",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+
+    assert.ok(facts.sales);
+    assert.match(facts.sales.patterns.join(" "), /lower than the earlier/);
+    assert.match(facts.sales.patterns.join(" "), /\$9,950/);
+  });
+
   it("never sends the stored provider payload", () => {
     assert.doesNotMatch(serialized, /reportlink|meterunit/i);
   });

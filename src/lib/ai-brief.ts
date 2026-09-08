@@ -119,10 +119,35 @@ function listingLine(listing: Listing): string {
     listing.headline,
     listing.price,
     listingField(listing, "Location"),
+    listingField(listing, "Source"),
+    listingField(listing, "Status"),
+    listingField(listing, "Result"),
     sellers,
   ]
     .filter((part) => part.length > 0)
     .join(" · ");
+}
+
+function listingBlob(listing: Listing): string {
+  return [
+    listing.headline,
+    listing.price,
+    listing.date,
+    ...listing.summary.map((field) => `${field.label} ${field.value}`),
+    ...listing.detail.map((field) => `${field.label} ${field.value}`),
+  ].join(" ");
+}
+
+function listingAmount(price: string): number | null {
+  const cleaned = price.replace(/[^\d.]/g, "");
+  if (!cleaned) return null;
+  const amount = Number(cleaned);
+  return Number.isFinite(amount) && amount > 0 ? amount : null;
+}
+
+function listingTime(date: string): number {
+  const parsed = Date.parse(date);
+  return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function saleGroupFact(group: ListingGroup): BriefSaleGroup {
@@ -173,15 +198,14 @@ function salePatterns(groups: ListingGroup[]): string[] {
   }
   for (const [date, listings] of byDate) {
     if (listings.length < 2) continue;
-    const text = listings
-      .map((listing) =>
-        [listing.headline, listing.price, ...listing.summary, ...listing.detail]
-          .map((part) => (typeof part === "string" ? part : part.value))
-          .join(" "),
-      )
-      .join(" | ");
+    const text = listings.map(listingBlob).join(" | ");
+    // The feed writes SOLD / TO BE DETERMINED; after unshout that is
+    // "Sold" / "To be determined". TBD as a price is the same idea.
     const sold = /\bsold\b/i.test(text);
-    const open = /\b(tbd|pending|not sold|unsold|no sale)\b/i.test(text);
+    const open =
+      /\b(tbd|pending|unsold|no sale)\b/i.test(text) ||
+      /to be determined/i.test(text) ||
+      /not sold|did not sell/i.test(text);
     if (sold && open) {
       patterns.push(
         `Same-day ${date} listings include both a sold result and a TBD or unsold result`,
@@ -189,9 +213,37 @@ function salePatterns(groups: ListingGroup[]): string[] {
     }
   }
 
-  const channels = groups.flatMap((group) => group.listings.map((listing) => listing.headline));
+  const dated = groups
+    .map((group) => ({
+      group,
+      amount: listingAmount(group.price),
+      time: listingTime(group.date),
+    }))
+    .filter(
+      (entry): entry is typeof entry & { amount: number } =>
+        entry.amount !== null && entry.time > 0,
+    )
+    .sort((a, b) => a.time - b.time);
+  for (let index = 1; index < dated.length; index += 1) {
+    const earlier = dated[index - 1];
+    const later = dated[index];
+    if (later.amount < earlier.amount) {
+      patterns.push(
+        `Later listing total ${later.group.price} (${later.group.date}) is lower than the earlier ${earlier.group.price} (${earlier.group.date})`,
+      );
+      break;
+    }
+  }
+
+  const channels = groups.flatMap((group) =>
+    group.listings.flatMap((listing) => [
+      listing.headline,
+      listingField(listing, "Source"),
+      listingField(listing, "Seller"),
+    ]),
+  );
   if (
-    channels.some((channel) => /auction/i.test(channel)) &&
+    channels.some((channel) => /auction|copart|iaai|manheim/i.test(channel)) &&
     channels.some((channel) => /dealer/i.test(channel))
   ) {
     patterns.push("History includes both auction and dealer listings");
@@ -286,7 +338,7 @@ When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an
 
 Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences at the outside.
 
-When FACTS.sales is present, at least one fromReport bullet MUST cover the sales and listing story. Use the grouped totals, dates, locations, seller types and channels. Say why the pattern matters: several near-identical cards at the same total are usually one car advertised in more than one place, not several sales; an auction sold result next to a TBD or unsold the same day is often the same run; a later lower ask is often a car that did not find a buyer at the first price; a mix of auction and dealer listings is the shopping path, not two unrelated lives. Cite only dates, totals and places that appear in FACTS.sales. Do not invent a sale.
+When FACTS.sales is present, at least one fromReport bullet MUST cover the sales and listing story. Use the grouped totals, dates, locations, seller types, sources and channels in FACTS.sales. Say why the pattern matters: several near-identical cards at the same total are usually one car advertised in more than one place, not several sales; an auction sold result next to a TBD / to-be-determined or unsold the same day is often the same run, not two sales; a later lower ask is often a car that did not find a buyer at the first price; a mix of auction and dealer listings is the shopping path, not two unrelated lives. An auction-house name (Copart, IAA, Manheim) is a place the car was offered — say that in ordinary words. Cite only dates, totals and places that appear in FACTS.sales. Do not invent a sale.
 
 Records with nothing worrying in them do not need a consequence. Do not manufacture one for a routine registration renewal.
 
