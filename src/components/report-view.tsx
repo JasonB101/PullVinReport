@@ -1,9 +1,11 @@
 import { AiBrief } from "@/components/ai-brief";
+import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import type { VehicleBrief } from "@/lib/ai-brief";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
   Listing,
+  ListingGroup,
   ReportCheck,
   ReportChip,
   ReportSection,
@@ -18,7 +20,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
-  sectionListings,
+  sectionListingGroups,
   sectionTable,
   sectionsWithRecords,
   vehicleTitle,
@@ -301,8 +303,62 @@ function ListingCard({ listing }: { listing: Listing }) {
   );
 }
 
+/**
+ * One sale, even when the feed sent it as several near-identical listings.
+ *
+ * The parent holds the shared total and the best date/location. Related
+ * dealer cards stay a click away instead of repeating the same price down
+ * the page.
+ */
+function ListingGroupCard({ group }: { group: ListingGroup }) {
+  if (group.listings.length === 1) {
+    return <ListingCard listing={group.listings[0]} />;
+  }
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-4">
+        <span className="text-sm font-semibold text-slate-900">
+          {group.headline}
+        </span>
+        {group.date && (
+          <span className="text-xs text-slate-500">{group.date}</span>
+        )}
+        {group.price && (
+          <span className="ml-auto text-base font-semibold tabular-nums text-slate-900">
+            {group.price}
+          </span>
+        )}
+        {group.location && (
+          <span className="flex w-full flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
+            <span className="text-slate-400">Location: </span>
+            <span className="text-slate-700">{group.location}</span>
+          </span>
+        )}
+      </div>
+
+      <ScrollOpenDetails
+        className="scroll-mt-32 border-t border-slate-100"
+        summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden"
+        summary={
+          <span className="font-medium text-brand-600">
+            {group.listings.length} related listings
+          </span>
+        }
+      >
+        <div className="space-y-3 px-4 pb-4">
+          {group.listings.map((listing, index) => (
+            <ListingCard key={`${listing.headline}-${listing.date}-${index}`} listing={listing} />
+          ))}
+        </div>
+      </ScrollOpenDetails>
+    </div>
+  );
+}
+
 function SectionBlock({ section }: { section: ReportSection }) {
-  const listings = section.layout === "listings" ? sectionListings(section) : null;
+  const listings =
+    section.layout === "listings" ? sectionListingGroups(section) : null;
   const table = listings ? null : sectionTable(section);
   const current = currentEvent(section);
 
@@ -337,8 +393,8 @@ function SectionBlock({ section }: { section: ReportSection }) {
 
       {listings ? (
         <div className="mt-4 space-y-3">
-          {listings.map((listing, index) => (
-            <ListingCard key={index} listing={listing} />
+          {listings.map((group, index) => (
+            <ListingGroupCard key={`${group.price}-${group.date}-${index}`} group={group} />
           ))}
         </div>
       ) : table ? (
@@ -436,13 +492,18 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
 
   return (
-    <details className="border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm [&::-webkit-details-marker]:hidden">
-        <span className="font-semibold text-slate-900">
-          Vehicle specifications
-        </span>
-        <MoreHint count={specifications.length} />
-      </summary>
+    <ScrollOpenDetails
+      className="scroll-mt-32 border-t border-slate-200 bg-white px-5 py-4 sm:px-7"
+      summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 text-sm [&::-webkit-details-marker]:hidden"
+      summary={
+        <>
+          <span className="font-semibold text-slate-900">
+            Vehicle specifications
+          </span>
+          <MoreHint count={specifications.length} />
+        </>
+      }
+    >
       <p className="mt-3 text-xs text-slate-500">
         Decoded from the VIN and the manufacturer&apos;s build record.
       </p>
@@ -456,7 +517,7 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
           </div>
         ))}
       </dl>
-    </details>
+    </ScrollOpenDetails>
   );
 }
 

@@ -29,6 +29,7 @@ import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
   Listing,
+  ListingGroup,
   ReportCheck,
   ReportSection,
   VehicleReport,
@@ -40,7 +41,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
-  sectionListings,
+  sectionListingGroups,
   sectionTable,
   sectionsWithRecords,
   vehicleTitle,
@@ -188,6 +189,12 @@ const styles = StyleSheet.create({
   },
   listingSummary: { marginTop: 3 },
   listingDetail: { color: MUTED, fontSize: 7, marginTop: 4 },
+  relatedListing: {
+    marginTop: 6,
+    paddingTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: LINE,
+  },
 
   headerSpecs: { marginTop: 10 },
   specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
@@ -346,9 +353,63 @@ function ListingCard({ listing }: { listing: Listing }) {
   );
 }
 
+function ListingFields({ listing }: { listing: Listing }) {
+  return (
+    <View>
+      <View style={styles.listingHead}>
+        <Text style={styles.listingHeadline}>{listing.headline}</Text>
+        {listing.date.length > 0 && (
+          <Text style={styles.listingDate}>{listing.date}</Text>
+        )}
+      </View>
+      {listing.summary.length > 0 && (
+        <Text style={styles.listingSummary}>{fieldList(listing.summary)}</Text>
+      )}
+      {listing.detail.length > 0 && (
+        <Text style={styles.listingDetail}>{fieldList(listing.detail)}</Text>
+      )}
+    </View>
+  );
+}
+
+/**
+ * Paper has no disclosure, so a grouped sale prints once with every related
+ * listing underneath rather than repeating the same total down the page.
+ */
+function ListingGroupCard({ group }: { group: ListingGroup }) {
+  if (group.listings.length === 1) {
+    return <ListingCard listing={group.listings[0]} />;
+  }
+
+  return (
+    <View style={styles.card} wrap>
+      <View style={styles.listingHead}>
+        <Text style={styles.listingHeadline}>{group.headline}</Text>
+        {group.date.length > 0 && (
+          <Text style={styles.listingDate}>{group.date}</Text>
+        )}
+        {group.price.length > 0 && (
+          <Text style={styles.listingPrice}>{group.price}</Text>
+        )}
+      </View>
+      {group.location.length > 0 && (
+        <Text style={styles.listingSummary}>Location: {group.location}</Text>
+      )}
+      <Text style={styles.listingDetail}>
+        {group.listings.length} related listings
+      </Text>
+      {group.listings.map((listing, index) => (
+        <View key={index} style={styles.relatedListing} wrap={false}>
+          <ListingFields listing={listing} />
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function Section({ section }: { section: ReportSection }) {
   const listings =
-    section.layout === "listings" ? sectionListings(section) : null;
+    section.layout === "listings" ? sectionListingGroups(section) : null;
   const table = listings ? null : sectionTable(section);
   const width = table ? `${(100 / table.columns.length).toFixed(3)}%` : "100%";
   const wraps = section.records.length > KEEP_TOGETHER;
@@ -376,8 +437,8 @@ function Section({ section }: { section: ReportSection }) {
 
       {listings ? (
         <View>
-          {listings.map((listing, index) => (
-            <ListingCard key={index} listing={listing} />
+          {listings.map((group, index) => (
+            <ListingGroupCard key={index} group={group} />
           ))}
         </View>
       ) : table ? (

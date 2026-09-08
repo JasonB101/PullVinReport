@@ -334,6 +334,98 @@ export function sectionListings(section: ReportSection): Listing[] {
 }
 
 /**
+ * Listings that share a sale total, shown as one parent with the rest folded.
+ *
+ * A feed often repeats one transaction once per site that carried it — same
+ * asking price, same year, different dealer cards. Showing each as its own
+ * card makes a single sale look like three. They stay available; they just
+ * sit under one parent until asked for. A later listing at the same dollars
+ * is a different sale and stays its own card.
+ */
+export type ListingGroup = {
+  /** Shared sale total, as shown on the parent card. */
+  price: string;
+  /** Newest date among the related listings. */
+  date: string;
+  /** Best location among the related listings. */
+  location: string;
+  /** Shared headline, or "Sale" when the listings disagree. */
+  headline: string;
+  listings: Listing[];
+};
+
+function listingLocation(listing: Listing): string {
+  return listing.summary.find((field) => field.label === "Location")?.value ?? "";
+}
+
+/** Cents of a listed price, so `$11,450` and `$11,450.00` are the same sale. */
+function listingPriceKey(price: string): string {
+  const cleaned = price.replace(/[^\d.]/g, "");
+  if (!cleaned) return "";
+  const amount = Number(cleaned);
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  return String(Math.round(amount * 100));
+}
+
+function listingYear(date: string): string {
+  return /\b((?:19|20)\d{2})\b/.exec(date)?.[1] ?? "";
+}
+
+function listingSortValue(date: string): number {
+  const iso = isoDate(date);
+  if (iso) return Date.parse(`${iso}T00:00:00Z`);
+  const parsed = Date.parse(date);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function listingGroupKey(listing: Listing): string | null {
+  const price = listingPriceKey(listing.price);
+  // No usable price means there is nothing to match on — keep it a singleton
+  // rather than clumping every "call for price" card into one pile.
+  if (!price) return null;
+  return `${price}|${listingYear(listing.date)}`;
+}
+
+export function groupListings(listings: Listing[]): ListingGroup[] {
+  const buckets = new Map<string, Listing[]>();
+  const order: string[] = [];
+  let singles = 0;
+
+  for (const listing of listings) {
+    const key = listingGroupKey(listing) ?? `single:${singles++}`;
+    const bucket = buckets.get(key);
+    if (!bucket) {
+      buckets.set(key, [listing]);
+      order.push(key);
+      continue;
+    }
+    bucket.push(listing);
+  }
+
+  return order.map((key) => {
+    const items = [...(buckets.get(key) ?? [])].sort(
+      (a, b) => listingSortValue(b.date) - listingSortValue(a.date),
+    );
+    const headlines = new Set(items.map((item) => item.headline));
+    const priced = items.find((item) => item.price.length > 0);
+    const located = items.find((item) => listingLocation(item).length > 0);
+    const dated = items.find((item) => item.date.length > 0);
+
+    return {
+      headline: headlines.size === 1 ? items[0].headline : "Sale",
+      date: dated?.date ?? "",
+      price: priced?.price ?? "",
+      location: located ? listingLocation(located) : "",
+      listings: items,
+    };
+  });
+}
+
+export function sectionListingGroups(section: ReportSection): ListingGroup[] {
+  return groupListings(sectionListings(section));
+}
+
+/**
  * Drops records that repeat the one before them.
  *
  * Providers sometimes echo the same event once per source that reported it.

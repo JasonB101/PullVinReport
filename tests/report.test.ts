@@ -8,12 +8,14 @@ import {
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
+  groupListings,
   hasOdometerRollback,
   isoDate,
   liftSharedFields,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionListingGroups,
   sectionListings,
   sectionTable,
   sectionsWithRecords,
@@ -321,6 +323,95 @@ describe("listings", () => {
     sectionListings(listing);
     sectionListings(listing);
     assert.equal(JSON.stringify(listing.records), before);
+  });
+});
+
+describe("listing groups", () => {
+  const dealer = (overrides: Record<string, string> = {}) => {
+    const fields = {
+      Date: "Aug 14, 2024",
+      "Listing type": "Dealer classified",
+      Price: "$11,450",
+      Mileage: "120,880 mi",
+      City: "Nashville",
+      State: "TN",
+      ...overrides,
+    };
+    return Object.entries(fields).map(([label, value]) => ({ label, value }));
+  };
+
+  it("folds same-price listings from the same year into one parent", () => {
+    const groups = sectionListingGroups(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [
+          dealer(),
+          dealer({
+            Date: "Aug 16, 2024",
+            Price: "$11,450.00",
+            City: "Brentwood",
+            "Listing type": "Online marketplace",
+          }),
+          dealer({ Date: "Feb 22, 2019", Price: "$9,995", City: "Bowling Green", State: "KY" }),
+        ],
+      }),
+    );
+
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].listings.length, 2);
+    assert.equal(groups[0].price, "$11,450.00");
+    assert.equal(groups[0].date, "Aug 16, 2024");
+    assert.equal(groups[0].location, "Brentwood, TN");
+    assert.equal(groups[0].headline, "Sale");
+    assert.equal(groups[1].listings.length, 1);
+    assert.equal(groups[1].price, "$9,995");
+  });
+
+  it("does not treat the same dollars years later as the same sale", () => {
+    const groups = groupListings(
+      sectionListings(
+        section({
+          key: "sales",
+          layout: "listings",
+          records: [
+            dealer({ Date: "Aug 14, 2024", Price: "$11,450" }),
+            dealer({ Date: "May 3, 2019", Price: "$11,450" }),
+          ],
+        }),
+      ),
+    );
+
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].listings.length, 1);
+    assert.equal(groups[1].listings.length, 1);
+  });
+
+  it("leaves a listing with no price as its own card", () => {
+    const groups = sectionListingGroups(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [dealer({ Price: "" }), dealer({ Price: "Call for price", City: "Memphis" })],
+      }),
+    );
+
+    assert.equal(groups.length, 2);
+    assert.equal(groups[0].listings.length, 1);
+    assert.equal(groups[1].listings.length, 1);
+  });
+
+  it("keeps a shared listing type as the parent headline", () => {
+    const [group] = sectionListingGroups(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [dealer(), dealer({ Date: "Aug 18, 2024", City: "Franklin" })],
+      }),
+    );
+
+    assert.equal(group.headline, "Dealer classified");
+    assert.equal(group.listings.length, 2);
   });
 });
 

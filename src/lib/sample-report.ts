@@ -250,7 +250,8 @@ export function buildSampleReport(): VehicleReport {
         emptyLabel: "No prior sales listings came back.",
         // Deliberately the widest records in the sample. A real listing feed
         // carries this much and more, and the sample exists to prove the
-        // layout survives it rather than to flatter it.
+        // layout survives it rather than to flatter it. Three cards share
+        // the 2024 asking price so the page has to fold them into one sale.
         layout: "listings",
         records: [
           [
@@ -269,6 +270,38 @@ export function buildSampleReport(): VehicleReport {
               label: "Description",
               value:
                 "One-owner trade-in, service records available, new tyres fitted at 118,000 miles. Sold as-is with the balance of the powertrain warranty.",
+            },
+          ],
+          [
+            { label: "Date", value: "Aug 16, 2024" },
+            { label: "Listing type", value: "Dealer classified" },
+            { label: "Price", value: "$11,450.00" },
+            { label: "Mileage", value: "120,880 mi" },
+            { label: "Seller type", value: "Franchise dealer" },
+            { label: "Seller", value: "Music City Toyota" },
+            { label: "City", value: "Brentwood" },
+            { label: "State", value: "TN" },
+            { label: "Stock number", value: "88213A" },
+            { label: "Exterior colour", value: "Super White" },
+            {
+              label: "Description",
+              value:
+                "Same asking price syndicated to a second dealer site the week it was listed.",
+            },
+          ],
+          [
+            { label: "Date", value: "Aug 11, 2024" },
+            { label: "Listing type", value: "Online marketplace" },
+            { label: "Price", value: "$11,450" },
+            { label: "Mileage", value: "120,904 mi" },
+            { label: "Seller type", value: "Franchise dealer" },
+            { label: "City", value: "Nashville" },
+            { label: "State", value: "TN" },
+            { label: "Days listed", value: "6" },
+            {
+              label: "Description",
+              value:
+                "Cross-posted marketplace card that repeats the dealer asking price.",
             },
           ],
           [
