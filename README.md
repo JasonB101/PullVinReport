@@ -184,9 +184,9 @@ What keeps it honest:
 
 With `FAL_KEY` set, a paid report draws a **product-cutout** of the year, make
 and model (plus a richer listing trim and exterior colour when the records
-have them) and places it **to the right of the vehicle details** with a
-permanent badge: **Illustration · not this VIN**. It is never a photograph of
-that VIN. On a narrow screen the cutout stacks under the details.
+have them) and places it **to the right of the vehicle details**. It is never
+a photograph of that VIN. On a narrow screen the cutout stacks under the
+details.
 
 - Colour comes from listing fields including **`Vehicle color` / `Vehicle
   colour`**, not only `Exterior color`. Interior colour is ignored.
@@ -217,8 +217,8 @@ After Baloo pulls this branch:
    `cutout-v1|`, so a missed delete still will not show the old white image.
 2. Hard-refresh the paid report (Cmd/Ctrl-Shift-R).
 3. With `FAL_KEY` set you should see a Magnetite Gray (or the listing's
-   `Vehicle color`) cutout to the right of the details, labelled
-   **Illustration · not this VIN**. Without the key, no hero.
+   `Vehicle color`) cutout to the right of the details, with no on-image
+   label. Without the key, no hero.
 
 ## What customers see when something breaks
 

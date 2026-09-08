@@ -12,7 +12,6 @@ import type { Field, VehicleReport } from "@/lib/report";
 import { sectionListings } from "@/lib/report";
 import type { VehicleHeroRecord } from "@/lib/store";
 
-export const HERO_LABEL = "Illustration · not this VIN";
 export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.svg";
 /**
  * Bump this when the drawing contract changes (colour source, cutout, prompt)
@@ -160,7 +159,7 @@ export function heroAlt(facts: HeroFacts): string {
     .filter(Boolean)
     .join(" ");
   const color = facts.color ? ` in ${facts.color}` : "";
-  return `Illustrated cutout of a ${name}${color} — not a photo of this VIN`;
+  return `Illustrated ${name}${color}`;
 }
 
 function falInput(facts: HeroFacts): Record<string, unknown> {

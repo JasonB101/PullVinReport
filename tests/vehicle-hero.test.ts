@@ -8,7 +8,6 @@ import {
   heroFacts,
   heroPrompt,
   HERO_CACHE_VERSION,
-  HERO_LABEL,
 } from "../src/lib/vehicle-hero.ts";
 import { buildSampleReport } from "../src/lib/sample-report.ts";
 import { fal, isFalConfigured } from "../src/lib/config.ts";
@@ -125,9 +124,8 @@ describe("the illustration prompt", () => {
     assert.match(prompt, /Transparent background/i);
     assert.match(prompt, /2\.5L L4/);
     assert.doesNotMatch(prompt, new RegExp(buildSampleReport().vin, "i"));
-    assert.match(heroAlt(facts), /not a photo of this VIN/i);
-    assert.match(HERO_LABEL, /Illustration/);
-    assert.match(HERO_LABEL, /not this VIN/i);
+    assert.match(heroAlt(facts), /^Illustrated 2012 Toyota Camry SE/);
+    assert.doesNotMatch(heroAlt(facts), /not this VIN/i);
   });
 });
 

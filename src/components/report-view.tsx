@@ -570,7 +570,7 @@ export function ReportView({
   const facts = heroFacts(report);
   const illustrationAlt = facts
     ? heroAlt(facts)
-    : "Illustrated cutout of this vehicle — not a photo of this VIN";
+    : "Illustrated vehicle";
   const flags = report.checks.filter((check) => check.status === "found");
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
