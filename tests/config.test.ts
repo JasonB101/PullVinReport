@@ -6,8 +6,10 @@ import {
   DEFAULT_REPORT_PRICE_CENTS,
   anthropic,
   emailConfig,
+  fal,
   formatPrice,
   isAnthropicConfigured,
+  isFalConfigured,
   pricing,
 } from "../src/lib/config.ts";
 
@@ -17,6 +19,8 @@ const ENV_KEYS = [
   "REPORT_PRICE_CENTS",
   "ANTHROPIC_MODEL",
   "ANTHROPIC_TIMEOUT_MS",
+  "FAL_IMAGE_MODEL",
+  "FAL_IMAGE_STYLE",
 ];
 
 afterEach(() => {
@@ -109,6 +113,36 @@ describe("the model that writes the brief", () => {
       assert.equal(anthropic.apiKey, undefined);
     } finally {
       if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
+    }
+  });
+});
+
+describe("the model that draws the vehicle hero", () => {
+  it("defaults to Recraft V3 digital illustration, not a photoreal Flux pass", () => {
+    assert.equal(fal.model, "fal-ai/recraft/v3/text-to-image");
+    assert.equal(fal.style, "digital_illustration");
+  });
+
+  it("takes an override for operators who want a cheaper Flux pass", () => {
+    process.env.FAL_IMAGE_MODEL = "fal-ai/flux/schnell";
+    process.env.FAL_IMAGE_STYLE = "any";
+    assert.equal(fal.model, "fal-ai/flux/schnell");
+    assert.equal(fal.style, "any");
+  });
+
+  it("refuses a photoreal Recraft style so an env typo cannot look like this VIN", () => {
+    process.env.FAL_IMAGE_STYLE = "realistic_image";
+    assert.equal(fal.style, "digital_illustration");
+  });
+
+  it("is off, not broken, when no key is set", () => {
+    const before = process.env.FAL_KEY;
+    delete process.env.FAL_KEY;
+    try {
+      assert.equal(isFalConfigured(), false);
+      assert.equal(fal.apiKey, undefined);
+    } finally {
+      if (before !== undefined) process.env.FAL_KEY = before;
     }
   });
 });

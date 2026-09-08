@@ -11,9 +11,11 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  VehicleHeroRecord,
 } from "@/lib/store/types";
 
 const TABLE = "pullvinreport_orders";
+const HEROES = "pullvinreport_vehicle_heroes";
 
 type Row = {
   id: string;
@@ -144,6 +146,15 @@ export class PostgresOrderStore implements OrderStore {
         await this.getPool().query(
           `CREATE INDEX IF NOT EXISTS ${TABLE}_created_at_idx ON ${TABLE} (created_at DESC);`,
         );
+        await this.getPool().query(`
+          CREATE TABLE IF NOT EXISTS ${HEROES} (
+            cache_key TEXT PRIMARY KEY,
+            src TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            model TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+        `);
       })().catch((error) => {
         this.ready = null;
         throw error;
@@ -264,6 +275,34 @@ export class PostgresOrderStore implements OrderStore {
       revenueCents: Number(row.revenue ?? 0),
       refundedCents: Number(row.refunded ?? 0),
     };
+  }
+
+  async getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null> {
+    const result = await this.query<{
+      cache_key: string;
+      src: string;
+      content_type: string;
+      model: string;
+      created_at: Date | string;
+    }>(`SELECT * FROM ${HEROES} WHERE cache_key = $1`, [cacheKey]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      cacheKey: row.cache_key,
+      src: row.src,
+      contentType: row.content_type,
+      model: row.model,
+      createdAt: iso(row.created_at) as string,
+    };
+  }
+
+  async saveVehicleHero(hero: VehicleHeroRecord): Promise<void> {
+    await this.query(
+      `INSERT INTO ${HEROES} (cache_key, src, content_type, model, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (cache_key) DO NOTHING`,
+      [hero.cacheKey, hero.src, hero.contentType, hero.model, hero.createdAt],
+    );
   }
 
   async ping(): Promise<{ ok: boolean; detail: string }> {

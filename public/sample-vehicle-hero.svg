@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 600" role="img" aria-label="Cartoon illustration of a sedan — not a photo of this VIN">
+  <rect width="800" height="600" fill="#e8eef6"/>
+  <ellipse cx="400" cy="470" rx="260" ry="28" fill="#c5d0de"/>
+  <path d="M150 390c20-70 70-120 160-140h180c90 8 150 55 180 140" fill="#f4f7fb" stroke="#1e293b" stroke-width="8" stroke-linejoin="round"/>
+  <path d="M130 390h540c18 0 30 14 30 30v20c0 12-8 22-22 22H130c-16 0-26-10-26-24v-16c0-18 10-32 26-32z" fill="#f8fafc" stroke="#1e293b" stroke-width="8"/>
+  <path d="M250 250h130v100H230c8-40 12-70 20-100z" fill="#b8d4ea" stroke="#1e293b" stroke-width="6"/>
+  <path d="M400 250h150c20 20 32 55 42 100H400V250z" fill="#b8d4ea" stroke="#1e293b" stroke-width="6"/>
+  <circle cx="240" cy="440" r="42" fill="#1e293b"/>
+  <circle cx="240" cy="440" r="22" fill="#94a3b8"/>
+  <circle cx="560" cy="440" r="42" fill="#1e293b"/>
+  <circle cx="560" cy="440" r="22" fill="#94a3b8"/>
+  <rect x="155" y="368" width="36" height="16" rx="4" fill="#fbbf24" stroke="#1e293b" stroke-width="4"/>
+  <rect x="610" y="368" width="28" height="14" rx="3" fill="#f87171" stroke="#1e293b" stroke-width="4"/>
+  <path d="M380 250v100" stroke="#1e293b" stroke-width="6"/>
+</svg>

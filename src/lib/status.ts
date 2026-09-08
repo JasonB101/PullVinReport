@@ -1,10 +1,12 @@
 import {
   anthropic,
   emailConfig,
+  fal,
   formatPrice,
   isAdminConfigured,
   isAnthropicConfigured,
   isEmailConfigured,
+  isFalConfigured,
   isStripeConfigured,
   isVinAuditConfigured,
   missingVinAuditKeys,
@@ -132,6 +134,16 @@ export async function buildStatusReport(
       detail: isAnthropicConfigured()
         ? `Key present — briefs are written by ${anthropic.model} and cached on the order, so a report costs one call however often it is read. Nothing here proves the key works; the next paid report does.`
         : "ANTHROPIC_API_KEY not set — reports are delivered in full without the written brief, and no other behaviour changes.",
+    },
+    {
+      key: "hero",
+      label: "Illustrated vehicle hero",
+      required: false,
+      verification: "config-only",
+      state: isFalConfigured() ? "ready" : "optional",
+      detail: isFalConfigured()
+        ? `FAL_KEY present — cartoons are drawn by ${fal.model} and cached by year/make/model/trim/color, so a report costs one call. Nothing here proves the key works; the next paid report does.`
+        : "FAL_KEY not set — reports are delivered in full without an illustrated hero, and no other behaviour changes.",
     },
     {
       key: "admin",

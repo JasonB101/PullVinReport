@@ -1,5 +1,6 @@
 import { AiBrief } from "@/components/ai-brief";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
+import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -24,6 +25,7 @@ import {
   sectionsWithRecords,
   vehicleTitle,
 } from "@/lib/report";
+import { heroAlt, heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 function formatDateTime(iso: string): string {
@@ -551,14 +553,24 @@ export function ReportView({
   report,
   brief = null,
   briefToken,
+  heroSrc = null,
+  heroToken,
 }: {
   report: VehicleReport;
   /** A brief already written for this report, if there is one. */
   brief?: VehicleBrief | null;
   /** Access token, given only when a missing brief may be requested. */
   briefToken?: string;
+  /** Cached illustration for this year/make/model/trim/color. */
+  heroSrc?: string | null;
+  /** Access token, given only when a missing hero may be requested. */
+  heroToken?: string;
 }) {
   const chips = reportChips(report);
+  const facts = heroFacts(report);
+  const illustrationAlt = facts
+    ? heroAlt(facts)
+    : "Cartoon illustration of this vehicle — not a photo of this VIN";
   const flags = report.checks.filter((check) => check.status === "found");
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
@@ -570,6 +582,12 @@ export function ReportView({
       {report.isSample && <SampleBanner />}
 
       <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
+        <VehicleHero
+          src={heroSrc}
+          token={heroToken}
+          sample={report.isSample}
+          alt={illustrationAlt}
+        />
         <div className="hero-aurora bg-ink-950 px-5 py-7 sm:px-7 sm:py-8">
           <div className="flex flex-wrap items-center gap-2">
             <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-200 ring-1 ring-inset ring-white/15">

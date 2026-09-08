@@ -131,6 +131,41 @@ export function isAnthropicConfigured(): boolean {
   return Boolean(anthropic.apiKey);
 }
 
+/**
+ * Illustrated vehicle hero on the paid report.
+ *
+ * Optional: with no key the report is unchanged and no image is requested.
+ * Recraft V3 (`fal-ai/recraft/v3/text-to-image`) is the default because it
+ * has a `digital_illustration` style lock — Recraft V4 on fal has no style
+ * preset and leans photoreal. `FAL_IMAGE_MODEL` overrides it. Photoreal
+ * Recraft styles are ignored so an env typo cannot turn the hero into a
+ * photograph of “this VIN”.
+ */
+export const fal = {
+  get apiKey(): string | undefined {
+    return env("FAL_KEY");
+  },
+  get model(): string {
+    return env("FAL_IMAGE_MODEL") ?? "fal-ai/recraft/v3/text-to-image";
+  },
+  get style(): string {
+    const requested = env("FAL_IMAGE_STYLE") ?? "digital_illustration";
+    return requested.toLowerCase().includes("realistic")
+      ? "digital_illustration"
+      : requested;
+  },
+  get baseUrl(): string {
+    return env("FAL_API_BASE") ?? "https://fal.run";
+  },
+  get timeoutMs(): number {
+    return intEnv("FAL_TIMEOUT_MS", 45_000);
+  },
+};
+
+export function isFalConfigured(): boolean {
+  return Boolean(fal.apiKey);
+}
+
 export const stripeConfig = {
   get secretKey(): string | undefined {
     return env("STRIPE_SECRET_KEY");

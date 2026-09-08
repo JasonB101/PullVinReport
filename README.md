@@ -67,6 +67,10 @@ version:
 | `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
+| `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
+| `FAL_IMAGE_MODEL` | No (default `fal-ai/recraft/v3/text-to-image`) | fal.ai model id. Recraft V3's digital-illustration style is the default so the picture cannot read as a photo of this VIN. Recraft V4 on fal has no style lock. |
+| `FAL_IMAGE_STYLE` | No (default `digital_illustration`) | Recraft style preset. Do not set `realistic_image`. |
+| `FAL_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for an illustration. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
@@ -175,6 +179,32 @@ What keeps it honest:
   the brief existed. The records are never made to wait on it.
 - The sample's brief is written by hand, so browsing `/sample` spends nothing.
 
+## Illustrated vehicle hero
+
+With `FAL_KEY` set, a paid report draws a **cartoon** of the year, make and
+model (plus a richer listing trim and exterior colour when the records have
+them) and places it on the vehicle card with a permanent badge:
+**Illustration · not this VIN**. It is never a photograph of that VIN.
+
+- Generated **inside the product** on `POST /api/vehicle-hero` after the
+  records are already on screen — the same lazy pattern as the brief.
+  Fulfillment does not wait on it.
+- Cached once per `year|make|model|trim|color|body|engine` on the store
+  (`pullvinreport_vehicle_heroes` in Postgres, `.data/vehicle-heroes.json`
+  on the file store). Another order for the same example reuses the drawing.
+- Default model is Recraft V3 (`fal-ai/recraft/v3/text-to-image`) with
+  `digital_illustration` so the style cannot drift photoreal. Recraft V4 on
+  fal has no style preset and leans photoreal, so it is not the default.
+  Override with `FAL_IMAGE_MODEL` (for example `fal-ai/flux/schnell`) if you
+  want a cheaper cartoon and are willing to lean on the prompt alone.
+- The sample report uses a static SVG at `/sample-vehicle-hero.svg` and never
+  calls fal.
+- Soft-fail: no key, a timeout or a rejection leaves the report unchanged
+  aside from no hero.
+
+On ZOO `:3004`, hard-refresh a paid report after Baloo pulls. With `FAL_KEY`
+set you should see the labelled cartoon; without it the card looks as it did.
+
 ## What customers see when something breaks
 
 The second rule: **buyers never read our internals.** No environment variable
@@ -233,6 +263,8 @@ you" on its own.
 | `/order/success` | Post-Stripe landing; finalises fulfillment and redirects. |
 | `/status` | Human-readable provider readiness, each check labelled *Checked live* or *Config only*. |
 | `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. Each check carries a `verification` field. |
+| `/api/brief` | Writes or returns the cached buyer brief for one order. |
+| `/api/vehicle-hero` | Draws or returns the cached cartoon hero for one order. |
 | `/api/checkout` | Creates the order and the Stripe Checkout Session. |
 | `/api/stripe/webhook` | Signature-verified fulfillment webhook. |
 | `/admin`, `/admin/login` | Password-protected order console. |
@@ -242,8 +274,9 @@ you" on its own.
 
 `getStore()` picks a backend at runtime:
 
-- **`DATABASE_URL` set** → PostgreSQL. The `pullvinreport_orders` table and its
-  index are created on first use; no migration step is needed.
+- **`DATABASE_URL` set** → PostgreSQL. The `pullvinreport_orders` table, its
+  index and `pullvinreport_vehicle_heroes` are created on first use; no
+  migration step is needed.
 - **`DATABASE_URL` unset** → a JSON file under `DATA_DIR` (default `.data/`).
   Writes are serialised and atomic. This is for local development and demos —
   serverless filesystems are ephemeral, so set `DATABASE_URL` in production.

@@ -6,7 +6,7 @@ import { PrintButton } from "@/components/print-button";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { emailConfig, formatPrice } from "@/lib/config";
+import { emailConfig, formatPrice, isFalConfigured } from "@/lib/config";
 import {
   classifyFailure,
   customerFailureMessage,
@@ -15,6 +15,7 @@ import {
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
+import { heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
@@ -134,6 +135,11 @@ export default async function ReportPage({
     );
   }
 
+  const report = withCurrentLayout(order.report);
+  const heroKey = heroFacts(report)?.cacheKey;
+  const hero =
+    isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
+
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
       <SiteHeader cta="another" />
@@ -176,9 +182,11 @@ export default async function ReportPage({
           {/* Laid out from the payload stored with the order, so a report bought
               before a layout change still reads the way today's does. */}
           <ReportView
-            report={withCurrentLayout(order.report)}
+            report={report}
             brief={order.aiBrief}
             briefToken={token}
+            heroSrc={hero?.src}
+            heroToken={isFalConfigured() ? token : undefined}
           />
         </div>
       </main>

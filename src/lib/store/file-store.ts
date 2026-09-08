@@ -8,6 +8,7 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  VehicleHeroRecord,
 } from "@/lib/store/types";
 
 /**
@@ -21,6 +22,7 @@ export class FileOrderStore implements OrderStore {
 
   private readonly dir: string;
   private readonly file: string;
+  private readonly heroesFile: string;
   /** Serializes read-modify-write cycles so concurrent updates don't clobber. */
   private queue: Promise<unknown> = Promise.resolve();
 
@@ -30,6 +32,7 @@ export class FileOrderStore implements OrderStore {
     // serverless bundle.
     this.dir = path.resolve(/* turbopackIgnore: true */ process.cwd(), dir);
     this.file = path.join(this.dir, "orders.json");
+    this.heroesFile = path.join(this.dir, "vehicle-heroes.json");
   }
 
   get description(): string {
@@ -170,6 +173,33 @@ export class FileOrderStore implements OrderStore {
         .filter((o) => Boolean(o.refundedAt))
         .reduce((sum, o) => sum + o.amountCents, 0),
     };
+  }
+
+  private async readHeroes(): Promise<Record<string, VehicleHeroRecord>> {
+    try {
+      const parsed = JSON.parse(await readFile(this.heroesFile, "utf8"));
+      return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, VehicleHeroRecord>)
+        : {};
+    } catch {
+      return {};
+    }
+  }
+
+  async getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null> {
+    const heroes = await this.readHeroes();
+    return heroes[cacheKey] ?? null;
+  }
+
+  async saveVehicleHero(hero: VehicleHeroRecord): Promise<void> {
+    await this.run(async () => {
+      const heroes = await this.readHeroes();
+      heroes[hero.cacheKey] = hero;
+      await mkdir(this.dir, { recursive: true });
+      const tmp = `${this.heroesFile}.${randomBytes(4).toString("hex")}.tmp`;
+      await writeFile(tmp, JSON.stringify(heroes), "utf8");
+      await rename(tmp, this.heroesFile);
+    });
   }
 
   async ping(): Promise<{ ok: boolean; detail: string }> {

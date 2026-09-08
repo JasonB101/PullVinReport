@@ -63,6 +63,15 @@ export type OrderPatch = Partial<
   >
 >;
 
+/** Illustrated vehicle hero, cached by year/make/model/trim/color. */
+export type VehicleHeroRecord = {
+  cacheKey: string;
+  src: string;
+  contentType: string;
+  model: string;
+  createdAt: string;
+};
+
 export type OrderStats = {
   total: number;
   pending: number;
@@ -87,4 +96,7 @@ export interface OrderStore {
   list(limit?: number): Promise<Order[]>;
   stats(): Promise<OrderStats>;
   ping(): Promise<{ ok: boolean; detail: string }>;
-}
+  /** Illustrated hero, keyed by year/make/model/trim/color — not by VIN. */
+  getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null>;
+  saveVehicleHero(hero: VehicleHeroRecord): Promise<void>;
+};
