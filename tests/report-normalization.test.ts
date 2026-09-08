@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { sectionTable } from "@/lib/report";
+import { sectionListings, sectionTable } from "@/lib/report";
 import type { ReportSection } from "@/lib/report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -168,6 +168,86 @@ describe("provider report normalization", () => {
         ["2019-03-08", 78_930, "mi"],
         ["2024-09-27", 121_477, "mi"],
       ],
+    );
+  });
+
+  it("reads a wide sales feed as cards, not as a table with a tail", () => {
+    const withSales = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          {
+            vin: VIN,
+            date: "2024-08-14",
+            listing_type: "Dealer classified",
+            listingprice: "11450",
+            meter: "120880",
+            meterunit: "M",
+            sellertype: "Franchise dealer",
+            city: "Nashville",
+            state: "TN",
+            stock_number: "T24-88213",
+            exterior_color: "Super White",
+            interior_color: "Ash cloth",
+            days_listed: "34",
+            description: "One-owner trade-in, service records available.",
+          },
+        ],
+      },
+      VIN,
+    );
+
+    const sales = find(withSales.sections, "sales");
+    assert.equal(sales.layout, "listings");
+    // A table here is what made the section unreadable: six columns and then a
+    // paragraph of leftovers under every row.
+    assert.equal(sectionTable(sales), null);
+
+    const [card] = sectionListings(sales);
+    assert.equal(card.headline, "Dealer classified");
+    assert.equal(card.date, "Aug 14, 2024");
+    // The feed sends `11450`. It leads the card now, so it cannot read as one.
+    assert.equal(card.price, "$11,450");
+    assert.deepEqual(card.summary, [
+      { label: "Mileage", value: "120,880 mi" },
+      { label: "Location", value: "Nashville, TN" },
+      { label: "Seller type", value: "Franchise dealer" },
+    ]);
+    assert.deepEqual(
+      card.detail.map((field) => field.label),
+      [
+        "Stock number",
+        "Exterior color",
+        "Interior color",
+        "Days listed",
+        "Description",
+      ],
+    );
+    // The VIN and the unit code are stripped before any of this runs.
+    assert.equal(
+      [...card.summary, ...card.detail].some(
+        (field) => field.label === "VIN" || /unit/i.test(field.label),
+      ),
+      false,
+    );
+  });
+
+  it("leaves a price the feed already formatted exactly as it arrived", () => {
+    const report = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          { date: "2024-08-14", saleprice: "$11,450" },
+          { date: "2019-02-22", saleprice: "9995 USD" },
+          { date: "2018-01-02", saleprice: "0" },
+        ],
+      },
+      VIN,
+    );
+    const cards = sectionListings(find(report.sections, "sales"));
+    assert.deepEqual(
+      cards.map((card) => card.price),
+      ["$11,450", "9995 USD", ""],
     );
   });
 

@@ -3,6 +3,7 @@ import type { VehicleBrief } from "@/lib/ai-brief";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
+  Listing,
   ReportCheck,
   ReportChip,
   ReportSection,
@@ -16,6 +17,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionListings,
   sectionTable,
   sectionsWithRecords,
   vehicleTitle,
@@ -198,8 +200,69 @@ function RecordTable({ table }: { table: SectionTable }) {
   );
 }
 
+/**
+ * One listing, with its long tail folded away.
+ *
+ * A sales feed sends a dealer, a stock number, two colours, a lot number and a
+ * paragraph of ad copy behind the four facts a buyer is actually comparing
+ * between listings. Shown all at once it buries the price. Nothing is dropped —
+ * `<details>` keeps it a keystroke away, works with no JavaScript, and the
+ * print stylesheet opens every card so a printed copy is still complete.
+ */
+function ListingCard({ listing }: { listing: Listing }) {
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] open:shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
+      <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 p-4 [&::-webkit-details-marker]:hidden">
+        <span className="text-sm font-semibold text-slate-900">
+          {listing.headline}
+        </span>
+        {listing.date && (
+          <span className="text-xs text-slate-500">{listing.date}</span>
+        )}
+        {listing.price && (
+          <span className="ml-auto text-base font-semibold tabular-nums text-slate-900">
+            {listing.price}
+          </span>
+        )}
+
+        <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
+          {listing.summary.map((field, index) => (
+            <span key={`${field.label}-${index}`}>
+              {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
+              <span className="text-slate-400">{field.label}: </span>
+              <span className="text-slate-700">{field.value}</span>
+            </span>
+          ))}
+          {listing.detail.length > 0 && (
+            <span className="when-closed ml-auto font-medium text-brand-600">
+              {listing.detail.length} more{" "}
+              {listing.detail.length === 1 ? "detail" : "details"}
+            </span>
+          )}
+        </span>
+      </summary>
+
+      {listing.detail.length > 0 && (
+        <dl className="grid gap-x-6 gap-y-3 border-t border-slate-100 px-4 py-4 sm:grid-cols-2">
+          {listing.detail.map((field, index) => (
+            <div key={`${field.label}-${index}`} className="min-w-0">
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {field.label}
+              </dt>
+              <dd className="mt-0.5 break-words text-sm text-slate-800">
+                {field.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
+    </details>
+  );
+}
+
 function SectionBlock({ section }: { section: ReportSection }) {
-  const table = sectionTable(section);
+  const listings = section.layout === "listings" ? sectionListings(section) : null;
+  const table = listings ? null : sectionTable(section);
   const current = currentEvent(section);
 
   return (
@@ -231,7 +294,13 @@ function SectionBlock({ section }: { section: ReportSection }) {
         <SharedFields fields={section.shared} count={section.records.length} />
       )}
 
-      {table ? (
+      {listings ? (
+        <div className="mt-4 space-y-3">
+          {listings.map((listing, index) => (
+            <ListingCard key={index} listing={listing} />
+          ))}
+        </div>
+      ) : table ? (
         <RecordTable table={table} />
       ) : (
         <div className="mt-4 space-y-3">

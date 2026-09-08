@@ -141,6 +141,30 @@ function yesNo(value: unknown): string {
   return stringify(value);
 }
 
+const PRICE_KEYS = new Set([
+  "price",
+  "listingprice",
+  "saleprice",
+  "soldprice",
+  "askingprice",
+]);
+
+/**
+ * Renders a price the feed sent as a bare number.
+ *
+ * These records are US titles and US listings, so the currency is not in
+ * doubt. Anything that already carries a symbol, a currency code or any other
+ * punctuation the feed chose is left exactly as it arrived — reformatting a
+ * value someone else already formatted is how `$$11,450` happens.
+ */
+function formatMoney(value: unknown): string {
+  const text = stringify(value);
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return text;
+  const amount = Number.parseFloat(text);
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  return `$${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
 /** Turns a raw mileage plus its unit code into one readable value. */
 function formatOdometer(value: unknown, unit: unknown): string {
   const numeric = Number.parseInt(stringify(value).replace(/[^0-9]/g, ""), 10);
@@ -170,6 +194,11 @@ function toFields(record: Record<string, unknown>): Field[] {
       // One column for the reading, whichever of meter/odometer/mileage the
       // feed used, with its unit already folded in.
       addField(fields, "Mileage", formatOdometer(value, unit));
+      continue;
+    }
+
+    if (PRICE_KEYS.has(lower)) {
+      addField(fields, "Price", formatMoney(value));
       continue;
     }
 
@@ -274,6 +303,7 @@ type SectionSpec = {
   description: string;
   emptyLabel: string;
   columns?: string[];
+  layout?: ReportSection["layout"];
 };
 
 function buildSection(spec: SectionSpec, value: unknown): ReportSection {
@@ -517,7 +547,10 @@ export function normalizeVinAuditReport(
         description:
           "Prior retail and auction listings, including asking prices where available.",
         emptyLabel: "No prior sales listings came back.",
-        columns: ["Date", "Price", "Mileage", "Seller type", "City", "State"],
+        // A listing carries far more than a table can hold: dealer, stock
+        // number, colours, options, the ad copy itself. One card each, with
+        // the long tail folded away.
+        layout: "listings",
       },
       sales,
     ),

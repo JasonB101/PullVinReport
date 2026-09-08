@@ -44,6 +44,16 @@ export type ReportSection = {
   shared?: Field[];
   /** Short label for the jump nav. Falls back to the section title. */
   navLabel?: string;
+  /**
+   * How the records want to be read.
+   *
+   * `records` is the default: events that share a shape, laid out against
+   * columns. `listings` is for records with a long tail — a sales listing
+   * carries a dealer, a stock number, colours, options and a description
+   * behind the four facts anyone actually scans — where a table row plus a
+   * paragraph of leftovers is worse than no table at all.
+   */
+  layout?: "records" | "listings";
 };
 
 export type OdometerReading = {
@@ -166,6 +176,102 @@ export function sectionTable(section: ReportSection): SectionTable | null {
   }));
 
   return { columns, rows };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Listings                                                                     */
+/* -------------------------------------------------------------------------- */
+
+export type Listing = {
+  /** What kind of listing this was, in the feed's own words. */
+  headline: string;
+  /** When it was listed or sold. Empty when the feed gave no date. */
+  date: string;
+  /** Asking or sale price. Empty when the feed gave none. */
+  price: string;
+  /** The two or three facts worth reading before deciding to open it. */
+  summary: Field[];
+  /** Everything else the feed sent, shown only when it is asked for. */
+  detail: Field[];
+};
+
+/** Where a listing's one-line headline comes from, best first. */
+const HEADLINE_LABELS = [
+  "Listing type",
+  "Sale type",
+  "Type",
+  "Channel",
+  "Source",
+  "Seller type",
+];
+
+/** The facts that stay on the front of the card, in the order they read. */
+const SUMMARY_LABELS = ["Mileage", "Location", "Seller type", "Seller"];
+
+const DATE_LABELS = ["Date", "Listing date", "Sale date"];
+const PRICE_LABELS = ["Price", "Sale price", "Listing price"];
+
+/** How many facts fit on the front of a card before it is a table again. */
+const MAX_SUMMARY_FACTS = 3;
+
+function take(fields: Field[], labels: string[]): Field | undefined {
+  for (const label of labels) {
+    const index = fields.findIndex((field) => field.label === label);
+    if (index !== -1) return fields.splice(index, 1)[0];
+  }
+  return undefined;
+}
+
+/**
+ * Folds a city and a state into the one thing a reader wanted from them.
+ *
+ * Two columns holding `Nashville` and `TN` are one fact written twice as far
+ * apart as it needs to be.
+ */
+function foldLocation(fields: Field[]): void {
+  const city = take(fields, ["City"]);
+  const state = take(fields, ["State"]);
+  const parts = [city?.value, state?.value].filter(
+    (part): part is string => Boolean(part),
+  );
+  if (parts.length > 0) fields.push({ label: "Location", value: parts.join(", ") });
+}
+
+/**
+ * Turns a listing record into a card: a headline, the few facts worth scanning,
+ * and everything else behind them.
+ *
+ * A sales feed is the widest thing in a report — dealer name, stock number,
+ * colours, options, a paragraph of ad copy — and rendering all of it at once
+ * buries the four things a buyer is actually comparing between listings. None
+ * of it is dropped; it just stops competing with the price.
+ */
+export function sectionListings(section: ReportSection): Listing[] {
+  return section.records.map((record) => {
+    const fields = record.map((field) => ({ ...field }));
+    foldLocation(fields);
+
+    const date = take(fields, DATE_LABELS);
+    const price = take(fields, PRICE_LABELS);
+    const headline = take(fields, HEADLINE_LABELS);
+
+    const summary: Field[] = [];
+    for (const label of SUMMARY_LABELS) {
+      if (summary.length === MAX_SUMMARY_FACTS) break;
+      const field = take(fields, [label]);
+      if (field) summary.push(field);
+    }
+
+    return {
+      // Verbatim from the record when the feed said what kind of listing it
+      // was. "Listing" only when it did not — never a guess dressed as a fact.
+      headline: headline?.value ?? "Listing",
+      date: date?.value ?? "",
+      price: price?.value ?? "",
+      summary,
+      detail: fields,
+    };
+  });
 }
 
 /**

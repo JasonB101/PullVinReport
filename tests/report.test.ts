@@ -13,6 +13,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionListings,
   sectionTable,
   sectionsWithRecords,
 } from "../src/lib/report.ts";
@@ -216,6 +217,109 @@ describe("fields that never vary", () => {
       sectionTable(section({ columns: ["Date", "State"], records })),
       null,
     );
+  });
+});
+
+describe("listings", () => {
+  /** A listing with the long tail a real sales feed actually sends. */
+  const listing = section({
+    key: "sales",
+    layout: "listings",
+    records: [
+      [
+        { label: "Date", value: "Aug 14, 2024" },
+        { label: "Listing type", value: "Dealer classified" },
+        { label: "Price", value: "$11,450" },
+        { label: "Mileage", value: "120,880 mi" },
+        { label: "Seller type", value: "Franchise dealer" },
+        { label: "City", value: "Nashville" },
+        { label: "State", value: "TN" },
+        { label: "Stock number", value: "T24-88213" },
+        { label: "Exterior colour", value: "Super White" },
+        { label: "Description", value: "One-owner trade-in." },
+      ],
+    ],
+  });
+
+  it("leads with what kind of listing it was, in the feed's own words", () => {
+    const [card] = sectionListings(listing);
+    assert.equal(card.headline, "Dealer classified");
+    assert.equal(card.date, "Aug 14, 2024");
+    assert.equal(card.price, "$11,450");
+  });
+
+  it("puts only the facts being compared on the front of the card", () => {
+    const [card] = sectionListings(listing);
+    assert.deepEqual(card.summary, [
+      { label: "Mileage", value: "120,880 mi" },
+      { label: "Location", value: "Nashville, TN" },
+      { label: "Seller type", value: "Franchise dealer" },
+    ]);
+  });
+
+  it("keeps the long tail rather than dropping it", () => {
+    const [card] = sectionListings(listing);
+    assert.deepEqual(card.detail, [
+      { label: "Stock number", value: "T24-88213" },
+      { label: "Exterior colour", value: "Super White" },
+      { label: "Description", value: "One-owner trade-in." },
+    ]);
+  });
+
+  it("never shows the same fact twice", () => {
+    const [card] = sectionListings(listing);
+    const shown = [
+      card.headline,
+      card.date,
+      card.price,
+      ...card.summary.map((field) => field.value),
+      ...card.detail.map((field) => field.value),
+    ].filter((value) => value.length > 0);
+    assert.equal(new Set(shown).size, shown.length);
+    // City and state are one fact written twice as far apart as it needs to be.
+    assert.equal(
+      shown.some((value) => value === "Nashville" || value === "TN"),
+      false,
+    );
+  });
+
+  it("says Listing, not a guess, when the feed did not say what kind it was", () => {
+    const [card] = sectionListings(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [[{ label: "Date", value: "Aug 14, 2024" }]],
+      }),
+    );
+    assert.equal(card.headline, "Listing");
+    assert.equal(card.price, "");
+    assert.deepEqual(card.summary, []);
+    assert.deepEqual(card.detail, []);
+  });
+
+  it("falls back to the seller type when there is no listing type", () => {
+    const [card] = sectionListings(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [
+          [
+            { label: "Seller type", value: "Private party" },
+            { label: "Mileage", value: "78,120 mi" },
+          ],
+        ],
+      }),
+    );
+    assert.equal(card.headline, "Private party");
+    // Promoted to the headline, so it must not also sit in the summary.
+    assert.deepEqual(card.summary, [{ label: "Mileage", value: "78,120 mi" }]);
+  });
+
+  it("leaves the records themselves untouched, so a re-render is stable", () => {
+    const before = JSON.stringify(listing.records);
+    sectionListings(listing);
+    sectionListings(listing);
+    assert.equal(JSON.stringify(listing.records), before);
   });
 });
 

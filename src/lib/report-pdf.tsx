@@ -26,7 +26,13 @@ import {
 import type { VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
-import type { Field, ReportCheck, ReportSection, VehicleReport } from "@/lib/report";
+import type {
+  Field,
+  Listing,
+  ReportCheck,
+  ReportSection,
+  VehicleReport,
+} from "@/lib/report";
 import {
   currentEvent,
   formatEventDate,
@@ -34,6 +40,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionListings,
   sectionTable,
   sectionsWithRecords,
   vehicleTitle,
@@ -171,6 +178,17 @@ const styles = StyleSheet.create({
   },
   cardText: { color: MUTED },
 
+  listingHead: { flexDirection: "row", alignItems: "baseline", gap: 6 },
+  listingHeadline: { fontFamily: "Helvetica-Bold", fontSize: 10 },
+  listingDate: { color: MUTED, fontSize: 7.5 },
+  listingPrice: {
+    marginLeft: "auto",
+    fontFamily: "Helvetica-Bold",
+    fontSize: 10,
+  },
+  listingSummary: { marginTop: 3 },
+  listingDetail: { color: MUTED, fontSize: 7, marginTop: 4 },
+
   specGrid: { flexDirection: "row", flexWrap: "wrap" },
   spec: { width: "33.3%", paddingRight: 10, marginBottom: 8 },
   specLabel: { fontSize: 7, color: FAINT, textTransform: "uppercase", letterSpacing: 0.6 },
@@ -296,8 +314,41 @@ function fieldList(fields: Field[]): string {
 /** Record count below which a section is small enough to keep on one page. */
 const KEEP_TOGETHER = 3;
 
+/**
+ * One listing, laid out the way the web card reads when it is open.
+ *
+ * Paper has no disclosure triangle and this copy gets forwarded to people who
+ * cannot click anything, so the long tail is printed rather than promised. It
+ * keeps the card's hierarchy instead of its interaction: the headline and the
+ * price lead, the facts being compared come next, and the dealer, colours and
+ * ad copy sit underneath in small type where they stop competing.
+ */
+function ListingCard({ listing }: { listing: Listing }) {
+  return (
+    <View style={styles.card} wrap={false}>
+      <View style={styles.listingHead}>
+        <Text style={styles.listingHeadline}>{listing.headline}</Text>
+        {listing.date.length > 0 && (
+          <Text style={styles.listingDate}>{listing.date}</Text>
+        )}
+        {listing.price.length > 0 && (
+          <Text style={styles.listingPrice}>{listing.price}</Text>
+        )}
+      </View>
+      {listing.summary.length > 0 && (
+        <Text style={styles.listingSummary}>{fieldList(listing.summary)}</Text>
+      )}
+      {listing.detail.length > 0 && (
+        <Text style={styles.listingDetail}>{fieldList(listing.detail)}</Text>
+      )}
+    </View>
+  );
+}
+
 function Section({ section }: { section: ReportSection }) {
-  const table = sectionTable(section);
+  const listings =
+    section.layout === "listings" ? sectionListings(section) : null;
+  const table = listings ? null : sectionTable(section);
   const width = table ? `${(100 / table.columns.length).toFixed(3)}%` : "100%";
   const wraps = section.records.length > KEEP_TOGETHER;
   const current = currentEvent(section);
@@ -322,7 +373,13 @@ function Section({ section }: { section: ReportSection }) {
         )}
       </View>
 
-      {table ? (
+      {listings ? (
+        <View>
+          {listings.map((listing, index) => (
+            <ListingCard key={index} listing={listing} />
+          ))}
+        </View>
+      ) : table ? (
         <View style={styles.table}>
           {/* A table that spans a page break repeats its header there. */}
           <View style={styles.tableHead} fixed={wraps}>

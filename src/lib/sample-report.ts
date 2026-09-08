@@ -248,23 +248,40 @@ export function buildSampleReport(): VehicleReport {
         description:
           "Prior retail and auction listings, including asking prices where available.",
         emptyLabel: "No prior sales listings came back.",
-        columns: ["Date", "Price", "Mileage", "Seller type", "City", "State"],
+        // Deliberately the widest records in the sample. A real listing feed
+        // carries this much and more, and the sample exists to prove the
+        // layout survives it rather than to flatter it.
+        layout: "listings",
         records: [
           [
             { label: "Date", value: "Aug 14, 2024" },
+            { label: "Listing type", value: "Dealer classified" },
             { label: "Price", value: "$11,450" },
             { label: "Mileage", value: "120,880 mi" },
             { label: "Seller type", value: "Franchise dealer" },
             { label: "City", value: "Nashville" },
             { label: "State", value: "TN" },
+            { label: "Days listed", value: "34" },
+            { label: "Exterior colour", value: "Super White" },
+            { label: "Interior colour", value: "Ash cloth" },
+            { label: "Stock number", value: "T24-88213" },
+            {
+              label: "Description",
+              value:
+                "One-owner trade-in, service records available, new tyres fitted at 118,000 miles. Sold as-is with the balance of the powertrain warranty.",
+            },
           ],
           [
             { label: "Date", value: "Feb 22, 2019" },
+            { label: "Listing type", value: "Auction" },
             { label: "Price", value: "$9,995" },
             { label: "Mileage", value: "78,120 mi" },
             { label: "Seller type", value: "Independent dealer" },
             { label: "City", value: "Bowling Green" },
             { label: "State", value: "KY" },
+            { label: "Lot number", value: "4417" },
+            { label: "Exterior colour", value: "Super White" },
+            { label: "Announcements", value: "Runs and drives" },
           ],
         ],
       },

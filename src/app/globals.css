@@ -86,4 +86,22 @@
   .no-print {
     display: none !important;
   }
+
+  /*
+   * Paper has no disclosure triangle. A listing's folded-away detail is real
+   * data the buyer paid for, so a printed copy shows all of it whether or not
+   * the reader happened to open the card first.
+   */
+  details > *:not(summary) {
+    display: block !important;
+  }
+
+  .when-closed {
+    display: none !important;
+  }
+}
+
+/* A hint about what is behind a card has no business on an open one. */
+details[open] .when-closed {
+  display: none;
 }
