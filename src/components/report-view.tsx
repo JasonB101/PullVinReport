@@ -24,6 +24,9 @@ import {
 } from "@/lib/report";
 import { prettyVin } from "@/lib/vin";
 
+/** How much of a shapeless record is worth showing before anyone asks. */
+const LEAD_FIELDS = 4;
+
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
   if (Number.isNaN(date.getTime())) return iso;
@@ -88,22 +91,64 @@ function FlagTile({ check }: { check: ReportCheck }) {
   );
 }
 
-function RecordCard({ fields }: { fields: Field[] }) {
+function FieldGrid({ fields }: { fields: Field[] }) {
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
-        {fields.map((field, index) => (
-          <div key={`${field.label}-${index}`} className="min-w-0">
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {field.label}
-            </dt>
-            <dd className="mt-0.5 break-words text-sm text-slate-800">
-              {field.value}
-            </dd>
-          </div>
-        ))}
-      </dl>
-    </div>
+    <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+      {fields.map((field, index) => (
+        <div key={`${field.label}-${index}`} className="min-w-0">
+          <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+            {field.label}
+          </dt>
+          <dd className="mt-0.5 break-words text-sm text-slate-800">
+            {field.value}
+          </dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/** The link that says how much is folded away. Absent once the card is open. */
+function MoreHint({ count }: { count: number }) {
+  return (
+    <span className="when-closed font-medium text-brand-600">
+      {count} more {count === 1 ? "detail" : "details"}
+    </span>
+  );
+}
+
+/**
+ * A record with no shared shape to tabulate — a recall campaign, a lien whose
+ * feed answered in fields nothing else uses.
+ *
+ * Compact by default. Every field at once is the dump that made these sections
+ * unreadable; the first few are what a reader scans, and the rest are a
+ * keystroke away rather than gone.
+ */
+function RecordCard({ fields }: { fields: Field[] }) {
+  const summary = fields.slice(0, LEAD_FIELDS);
+  const detail = fields.slice(LEAD_FIELDS);
+
+  if (detail.length === 0) {
+    return (
+      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        <FieldGrid fields={summary} />
+      </div>
+    );
+  }
+
+  return (
+    <details className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
+        <FieldGrid fields={summary} />
+        <span className="mt-3 flex text-xs">
+          <MoreHint count={detail.length} />
+        </span>
+      </summary>
+      <div className="border-t border-slate-100 px-4 py-4">
+        <FieldGrid fields={detail} />
+      </div>
+    </details>
   );
 }
 
@@ -179,17 +224,25 @@ function RecordTable({ table }: { table: SectionTable }) {
             </tr>
             {row.extras.length > 0 && (
               <tr>
-                <td
-                  colSpan={table.columns.length}
-                  className="px-4 pb-3 text-xs leading-relaxed text-slate-500"
-                >
-                  {row.extras.map((field, extraIndex) => (
-                    <span key={`${field.label}-${extraIndex}`}>
-                      {extraIndex > 0 && <span className="px-1.5 text-slate-300">·</span>}
-                      <span className="text-slate-400">{field.label}: </span>
-                      {field.value}
-                    </span>
-                  ))}
+                <td colSpan={table.columns.length} className="px-4 pb-3">
+                  {/* A title number and a claim code under every row is the
+                      noise that buried the date and the mileage above them.
+                      They stay in the report, one keystroke down. */}
+                  <details>
+                    <summary className="cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden">
+                      <MoreHint count={row.extras.length} />
+                    </summary>
+                    <dl className="mt-2 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+                      {row.extras.map((field, extraIndex) => (
+                        <div key={`${field.label}-${extraIndex}`} className="min-w-0">
+                          <dt className="inline text-slate-400">{field.label}: </dt>
+                          <dd className="inline break-words text-slate-600">
+                            {field.value}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  </details>
                 </td>
               </tr>
             )}
@@ -234,27 +287,17 @@ function ListingCard({ listing }: { listing: Listing }) {
             </span>
           ))}
           {listing.detail.length > 0 && (
-            <span className="when-closed ml-auto font-medium text-brand-600">
-              {listing.detail.length} more{" "}
-              {listing.detail.length === 1 ? "detail" : "details"}
+            <span className="ml-auto">
+              <MoreHint count={listing.detail.length} />
             </span>
           )}
         </span>
       </summary>
 
       {listing.detail.length > 0 && (
-        <dl className="grid gap-x-6 gap-y-3 border-t border-slate-100 px-4 py-4 sm:grid-cols-2">
-          {listing.detail.map((field, index) => (
-            <div key={`${field.label}-${index}`} className="min-w-0">
-              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                {field.label}
-              </dt>
-              <dd className="mt-0.5 break-words text-sm text-slate-800">
-                {field.value}
-              </dd>
-            </div>
-          ))}
-        </dl>
+        <div className="border-t border-slate-100 px-4 py-4">
+          <FieldGrid fields={listing.detail} />
+        </div>
       )}
     </details>
   );

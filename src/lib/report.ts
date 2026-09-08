@@ -148,31 +148,87 @@ export type SectionTable = {
   rows: TableRow[];
 };
 
-/** Below this a table reads worse than the labelled cards it replaces. */
+/** Below this a table reads worse than the cards it replaces. */
 const MIN_TABLE_COLUMNS = 2;
 
+/** Above this a column is a paragraph wearing a cell, and the row stops scanning. */
+const MAX_COLUMN_VALUE = 28;
+
+/** How many columns a derived table may reach before it is a dump again. */
+const MAX_DERIVED_COLUMNS = 4;
+
+function hasValue(section: ReportSection, label: string): boolean {
+  return section.records.some((record) =>
+    record.some((field) => field.label === label && field.value.length > 0),
+  );
+}
+
 /**
- * Lays a section out as a table when its records actually share structure.
+ * Columns worked out from the records themselves.
+ *
+ * Only used when a section's declared columns do not describe what actually
+ * came back — the NMVTIS junk and salvage feed, for instance, answers with a
+ * disposition and a report id that no hand-written column list anticipated.
+ * Left alone, that section fell through to a card per record listing every
+ * field it held, which is the field dump this whole pass exists to remove.
+ *
+ * A label qualifies only if every record carries it and no value is long
+ * enough to turn the row into prose. Order follows the records, so the table
+ * reads in the order the feed thought the fields belonged in.
+ */
+function derivedColumns(section: ReportSection): string[] {
+  const [first, ...rest] = section.records;
+  return first
+    .filter(
+      (candidate) =>
+        candidate.value.length > 0 &&
+        candidate.value.length <= MAX_COLUMN_VALUE &&
+        rest.every((record) =>
+          record.some(
+            (field) =>
+              field.label === candidate.label &&
+              field.value.length > 0 &&
+              field.value.length <= MAX_COLUMN_VALUE,
+          ),
+        ),
+    )
+    .map((field) => field.label)
+    .slice(0, MAX_DERIVED_COLUMNS);
+}
+
+/**
+ * Lays a section out as a table.
+ *
+ * The declared columns come first: they are the fields someone decided were
+ * worth scanning, in the order they read. When too few of them came back the
+ * records are asked what they hold instead, because a table of the wrong
+ * columns still beats a card per record with every field on it.
  *
  * Columns the provider never filled in are dropped rather than rendered as a
- * wall of dashes, and a section that ends up with almost nothing in common
- * falls back to cards by returning `null`.
+ * wall of dashes. Whatever is left over travels with its row as `extras` — the
+ * renderers put it behind a disclosure rather than under the row, so a title
+ * number and a claim code stop competing with the date and the mileage.
  */
 export function sectionTable(section: ReportSection): SectionTable | null {
-  if (!section.columns || section.records.length === 0) return null;
+  if (section.records.length === 0) return null;
+  // A section that asked for cards does not get tabulated by a renderer that
+  // forgot to check. Refusing here keeps that decision in one place.
+  if (section.layout === "listings") return null;
 
-  const columns = section.columns.filter((column) =>
-    section.records.some((record) =>
-      record.some((field) => field.label === column && field.value.length > 0),
-    ),
+  const declared = (section.columns ?? []).filter((column) =>
+    hasValue(section, column),
   );
+  const columns =
+    declared.length >= MIN_TABLE_COLUMNS ? declared : derivedColumns(section);
   if (columns.length < MIN_TABLE_COLUMNS) return null;
 
   const rows = section.records.map((record) => ({
     cells: columns.map(
       (column) => record.find((field) => field.label === column)?.value ?? "",
     ),
-    extras: record.filter((field) => !columns.includes(field.label)),
+    extras: record.filter(
+      (field) => !columns.includes(field.label) && field.value.length > 0,
+    ),
   }));
 
   return { columns, rows };

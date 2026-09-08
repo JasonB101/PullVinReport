@@ -82,6 +82,8 @@ const KEY_LABELS: Record<string, string> = {
   transaction: "Event",
   event: "Event",
   titlenumber: "Title number",
+  standardclaim: "Standard claim",
+  nmvtisid: "NMVTIS ID",
   vehicleuse: "Vehicle use",
   reportlink: "Provider report",
   nhtsa: "NHTSA",
@@ -165,6 +167,24 @@ function formatMoney(value: unknown): string {
   return `$${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
 }
 
+/** A run long enough that the capitals are the feed shouting, not an acronym. */
+const SHOUTED = /[A-Z]{4}/;
+
+/**
+ * Takes a record value out of all caps.
+ *
+ * NMVTIS answers in upper case — `SOLD`, `TO BE DETERMINED`, `INSURANCE
+ * COMPANY` — and a column of that reads as a database export rather than as a
+ * report someone paid for. Anything with a lower-case letter in it was already
+ * cased by whoever sent it and is left alone, as is anything too short to be
+ * more than an abbreviation or a state code.
+ */
+function unshout(value: string): string {
+  if (/[a-z]/.test(value) || !SHOUTED.test(value)) return value;
+  const lower = value.toLowerCase();
+  return lower.replace(/[a-z]/, (first) => first.toUpperCase());
+}
+
 /** Turns a raw mileage plus its unit code into one readable value. */
 function formatOdometer(value: unknown, unit: unknown): string {
   const numeric = Number.parseInt(stringify(value).replace(/[^0-9]/g, ""), 10);
@@ -209,7 +229,7 @@ function toFields(record: Record<string, unknown>): Field[] {
         ? yesNo(value)
         : isDateKey(lower)
           ? formatEventDate(stringify(value))
-          : stringify(value),
+          : unshout(stringify(value)),
     );
   }
 
