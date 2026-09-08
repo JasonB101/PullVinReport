@@ -1,7 +1,9 @@
 import { AiBrief } from "@/components/ai-brief";
+import { ReportHealthCard } from "@/components/report-health";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
+import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
@@ -123,13 +125,15 @@ function FindingsStrip({
   );
 }
 
-/** One summary surface: findings plus the written brief. */
+/** One summary surface: health, findings, and the written brief. */
 function WhatToKnow({
+  report,
   brief,
   briefToken,
   flags,
   clear,
 }: {
+  report: VehicleReport;
   brief?: VehicleBrief | null;
   briefToken?: string;
   flags: ReportCheck[];
@@ -147,6 +151,10 @@ function WhatToKnow({
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
           From the records below
         </span>
+      </div>
+
+      <div className="mt-4">
+        <ReportHealthCard health={reportHealth(report)} />
       </div>
 
       <div className="mt-4">
@@ -744,6 +752,7 @@ export function ReportView({
       <JumpNav report={report} />
 
       <WhatToKnow
+        report={report}
         brief={brief}
         briefToken={briefToken}
         flags={flags}

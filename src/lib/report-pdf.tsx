@@ -47,6 +47,7 @@ import {
   sectionsWithRecords,
   vehicleTitle,
 } from "@/lib/report";
+import { reportHealth } from "@/lib/report-health";
 import { normalizeVin, prettyVin } from "@/lib/vin";
 
 const INK = "#0f172a";
@@ -286,11 +287,39 @@ function Findings({
   );
 }
 
+function Health({ report }: { report: VehicleReport }) {
+  const health = reportHealth(report);
+  return (
+    <View style={{ marginBottom: 8 }}>
+      <Text style={styles.briefHeading}>
+        REPORT HEALTH  {health.score}/100  ·  {health.label.toUpperCase()}
+      </Text>
+      <Text style={styles.caveat}>{health.disclaimer}</Text>
+      {health.factors
+        .filter(
+          (factor) =>
+            factor.impact !== "helps" ||
+            factor.key === "salvage" ||
+            factor.key === "post-salvage",
+        )
+        .slice(0, 8)
+        .map((factor) => (
+          <Text key={factor.key} style={styles.bullet}>
+            • {factor.label} ({factor.impact}
+            {factor.delta !== 0 ? ` ${factor.delta}` : ""}): {factor.reason}
+          </Text>
+        ))}
+    </View>
+  );
+}
+
 function Brief({
+  report,
   brief,
   flags,
   clear,
 }: {
+  report: VehicleReport;
   brief: VehicleBrief | null;
   flags: ReportCheck[];
   clear: string[];
@@ -300,6 +329,7 @@ function Brief({
       <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>What to know</Text>
         <Text style={styles.sectionNote}>From the records in this report.</Text>
+        <Health report={report} />
         <Findings flags={flags} clear={clear} />
       </View>
 
@@ -566,7 +596,7 @@ export function ReportDocument({
           <Text>{report.headline}</Text>
         </View>
 
-        <Brief brief={brief} flags={flags} clear={clear} />
+        <Brief report={report} brief={brief} flags={flags} clear={clear} />
 
         {sections.map((section) => (
           <Section
