@@ -184,6 +184,7 @@ describe("provider report normalization", () => {
             meter: "120880",
             meterunit: "M",
             sellertype: "Franchise dealer",
+            sellername: "Music City Toyota",
             city: "Nashville",
             state: "TN",
             stock_number: "T24-88213",
@@ -211,11 +212,12 @@ describe("provider report normalization", () => {
     assert.deepEqual(card.summary, [
       { label: "Mileage", value: "120,880 mi" },
       { label: "Location", value: "Nashville, TN" },
-      { label: "Seller type", value: "Franchise dealer" },
+      { label: "Seller", value: "Music City Toyota" },
     ]);
     assert.deepEqual(
       card.detail.map((field) => field.label),
       [
+        "Seller type",
         "Stock number",
         "Exterior color",
         "Interior color",
@@ -229,6 +231,30 @@ describe("provider report normalization", () => {
         (field) => field.label === "VIN" || /unit/i.test(field.label),
       ),
       false,
+    );
+  });
+
+  it("maps seller_name and listing_price onto the card face", () => {
+    const report = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          {
+            date: "2024-08-14",
+            listing_price: "11450",
+            seller_name: "Blaise Alexander Subaru",
+            city: "Muncy",
+            state: "PA",
+          },
+        ],
+      },
+      VIN,
+    );
+    const [card] = sectionListings(find(report.sections, "sales"));
+    assert.equal(card.price, "$11,450");
+    assert.deepEqual(
+      card.summary.find((field) => field.label === "Seller"),
+      { label: "Seller", value: "Blaise Alexander Subaru" },
     );
   });
 

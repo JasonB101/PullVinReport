@@ -331,6 +331,32 @@ describe("listings", () => {
     assert.deepEqual(card.detail, []);
   });
 
+  it("surfaces a stored Seller name and Listing price as Seller and Price", () => {
+    const [card] = sectionListings(
+      section({
+        key: "sales",
+        layout: "listings",
+        records: [
+          [
+            { label: "Date", value: "Aug 14, 2024" },
+            { label: "Listing type", value: "Dealer classified" },
+            { label: "Listing price", value: "$11,450" },
+            { label: "Seller name", value: "Blaise Alexander Subaru" },
+            { label: "Seller type", value: "Franchise dealer" },
+            { label: "City", value: "Muncy" },
+            { label: "State", value: "PA" },
+          ],
+        ],
+      }),
+    );
+    assert.equal(card.price, "$11,450");
+    assert.deepEqual(card.summary, [
+      { label: "Location", value: "Muncy, PA" },
+      { label: "Seller", value: "Blaise Alexander Subaru" },
+      { label: "Seller type", value: "Franchise dealer" },
+    ]);
+  });
+
   it("falls back to the seller type when there is no listing type", () => {
     const [card] = sectionListings(
       section({
@@ -371,18 +397,20 @@ describe("listing groups", () => {
     return Object.entries(fields).map(([label, value]) => ({ label, value }));
   };
 
-  it("folds same-price listings from the same year into one parent", () => {
+  it("folds nearby snapshots at one dealer group into one chapter", () => {
     const groups = sectionListingGroups(
       section({
         key: "sales",
         layout: "listings",
         records: [
-          dealer(),
+          dealer({ Seller: "Music City Toyota" }),
           dealer({
             Date: "Aug 16, 2024",
-            Price: "$11,450.00",
+            Price: "$11,295",
             City: "Brentwood",
+            Seller: "Music City Honda",
             "Listing type": "Online marketplace",
+            Source: "Autotrader",
           }),
           dealer({ Date: "Feb 22, 2019", Price: "$9,995", City: "Bowling Green", State: "KY" }),
         ],
@@ -391,23 +419,23 @@ describe("listing groups", () => {
 
     assert.equal(groups.length, 2);
     assert.equal(groups[0].listings.length, 2);
-    assert.equal(groups[0].price, "$11,450.00");
-    assert.equal(groups[0].date, "Aug 16, 2024");
-    assert.equal(groups[0].location, "Brentwood, TN");
-    assert.equal(groups[0].headline, "Sale");
+    assert.equal(groups[0].price, "$11,295–$11,450");
+    assert.match(groups[0].date, /Aug 14–16, 2024|Aug 14, 2024 – Aug 16, 2024/);
+    assert.match(groups[0].identity, /Music City/);
+    assert.match(groups[0].location, /Nashville|Brentwood|Tennessee/);
     assert.equal(groups[1].listings.length, 1);
     assert.equal(groups[1].price, "$9,995");
   });
 
-  it("does not treat the same dollars years later as the same sale", () => {
+  it("does not treat the same dollars years later as the same chapter", () => {
     const groups = groupListings(
       sectionListings(
         section({
           key: "sales",
           layout: "listings",
           records: [
-            dealer({ Date: "Aug 14, 2024", Price: "$11,450" }),
-            dealer({ Date: "May 3, 2019", Price: "$11,450" }),
+            dealer({ Date: "Aug 14, 2024", Price: "$11,450", Seller: "Music City Toyota" }),
+            dealer({ Date: "May 3, 2019", Price: "$11,450", Seller: "Music City Toyota" }),
           ],
         }),
       ),
@@ -418,31 +446,88 @@ describe("listing groups", () => {
     assert.equal(groups[1].listings.length, 1);
   });
 
-  it("leaves a listing with no price as its own card", () => {
+  it("keeps unpriced snapshots in the chapter when time and place match", () => {
     const groups = sectionListingGroups(
       section({
         key: "sales",
         layout: "listings",
-        records: [dealer({ Price: "" }), dealer({ Price: "Call for price", City: "Memphis" })],
+        records: [
+          dealer({ Price: "", Seller: "Music City Toyota" }),
+          dealer({ Price: "Call for price", City: "Memphis", Seller: "Music City Toyota" }),
+        ],
       }),
     );
 
-    assert.equal(groups.length, 2);
-    assert.equal(groups[0].listings.length, 1);
-    assert.equal(groups[1].listings.length, 1);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].listings.length, 2);
   });
 
-  it("keeps a shared listing type as the parent headline", () => {
+  it("names the chapter for the dealer, not the listing type", () => {
     const [group] = sectionListingGroups(
       section({
         key: "sales",
         layout: "listings",
-        records: [dealer(), dealer({ Date: "Aug 18, 2024", City: "Franklin" })],
+        records: [
+          dealer({ Seller: "Music City Toyota" }),
+          dealer({ Date: "Aug 18, 2024", City: "Franklin", Seller: "Music City Honda" }),
+        ],
       }),
     );
 
-    assert.equal(group.headline, "Dealer classified");
+    assert.match(group.identity, /Music City/);
     assert.equal(group.listings.length, 2);
+  });
+
+  it("turns a 40-row sister-rooftop feed into a short chapter timeline", () => {
+    const row = (fields: Record<string, string>) =>
+      Object.entries({
+        "Listing type": "Dealer classified",
+        Mileage: "12 mi",
+        ...fields,
+      }).map(([label, value]) => ({ label, value }));
+
+    const records = [
+      row({ Date: "Jan 15, 2021", Price: "$36,300", Seller: "Alexander Subaru", City: "Muncy", State: "PA" }),
+      row({ Date: "Jan 16, 2021", Price: "$36,300", Seller: "Blaise Alexander Subaru", City: "Muncy", State: "PA" }),
+      row({ Date: "Jan 20, 2021", Price: "$35,990", Seller: "Aubrey Alexander Toyota", City: "Williamsport", State: "PA" }),
+      row({ Date: "Feb 3, 2021", Price: "$34,995", Seller: "Blaise Alexander Buick", City: "Muncy", State: "PA" }),
+      row({ Date: "Feb 18, 2021", Price: "$33,700", Seller: "Autotrader", City: "Muncy", State: "PA", "Listing type": "Online marketplace", Source: "Autotrader" }),
+      row({ Date: "Mar 1, 2021", Price: "$33,700", Seller: "Alexander Subaru", City: "Lewisburg", State: "PA" }),
+      row({ Date: "Nov 10, 2022", Price: "$33,995", Seller: "Blaise Alexander Subaru", City: "Muncy", State: "PA", Mileage: "8,410 mi" }),
+      row({ Date: "Dec 1, 2022", Price: "$33,800", Seller: "Alexander Subaru", City: "Muncy", State: "PA", Mileage: "8,410 mi" }),
+      row({ Date: "Jan 15, 2023", Price: "$34,000", Seller: "Blaise Alexander Subaru", City: "Lewisburg", State: "PA", Mileage: "9,020 mi" }),
+      row({ Date: "Feb 20, 2023", Price: "$30,900", Seller: "Bergstrom Subaru", City: "Appleton", State: "WI", Mileage: "11,200 mi" }),
+      row({ Date: "Feb 22, 2023", Price: "$30,900", Seller: "Express.Cars", City: "Appleton", State: "WI", Mileage: "11,200 mi", "Listing type": "Online marketplace" }),
+      row({ Date: "Mar 10, 2023", Price: "$30,500", Seller: "Bergstrom Subaru of Appleton", City: "Appleton", State: "WI", Mileage: "11,340 mi" }),
+      row({ Date: "Mar 28, 2023", Price: "$30,300", Seller: "Express.Cars", City: "Appleton", State: "WI", Mileage: "11,340 mi", Source: "Express.Cars" }),
+      row({ Date: "May 12, 2024", Price: "$27,995", Seller: "Gustman Subaru", City: "Appleton", State: "WI", Mileage: "18,640 mi" }),
+      row({ Date: "May 13, 2024", Price: "$27,995", Seller: "Cars.com", City: "Appleton", State: "WI", Mileage: "18,640 mi", Source: "Cars.com" }),
+    ];
+
+    const groups = sectionListingGroups(
+      section({ key: "sales", layout: "listings", records }),
+    );
+
+    assert.equal(groups.length, 4);
+    assert.match(groups[0].identity, /Gustman/);
+    assert.equal(groups[0].price, "$27,995");
+    assert.match(groups[1].identity, /Bergstrom/);
+    assert.doesNotMatch(groups[1].identity, /Blaise|Alexander|Express/i);
+    assert.equal(groups[1].price, "$30,300–$30,900");
+    assert.match(groups[2].identity, /Alexander/);
+    assert.match(groups[2].identity, /network/);
+    assert.match(groups[3].identity, /Alexander/);
+    assert.match(groups[3].identity, /network/);
+    assert.equal(groups[3].price, "$33,700–$36,300");
+    assert.match(groups[3].location, /Pennsylvania|Muncy|Lewisburg|Williamsport/);
+    assert.equal(
+      groups.reduce((sum, group) => sum + group.listings.length, 0),
+      records.length,
+    );
+    assert.doesNotMatch(
+      groups.map((group) => group.identity).join(" "),
+      /Blaise Alexander Subaru ·|selling at every/i,
+    );
   });
 });
 

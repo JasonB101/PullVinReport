@@ -321,37 +321,6 @@ function fieldList(fields: Field[]): string {
 /** Record count below which a section is small enough to keep on one page. */
 const KEEP_TOGETHER = 3;
 
-/**
- * One listing, laid out the way the web card reads when it is open.
- *
- * Paper has no disclosure triangle and this copy gets forwarded to people who
- * cannot click anything, so the long tail is printed rather than promised. It
- * keeps the card's hierarchy instead of its interaction: the headline and the
- * price lead, the facts being compared come next, and the dealer, colours and
- * ad copy sit underneath in small type where they stop competing.
- */
-function ListingCard({ listing }: { listing: Listing }) {
-  return (
-    <View style={styles.card} wrap={false}>
-      <View style={styles.listingHead}>
-        <Text style={styles.listingHeadline}>{listing.headline}</Text>
-        {listing.date.length > 0 && (
-          <Text style={styles.listingDate}>{listing.date}</Text>
-        )}
-        {listing.price.length > 0 && (
-          <Text style={styles.listingPrice}>{listing.price}</Text>
-        )}
-      </View>
-      {listing.summary.length > 0 && (
-        <Text style={styles.listingSummary}>{fieldList(listing.summary)}</Text>
-      )}
-      {listing.detail.length > 0 && (
-        <Text style={styles.listingDetail}>{fieldList(listing.detail)}</Text>
-      )}
-    </View>
-  );
-}
-
 function ListingFields({ listing }: { listing: Listing }) {
   return (
     <View>
@@ -372,18 +341,21 @@ function ListingFields({ listing }: { listing: Listing }) {
 }
 
 /**
- * Paper has no disclosure, so a grouped sale prints once with every related
- * listing underneath rather than repeating the same total down the page.
+ * Paper has no disclosure, so a listing chapter prints once with every
+ * snapshot underneath rather than repeating sister rooftops as sales.
  */
 function ListingGroupCard({ group }: { group: ListingGroup }) {
-  if (group.listings.length === 1) {
-    return <ListingCard listing={group.listings[0]} />;
-  }
+  const facts = [
+    group.location && `Location: ${group.location}`,
+    group.mileage && `Mileage: ${group.mileage}`,
+  ]
+    .filter((part): part is string => Boolean(part))
+    .join("  ·  ");
 
   return (
     <View style={styles.card} wrap>
       <View style={styles.listingHead}>
-        <Text style={styles.listingHeadline}>{group.headline}</Text>
+        <Text style={styles.listingHeadline}>{group.identity}</Text>
         {group.date.length > 0 && (
           <Text style={styles.listingDate}>{group.date}</Text>
         )}
@@ -391,17 +363,23 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
           <Text style={styles.listingPrice}>{group.price}</Text>
         )}
       </View>
-      {group.location.length > 0 && (
-        <Text style={styles.listingSummary}>Location: {group.location}</Text>
+      {facts.length > 0 && <Text style={styles.listingSummary}>{facts}</Text>}
+      {group.listings.length > 1 && (
+        <Text style={styles.listingDetail}>
+          {group.listings.length} listing snapshots
+        </Text>
       )}
-      <Text style={styles.listingDetail}>
-        {group.listings.length} related listings
-      </Text>
-      {group.listings.map((listing, index) => (
-        <View key={index} style={styles.relatedListing} wrap={false}>
-          <ListingFields listing={listing} />
-        </View>
-      ))}
+      {group.listings.length === 1 ? (
+        group.listings[0].detail.length > 0 ? (
+          <Text style={styles.listingDetail}>{fieldList(group.listings[0].detail)}</Text>
+        ) : null
+      ) : (
+        group.listings.map((listing, index) => (
+          <View key={index} style={styles.relatedListing} wrap={false}>
+            <ListingFields listing={listing} />
+          </View>
+        ))
+      )}
     </View>
   );
 }

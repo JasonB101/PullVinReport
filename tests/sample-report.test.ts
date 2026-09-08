@@ -29,13 +29,17 @@ describe("sample report", () => {
     assert.notEqual(report.source, "vinaudit");
   });
 
-  it("folds the same-sale listings so the sample shows that layout", () => {
+  it("folds sister rooftops into listing chapters so the sample shows that layout", () => {
     const sales = buildSampleReport().sections.find((section) => section.key === "sales");
     assert.ok(sales);
+    assert.match(sales.description, /not confirmed sales/);
     const groups = sectionListingGroups(sales);
     assert.equal(groups.length, 2);
     assert.equal(groups[0].listings.length, 3);
-    assert.equal(groups[0].price, "$11,450.00");
+    assert.equal(groups[0].price, "$11,450");
+    assert.match(groups[0].identity, /Music City/);
+    assert.doesNotMatch(groups[0].identity, /Honda|Toyota/);
     assert.equal(groups[1].listings.length, 1);
+    assert.equal(groups[1].price, "$9,995");
   });
 });

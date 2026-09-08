@@ -22,6 +22,7 @@ import type {
 } from "@/lib/report";
 import {
   hasOdometerRollback,
+  listingSeller,
   sectionListingGroups,
   vehicleTitle,
 } from "@/lib/report";
@@ -69,7 +70,7 @@ export type BriefFacts = {
   odometer: string[];
   odometerDirection: "consistent" | "a lower reading follows a higher one" | "unknown";
   /**
-   * Sales and listing history, already grouped by shared sale total.
+   * Sales and listing history, already grouped into listing chapters.
    * Null when the feed sent no listings — the brief must not invent any.
    * Groups are facts only: dates, totals, labels, locations, explicit status.
    */
@@ -112,7 +113,7 @@ function listingField(listing: Listing, label: string): string {
 }
 
 function listingLine(listing: Listing): string {
-  const sellers = [listingField(listing, "Seller type"), listingField(listing, "Seller")]
+  const sellers = [listingField(listing, "Seller type"), listingSeller(listing)]
     .filter(Boolean)
     .join(" / ");
   return [
@@ -136,7 +137,7 @@ function saleGroupFact(group: ListingGroup): BriefSaleGroup {
       group.listings
         .flatMap((listing) => [
           listingField(listing, "Seller type"),
-          listingField(listing, "Seller"),
+          listingSeller(listing),
         ])
         .filter((value) => value.length > 0),
     ),
@@ -145,7 +146,7 @@ function saleGroupFact(group: ListingGroup): BriefSaleGroup {
     price: group.price,
     date: group.date,
     location: group.location,
-    headline: group.headline,
+    headline: group.identity,
     listingCount: group.listings.length,
     channels,
     sellers,
@@ -163,9 +164,16 @@ function salePatterns(groups: ListingGroup[]): string[] {
   const notes: string[] = [];
   for (const group of groups) {
     if (group.listings.length > 1 && group.price) {
-      notes.push(
-        `${group.listings.length} listing rows show the ${group.price} total`,
-      );
+      if (group.price.includes("–")) {
+        const [low, high] = group.price.split("–");
+        notes.push(
+          `${group.listings.length} listing rows show asking totals from ${low} to ${high}`,
+        );
+      } else {
+        notes.push(
+          `${group.listings.length} listing rows show the ${group.price} total`,
+        );
+      }
     }
   }
   return notes;
@@ -257,7 +265,7 @@ When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an
 
 Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences and 400 characters at the outside.
 
-When FACTS.sales is present, include one fromReport bullet that states only observable listing facts: dates, listed totals, locations, and seller or channel labels (dealer, auction). Name an explicit Sold or TBD status only when FACTS.sales records that status. Listing feeds often repeat or vary asking totals without that meaning anything about whether the car sold or was advertised again. FORBIDDEN unless FACTS explicitly records sold vs unsold: that the car was advertised more than once, that the same car was listed twice, that it did not sell, that it didn't find a buyer, or that a later lower ask means it failed to sell. Do not invent a cause. Two rows at the same total are two rows. Cite only dates, totals, places and statuses that appear in FACTS.sales.
+When FACTS.sales is present, include one fromReport bullet that states only observable listing facts: dates, listed totals, locations, and seller or channel labels (dealer, auction). FACTS.sales groups are listing chapters — marketplace snapshots clustered by time and dealer or region — not confirmed sales. Name an explicit Sold or TBD status only when FACTS.sales records that status. Listing feeds often repeat or vary asking totals without that meaning anything about whether the car sold or was advertised again. FORBIDDEN unless FACTS explicitly records sold vs unsold: that the car was advertised more than once, that the same car was listed twice, that it did not sell, that it didn't find a buyer, or that a later lower ask means it failed to sell. Do not invent a cause. Two rows at the same total are two rows. Cite only dates, totals, places and statuses that appear in FACTS.sales.
 
 Records with nothing worrying in them do not need a consequence. Do not manufacture one for a routine registration renewal.
 

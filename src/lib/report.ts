@@ -269,6 +269,10 @@ export type Listing = {
   detail: Field[];
 };
 
+/** Buyer-facing note on every sales section: snapshots, not confirmed sales. */
+export const LISTING_SECTION_NOTE =
+  "These are marketplace listing snapshots, not confirmed sales. The same dealer group often posts one car across sister lots and aggregator sites, so many rows can be one chapter of asking prices rather than many sales.";
+
 /** Where a listing's one-line headline comes from, best first. */
 const HEADLINE_LABELS = [
   "Listing type",
@@ -280,10 +284,17 @@ const HEADLINE_LABELS = [
 ];
 
 /** The facts that stay on the front of the card, in the order they read. */
-const SUMMARY_LABELS = ["Mileage", "Location", "Seller type", "Seller"];
+const SUMMARY_LABELS = ["Mileage", "Location", "Seller", "Seller type"];
 
 const DATE_LABELS = ["Date", "Listing date", "Sale date"];
-const PRICE_LABELS = ["Price", "Sale price", "Listing price"];
+const PRICE_LABELS = ["Price", "Sale price", "Listing price", "Asking price"];
+const SELLER_LABELS = [
+  "Seller",
+  "Seller name",
+  "Sellername",
+  "Dealer name",
+  "Dealer",
+];
 
 /** How many facts fit on the front of a card before it is a table again. */
 const MAX_SUMMARY_FACTS = 3;
@@ -332,8 +343,11 @@ export function sectionListings(section: ReportSection): Listing[] {
     const summary: Field[] = [];
     for (const label of SUMMARY_LABELS) {
       if (summary.length === MAX_SUMMARY_FACTS) break;
-      const field = take(fields, [label]);
-      if (field) summary.push(field);
+      const field =
+        label === "Seller" ? take(fields, SELLER_LABELS) : take(fields, [label]);
+      if (field) {
+        summary.push(label === "Seller" ? { label: "Seller", value: field.value } : field);
+      }
     }
 
     return {
@@ -349,41 +363,58 @@ export function sectionListings(section: ReportSection): Listing[] {
 }
 
 /**
- * Listings that share a sale total, shown as one parent with the rest folded.
+ * One chapter of marketplace snapshots, not a confirmed sale.
  *
- * A feed often repeats one transaction once per site that carried it — same
- * asking price, same year, different dealer cards. Showing each as its own
- * card makes a single sale look like three. They stay available; they just
- * sit under one parent until asked for. A later listing at the same dollars
- * is a different sale and stays its own card.
+ * A feed often scrapes the same inventory once per sister rooftop and
+ * aggregator, at drifting asking totals. Folding those rows into a timeline
+ * chapter is what stops forty cards from reading as forty sales — or as one
+ * person selling the car at every store in the group.
  */
 export type ListingGroup = {
-  /** Shared sale total, as shown on the parent card. */
-  price: string;
-  /** Newest date among the related listings. */
-  date: string;
-  /** Best location among the related listings. */
-  location: string;
-  /** Shared headline, or "Sale" when the listings disagree. */
+  /** Dealer group, marketplace or auction label for the chapter. */
+  identity: string;
+  /** Same as identity — the parent card title. */
   headline: string;
+  /** Asking total, or a min–max range when the snapshots disagree. */
+  price: string;
+  /** Date, or a from–to range covering the snapshots. */
+  date: string;
+  /** City and state, or the state/region when the rooftops spread out. */
+  location: string;
+  /** Mileage, or a min–max range when the snapshots disagree. */
+  mileage: string;
   listings: Listing[];
 };
 
+export function listingFieldValue(listing: Listing, labels: string[]): string {
+  for (const label of labels) {
+    const match =
+      listing.summary.find((field) => field.label === label) ??
+      listing.detail.find((field) => field.label === label);
+    if (match?.value) return match.value;
+  }
+  return "";
+}
+
 function listingLocation(listing: Listing): string {
-  return listing.summary.find((field) => field.label === "Location")?.value ?? "";
+  return listingFieldValue(listing, ["Location"]);
 }
 
-/** Cents of a listed price, so `$11,450` and `$11,450.00` are the same sale. */
-function listingPriceKey(price: string): string {
+export function listingSeller(listing: Listing): string {
+  return listingFieldValue(listing, SELLER_LABELS);
+}
+
+function listingMileage(listing: Listing): string {
+  return listingFieldValue(listing, ["Mileage"]);
+}
+
+/** Cents of a listed price, so `$11,450` and `$11,450.00` compare equal. */
+function listingPriceCents(price: string): number {
   const cleaned = price.replace(/[^\d.]/g, "");
-  if (!cleaned) return "";
+  if (!cleaned) return 0;
   const amount = Number(cleaned);
-  if (!Number.isFinite(amount) || amount <= 0) return "";
-  return String(Math.round(amount * 100));
-}
-
-function listingYear(date: string): string {
-  return /\b((?:19|20)\d{2})\b/.exec(date)?.[1] ?? "";
+  if (!Number.isFinite(amount) || amount <= 0) return 0;
+  return Math.round(amount * 100);
 }
 
 function listingSortValue(date: string): number {
@@ -393,47 +424,350 @@ function listingSortValue(date: string): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
-function listingGroupKey(listing: Listing): string | null {
-  const price = listingPriceKey(listing.price);
-  // No usable price means there is nothing to match on — keep it a singleton
-  // rather than clumping every "call for price" card into one pile.
-  if (!price) return null;
-  return `${price}|${listingYear(listing.date)}`;
+function listingIso(date: string): string {
+  const direct = isoDate(date);
+  if (direct) return direct;
+  const ms = listingSortValue(date);
+  if (!ms) return "";
+  return new Date(ms).toISOString().slice(0, 10);
 }
 
-export function groupListings(listings: Listing[]): ListingGroup[] {
-  const buckets = new Map<string, Listing[]>();
-  const order: string[] = [];
-  let singles = 0;
+const STATE_NAMES: Record<string, string> = {
+  AL: "Alabama", AK: "Alaska", AZ: "Arizona", AR: "Arkansas", CA: "California",
+  CO: "Colorado", CT: "Connecticut", DE: "Delaware", FL: "Florida", GA: "Georgia",
+  HI: "Hawaii", ID: "Idaho", IL: "Illinois", IN: "Indiana", IA: "Iowa",
+  KS: "Kansas", KY: "Kentucky", LA: "Louisiana", ME: "Maine", MD: "Maryland",
+  MA: "Massachusetts", MI: "Michigan", MN: "Minnesota", MS: "Mississippi",
+  MO: "Missouri", MT: "Montana", NE: "Nebraska", NV: "Nevada", NH: "New Hampshire",
+  NJ: "New Jersey", NM: "New Mexico", NY: "New York", NC: "North Carolina",
+  ND: "North Dakota", OH: "Ohio", OK: "Oklahoma", OR: "Oregon", PA: "Pennsylvania",
+  RI: "Rhode Island", SC: "South Carolina", SD: "South Dakota", TN: "Tennessee",
+  TX: "Texas", UT: "Utah", VT: "Vermont", VA: "Virginia", WA: "Washington",
+  WV: "West Virginia", WI: "Wisconsin", WY: "Wyoming", DC: "District of Columbia",
+};
 
+function parseLocation(value: string): { city: string; state: string } {
+  const match = /^(.+),\s*([A-Za-z]{2})$/.exec(value.trim());
+  if (match) return { city: match[1].trim(), state: match[2].toUpperCase() };
+  const upper = value.trim().toUpperCase();
+  if (STATE_NAMES[upper]) return { city: "", state: upper };
+  const named = Object.entries(STATE_NAMES).find(([, name]) => name.toLowerCase() === value.trim().toLowerCase());
+  if (named) return { city: "", state: named[0] };
+  return { city: value.trim(), state: "" };
+}
+
+const VEHICLE_BRANDS = new Set([
+  "acura", "alfa", "audi", "bmw", "buick", "cadillac", "chevrolet", "chevy",
+  "chrysler", "dodge", "fiat", "ford", "genesis", "gmc", "honda", "hyundai",
+  "infiniti", "jaguar", "jeep", "kia", "lexus", "lincoln", "mazda", "mercedes",
+  "benz", "mini", "mitsubishi", "nissan", "porsche", "ram", "subaru", "tesla",
+  "toyota", "volkswagen", "volvo", "vw",
+]);
+
+const NAME_STOP = new Set([
+  "and", "at", "auto", "autos", "automotive", "car", "cars", "center", "centre",
+  "dealer", "dealership", "group", "inc", "llc", "ltd", "motor", "motors", "of",
+  "sales", "store", "superstore", "the",
+]);
+
+const MARKETPLACE_MARKERS = [
+  "autotrader", "cargurus", "car gurus", "cars.com", "carsdirect", "carsoup",
+  "carfax", "craigslist", "cycletrader", "ebay", "edmunds", "express.cars",
+  "express cars", "facebook", "marketplace", "offerup", "truecar",
+];
+
+function tokenizeName(value: string): string[] {
+  return value
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 2)
+    .filter((token) => !VEHICLE_BRANDS.has(token) && !NAME_STOP.has(token));
+}
+
+function isMarketplace(listing: Listing): boolean {
+  const hay = [
+    listing.headline,
+    listingSeller(listing),
+    listingFieldValue(listing, ["Source", "Listing type", "Channel"]),
+  ]
+    .join(" ")
+    .toLowerCase();
+  return MARKETPLACE_MARKERS.some((marker) => hay.includes(marker));
+}
+
+function dealerGroupKey(listing: Listing): string {
+  if (isMarketplace(listing)) return "";
+  const city = parseLocation(listingLocation(listing)).city.toLowerCase();
+  const tokens = tokenizeName(listingSeller(listing))
+    .filter((token) => token !== city && token.length >= 4)
+    .sort();
+  if (tokens.length > 0) return tokens.join(" ");
+  return listingSeller(listing).toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function groupsCompatible(left: string, right: string): boolean {
+  if (!left || !right) return false;
+  const a = left.split(" ");
+  const b = right.split(" ");
+  if (a.every((token) => b.includes(token)) || b.every((token) => a.includes(token))) {
+    return true;
+  }
+  // Sister rooftops often share a family name and differ on the first name
+  // (Blaise Alexander vs Aubrey Alexander). A shared token of 5+ letters is
+  // the group; short leftovers like "city" are not.
+  return a.some((token) => token.length >= 5 && b.includes(token));
+}
+
+function dominantGroupKey(listings: Listing[]): string {
+  const keys = listings.map(dealerGroupKey).filter((key) => key.length > 0);
+  if (keys.length === 0) return "";
+  let best = keys[0];
+  let bestCount = 0;
+  for (const key of keys) {
+    const count = keys.filter((other) => groupsCompatible(key, other)).length;
+    if (count > bestCount || (count === bestCount && key.length > best.length)) {
+      best = key;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function dominantState(listings: Listing[]): string {
+  const counts = new Map<string, number>();
   for (const listing of listings) {
-    const key = listingGroupKey(listing) ?? `single:${singles++}`;
-    const bucket = buckets.get(key);
-    if (!bucket) {
-      buckets.set(key, [listing]);
-      order.push(key);
+    const state = parseLocation(listingLocation(listing)).state;
+    if (!state) continue;
+    counts.set(state, (counts.get(state) ?? 0) + 1);
+  }
+  let best = "";
+  let bestCount = 0;
+  for (const [state, count] of counts) {
+    if (count > bestCount) {
+      best = state;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+function titleName(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(" ");
+}
+
+function displayDealerName(name: string, city: string): string {
+  const words = name.split(/\s+/).filter(Boolean);
+  const kept: string[] = [];
+  for (let index = 0; index < words.length; index += 1) {
+    const compact = words[index].toLowerCase().replace(/[^a-z0-9]/g, "");
+    if (VEHICLE_BRANDS.has(compact)) continue;
+    if (["inc", "llc", "ltd", "group"].includes(compact)) continue;
+    if (compact === "of" && words[index + 1]?.toLowerCase() === city.toLowerCase()) {
+      index += 1;
       continue;
     }
-    bucket.push(listing);
+    if (city && compact === city.toLowerCase()) continue;
+    kept.push(words[index]);
+  }
+  return kept.join(" ").trim() || name;
+}
+
+function episodeIdentity(listings: Listing[]): string {
+  const dealers = listings.filter((listing) => !isMarketplace(listing) && listingSeller(listing));
+  if (dealers.length === 0) {
+    const named = listings.find((listing) => listingSeller(listing) || listing.headline);
+    return listingSeller(named ?? listings[0]) || listings[0]?.headline || "Listing snapshots";
   }
 
-  return order.map((key) => {
-    const items = [...(buckets.get(key) ?? [])].sort(
-      (a, b) => listingSortValue(b.date) - listingSortValue(a.date),
-    );
-    const headlines = new Set(items.map((item) => item.headline));
-    const priced = items.find((item) => item.price.length > 0);
-    const located = items.find((item) => listingLocation(item).length > 0);
-    const dated = items.find((item) => item.date.length > 0);
+  const city = parseLocation(listingLocation(dealers[0])).city;
+  const names = dealers.map((listing) => displayDealerName(listingSeller(listing), city));
+  const unique = [...new Set(names.map((name) => name.toLowerCase()))];
+  if (unique.length === 1) return names[0];
 
-    return {
-      headline: headlines.size === 1 ? items[0].headline : "Sale",
-      date: dated?.date ?? "",
-      price: priced?.price ?? "",
-      location: located ? listingLocation(located) : "",
-      listings: items,
-    };
-  });
+  const freq = new Map<string, number>();
+  for (const listing of dealers) {
+    for (const token of new Set(tokenizeName(listingSeller(listing)))) {
+      if (token.length < 4) continue;
+      freq.set(token, (freq.get(token) ?? 0) + 1);
+    }
+  }
+  const shared = [...freq.entries()]
+    .filter(([, count]) => count >= Math.ceil(dealers.length / 2))
+    .map(([token]) => token);
+  const exemplar = names.find((name) =>
+    shared.every((token) => name.toLowerCase().includes(token)),
+  ) ?? names[0];
+  const ordered = tokenizeName(exemplar).filter((token) => shared.includes(token));
+  if (ordered.length > 0) return `${titleName(ordered.join(" "))} network`;
+  return `${names[0]} network`;
+}
+
+function formatCents(cents: number): string {
+  const amount = cents / 100;
+  return `$${amount.toLocaleString("en-US", {
+    minimumFractionDigits: Number.isInteger(amount) ? 0 : 2,
+    maximumFractionDigits: 2,
+  })}`;
+}
+
+function episodePrice(listings: Listing[]): string {
+  const amounts = listings.map((listing) => listingPriceCents(listing.price)).filter((cents) => cents > 0);
+  if (amounts.length === 0) return "";
+  const min = Math.min(...amounts);
+  const max = Math.max(...amounts);
+  return min === max ? formatCents(min) : `${formatCents(min)}–${formatCents(max)}`;
+}
+
+function formatDateRange(start: string, end: string): string {
+  if (!start) return end;
+  if (!end || start === end) return start;
+  const startIso = listingIso(start);
+  const endIso = listingIso(end);
+  if (!startIso || !endIso) {
+    return `${start} – ${end}`;
+  }
+  if (startIso === endIso) return formatEventDate(startIso);
+  const [sy, sm, sd] = startIso.split("-");
+  const [ey, em, ed] = endIso.split("-");
+  if (sy === ey && sm === em) {
+    return `${MONTHS[Number(sm) - 1]} ${Number(sd)}–${Number(ed)}, ${sy}`;
+  }
+  if (sy === ey) {
+    return `${MONTHS[Number(sm) - 1]} ${Number(sd)} – ${MONTHS[Number(em) - 1]} ${Number(ed)}, ${sy}`;
+  }
+  return `${formatEventDate(startIso)} – ${formatEventDate(endIso)}`;
+}
+
+function episodeDate(listings: Listing[]): string {
+  const dated = listings
+    .filter((listing) => listing.date && listingSortValue(listing.date) > 0)
+    .sort((a, b) => listingSortValue(a.date) - listingSortValue(b.date));
+  if (dated.length === 0) return listings.find((listing) => listing.date)?.date ?? "";
+  return formatDateRange(dated[0].date, dated[dated.length - 1].date);
+}
+
+function uniqueStrings(values: string[]): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const value of values) {
+    const key = value.toLowerCase();
+    if (!value || seen.has(key)) continue;
+    seen.add(key);
+    out.push(value);
+  }
+  return out;
+}
+
+function episodeLocation(listings: Listing[]): string {
+  const parsed = listings.map((listing) => parseLocation(listingLocation(listing)));
+  const states = uniqueStrings(parsed.map((entry) => entry.state).filter(Boolean));
+  const cities = uniqueStrings(parsed.map((entry) => entry.city).filter(Boolean));
+  if (states.length === 1 && cities.length === 1) return `${cities[0]}, ${states[0]}`;
+  if (states.length === 1 && cities.length > 1 && cities.length <= 3) {
+    return `${cities.join(" / ")}, ${states[0]}`;
+  }
+  if (states.length === 1) return STATE_NAMES[states[0]] ?? states[0];
+  if (states.length > 1) return states.map((state) => STATE_NAMES[state] ?? state).join(" / ");
+  return listings.map(listingLocation).find((value) => value.length > 0) ?? "";
+}
+
+function parseMileageAmount(value: string): { amount: number; unit: string } | null {
+  const match = /([\d,]+)\s*(mi|km)?/i.exec(value);
+  if (!match) return null;
+  const amount = Number(match[1].replace(/,/g, ""));
+  if (!Number.isFinite(amount) || amount <= 0) return null;
+  return { amount, unit: (match[2] ?? "mi").toLowerCase() };
+}
+
+function episodeMileage(listings: Listing[]): string {
+  const readings = listings
+    .map((listing) => parseMileageAmount(listingMileage(listing)))
+    .filter((reading): reading is { amount: number; unit: string } => reading !== null);
+  if (readings.length === 0) return "";
+  const unit = readings[0].unit;
+  const min = Math.min(...readings.map((reading) => reading.amount));
+  const max = Math.max(...readings.map((reading) => reading.amount));
+  const format = (amount: number) => `${amount.toLocaleString("en-US")} ${unit}`;
+  return min === max ? format(min) : `${format(min)}–${format(max)}`;
+}
+
+/** Quiet period after which the same dealer/region is a new chapter. */
+const EPISODE_GAP_MS = 120 * 24 * 60 * 60 * 1000;
+
+function listingTime(listing: Listing): number {
+  return listingSortValue(listing.date);
+}
+
+function shouldStartEpisode(current: Listing[], next: Listing): boolean {
+  const dated = current.filter((listing) => listingTime(listing) > 0);
+  const nextTime = listingTime(next);
+  if (dated.length > 0 && nextTime > 0) {
+    const lastTime = Math.max(...dated.map(listingTime));
+    if (nextTime - lastTime > EPISODE_GAP_MS) return true;
+  }
+
+  if (isMarketplace(next)) return false;
+
+  const nextGroup = dealerGroupKey(next);
+  const currentGroup = dominantGroupKey(current);
+  if (nextGroup && currentGroup && !groupsCompatible(nextGroup, currentGroup)) return true;
+
+  const nextState = parseLocation(listingLocation(next)).state;
+  const currentState = dominantState(current);
+  if (nextState && currentState && nextState !== currentState) return true;
+
+  return false;
+}
+
+function toEpisode(listings: Listing[]): ListingGroup {
+  const items = [...listings].sort((a, b) => listingTime(b) - listingTime(a));
+  const identity = episodeIdentity(items);
+  return {
+    identity,
+    headline: identity,
+    price: episodePrice(items),
+    date: episodeDate(items),
+    location: episodeLocation(items),
+    mileage: episodeMileage(items),
+    listings: items,
+  };
+}
+
+/**
+ * Collapses scrape snapshots into a short timeline a buyer can scan.
+ *
+ * Same-price grouping was the wrong axis: drifting asks at one dealer group
+ * became a card per total, and sister rooftops read as separate sellers.
+ * Chapters split on a long quiet period, a dealer-group change, or a move
+ * to another state. Marketplace/aggregator rows ride with the nearby dealer
+ * chapter instead of opening one of their own.
+ */
+export function groupListings(listings: Listing[]): ListingGroup[] {
+  if (listings.length === 0) return [];
+
+  const chronological = listings
+    .map((listing, index) => ({ listing, index }))
+    .sort((a, b) => listingTime(a.listing) - listingTime(b.listing) || a.index - b.index)
+    .map((entry) => entry.listing);
+
+  const chapters: Listing[][] = [];
+  let current: Listing[] = [];
+
+  for (const listing of chronological) {
+    if (current.length === 0 || !shouldStartEpisode(current, listing)) {
+      current.push(listing);
+      continue;
+    }
+    chapters.push(current);
+    current = [listing];
+  }
+  if (current.length > 0) chapters.push(current);
+
+  return chapters.map(toEpisode).reverse();
 }
 
 export function sectionListingGroups(section: ReportSection): ListingGroup[] {

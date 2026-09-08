@@ -78,7 +78,8 @@ describe("what the brief is allowed to see", () => {
     assert.ok(withSales.sales);
     assert.equal(withSales.sales.groups.length, 2);
     assert.equal(withSales.sales.groups[0].listingCount, 3);
-    assert.equal(withSales.sales.groups[0].price, "$11,450.00");
+    assert.equal(withSales.sales.groups[0].price, "$11,450");
+    assert.match(withSales.sales.groups[0].headline, /Music City/);
     const serialized = JSON.stringify(withSales.sales);
     assert.match(withSales.sales.notes.join(" "), /listing rows show the \$11,450/);
     assert.doesNotMatch(
@@ -377,6 +378,7 @@ describe("generating a brief", () => {
     assert.match(system, /Never name a sibling/);
     assert.match(system, /FACTS\.sales/);
     assert.match(system, /observable listing facts/);
+    assert.match(system, /listing chapters/);
     assert.match(system, /often repeat or vary asking totals without that meaning/);
     assert.match(system, /FORBIDDEN unless FACTS explicitly records sold vs unsold/);
     assert.doesNotMatch(

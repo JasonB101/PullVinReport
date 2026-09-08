@@ -318,23 +318,43 @@ function ListingCard({ listing }: { listing: Listing }) {
   );
 }
 
+function EpisodeFacts({ group }: { group: ListingGroup }) {
+  const facts = [
+    group.location && { label: "Location", value: group.location },
+    group.mileage && { label: "Mileage", value: group.mileage },
+  ].filter((fact): fact is { label: string; value: string } => Boolean(fact));
+
+  if (facts.length === 0) return null;
+
+  return (
+    <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
+      {facts.map((field, index) => (
+        <span key={`${field.label}-${index}`}>
+          {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
+          <span className="text-slate-400">{field.label}: </span>
+          <span className="text-slate-700">{field.value}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
 /**
- * One sale, even when the feed sent it as several near-identical listings.
+ * One listing chapter: a dealer group / region / date window, not a sale.
  *
- * The parent holds the shared total and the best date/location. Related
- * dealer cards stay a click away instead of repeating the same price down
- * the page.
+ * Sister rooftops and aggregator scrapes stay under the chapter. The raw
+ * snapshots are one click away so nothing is deleted, just taken off the
+ * timeline a buyer scans first.
  */
 function ListingGroupCard({ group }: { group: ListingGroup }) {
-  if (group.listings.length === 1) {
-    return <ListingCard listing={group.listings[0]} />;
-  }
+  const extras =
+    group.listings.length === 1 ? group.listings[0].detail : [];
 
   return (
     <div className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
       <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-4">
         <span className="text-sm font-semibold text-slate-900">
-          {group.headline}
+          {group.identity}
         </span>
         {group.date && (
           <span className="text-xs text-slate-500">{group.date}</span>
@@ -344,29 +364,43 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
             {group.price}
           </span>
         )}
-        {group.location && (
-          <span className="flex w-full flex-wrap items-center gap-x-1.5 text-xs text-slate-500">
-            <span className="text-slate-400">Location: </span>
-            <span className="text-slate-700">{group.location}</span>
-          </span>
-        )}
+        <EpisodeFacts group={group} />
       </div>
 
-      <ScrollOpenDetails
-        className="scroll-mt-32 border-t border-slate-100"
-        summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden"
-        summary={
-          <span className="font-medium text-brand-600">
-            {group.listings.length} related listings
-          </span>
-        }
-      >
-        <div className="space-y-3 px-4 pb-4">
-          {group.listings.map((listing, index) => (
-            <ListingCard key={`${listing.headline}-${listing.date}-${index}`} listing={listing} />
-          ))}
-        </div>
-      </ScrollOpenDetails>
+      {group.listings.length > 1 ? (
+        <ScrollOpenDetails
+          className="scroll-mt-32 border-t border-slate-100"
+          summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden"
+          summary={
+            <span className="font-medium text-brand-600">
+              {group.listings.length} listing snapshots
+            </span>
+          }
+        >
+          <div className="space-y-3 px-4 pb-4">
+            {group.listings.map((listing, index) => (
+              <ListingCard
+                key={`${listing.headline}-${listing.date}-${index}`}
+                listing={listing}
+              />
+            ))}
+          </div>
+        </ScrollOpenDetails>
+      ) : extras.length > 0 ? (
+        <ScrollOpenDetails
+          className="scroll-mt-32 border-t border-slate-100"
+          summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm [&::-webkit-details-marker]:hidden"
+          summary={
+            <span className="font-medium text-brand-600">
+              <MoreHint count={extras.length} />
+            </span>
+          }
+        >
+          <div className="px-4 pb-4">
+            <FieldGrid fields={extras} />
+          </div>
+        </ScrollOpenDetails>
+      ) : null}
     </div>
   );
 }
@@ -399,8 +433,9 @@ function SectionBlock({
             </span>
           )}
           <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-            {section.records.length} record
-            {section.records.length === 1 ? "" : "s"}
+            {listings && listings.length > 0
+              ? `${listings.length} chapter${listings.length === 1 ? "" : "s"} · ${section.records.length} snapshot${section.records.length === 1 ? "" : "s"}`
+              : `${section.records.length} record${section.records.length === 1 ? "" : "s"}`}
           </span>
         </div>
       </div>
@@ -422,7 +457,7 @@ function SectionBlock({
       {listings ? (
         <div className="mt-4 space-y-3">
           {listings.map((group, index) => (
-            <ListingGroupCard key={`${group.price}-${group.date}-${index}`} group={group} />
+            <ListingGroupCard key={`${group.identity}-${group.date}-${index}`} group={group} />
           ))}
         </div>
       ) : table ? (

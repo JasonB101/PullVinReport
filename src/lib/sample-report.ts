@@ -1,5 +1,5 @@
 import type { VehicleBrief } from "@/lib/ai-brief";
-import type { VehicleReport } from "@/lib/report";
+import { LISTING_SECTION_NOTE, type VehicleReport } from "@/lib/report";
 
 /**
  * The sample report shown before checkout.
@@ -31,7 +31,7 @@ export function buildSampleBrief(): VehicleBrief {
     fromReport: [
       "Five title records across Kentucky and Tennessee, with no salvage, junk or insurance-loss brand on any of them — the clean-title history that lenders and insurers price normally.",
       "Mileage rises steadily from 12 miles in 2012 to 121,477 in 2024, and the 2020 re-registration reported the same reading as 2019, which is normal for a car re-registered without being driven much.",
-      "Three August 2024 dealer and marketplace listings in the Nashville area show an asking total of $11,450. A February 2019 auction listing shows $9,995.",
+      "August 2024 dealer and marketplace listings in the Nashville area show an asking total of $11,450. A February 2019 auction listing shows $9,995.",
       "One minor rear-bumper damage record from November 2018 in Knoxville, with no airbag deployment reported; light damage like this is usually repaired without ever reaching a title brand, but the quality of the repair is only visible in person.",
       "A lien recorded in Kentucky in 2015 is shown as released in February 2019, meaning the loan behind it was settled and the seller should be able to hand over a clear title.",
       "One open recall campaign is listed for the air bag inflator, which a dealer is required to fix free of charge and which stays open until someone books it in.",
@@ -246,13 +246,11 @@ export function buildSampleReport(): VehicleReport {
         key: "sales",
         title: "Sales & listing history",
         navLabel: "Sales",
-        description:
-          "Prior retail and auction listings, including asking prices where available.",
-        emptyLabel: "No prior sales listings came back.",
+        description: LISTING_SECTION_NOTE,
+        emptyLabel: "No listing snapshots came back.",
         // Deliberately the widest records in the sample. A real listing feed
-        // carries this much and more, and the sample exists to prove the
-        // layout survives it rather than to flatter it. Three cards share
-        // the 2024 asking price so the page has to fold them into one sale.
+        // carries this much and more. Sister rooftops and an aggregator card
+        // share one 2024 chapter so the page has to teach that layout.
         layout: "listings",
         records: [
           [
@@ -261,6 +259,7 @@ export function buildSampleReport(): VehicleReport {
             { label: "Price", value: "$11,450" },
             { label: "Mileage", value: "120,880 mi" },
             { label: "Seller type", value: "Franchise dealer" },
+            { label: "Seller", value: "Music City Toyota" },
             { label: "City", value: "Nashville" },
             { label: "State", value: "TN" },
             { label: "Days listed", value: "34" },
@@ -279,7 +278,7 @@ export function buildSampleReport(): VehicleReport {
             { label: "Price", value: "$11,450.00" },
             { label: "Mileage", value: "120,880 mi" },
             { label: "Seller type", value: "Franchise dealer" },
-            { label: "Seller", value: "Music City Toyota" },
+            { label: "Seller", value: "Music City Honda" },
             { label: "City", value: "Brentwood" },
             { label: "State", value: "TN" },
             { label: "Stock number", value: "88213A" },
@@ -287,7 +286,7 @@ export function buildSampleReport(): VehicleReport {
             {
               label: "Description",
               value:
-                "Same asking price syndicated to a second dealer site the week it was listed.",
+                "Sister rooftop of the same dealer group, carrying the same asking total.",
             },
           ],
           [
@@ -296,13 +295,15 @@ export function buildSampleReport(): VehicleReport {
             { label: "Price", value: "$11,450" },
             { label: "Mileage", value: "120,904 mi" },
             { label: "Seller type", value: "Franchise dealer" },
+            { label: "Seller", value: "Music City Toyota" },
+            { label: "Source", value: "Autotrader" },
             { label: "City", value: "Nashville" },
             { label: "State", value: "TN" },
             { label: "Days listed", value: "6" },
             {
               label: "Description",
               value:
-                "Cross-posted marketplace card that repeats the dealer asking price.",
+                "Aggregator snapshot of the same Music City inventory.",
             },
           ],
           [

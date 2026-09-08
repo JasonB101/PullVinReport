@@ -12,6 +12,7 @@ import type {
   VehicleSummary,
 } from "@/lib/report";
 import {
+  LISTING_SECTION_NOTE,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
@@ -92,6 +93,9 @@ const KEY_LABELS: Record<string, string> = {
   obtainedfrom: "Obtained from",
   intendedforexport: "Intended for export",
   sellertype: "Seller type",
+  sellername: "Seller",
+  seller: "Seller",
+  dealername: "Seller",
   listingprice: "Price",
   saleprice: "Price",
   lienholder: "Lienholder",
@@ -101,6 +105,8 @@ const KEY_LABELS: Record<string, string> = {
 export function humanizeKey(key: string): string {
   const lower = key.toLowerCase();
   if (KEY_LABELS[lower]) return KEY_LABELS[lower];
+  const compact = lower.replace(/[^a-z0-9]/g, "");
+  if (KEY_LABELS[compact]) return KEY_LABELS[compact];
   const spaced = key
     .replace(/[_-]+/g, " ")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -217,7 +223,7 @@ function toFields(record: Record<string, unknown>): Field[] {
       continue;
     }
 
-    if (PRICE_KEYS.has(lower)) {
+    if (PRICE_KEYS.has(lower) || PRICE_KEYS.has(lower.replace(/[^a-z0-9]/g, ""))) {
       addField(fields, "Price", formatMoney(value));
       continue;
     }
@@ -564,12 +570,11 @@ export function normalizeVinAuditReport(
         key: "sales",
         title: "Sales & listing history",
         navLabel: "Sales",
-        description:
-          "Prior retail and auction listings, including asking prices where available.",
-        emptyLabel: "No prior sales listings came back.",
+        description: LISTING_SECTION_NOTE,
+        emptyLabel: "No listing snapshots came back.",
         // A listing carries far more than a table can hold: dealer, stock
-        // number, colours, options, the ad copy itself. One card each, with
-        // the long tail folded away.
+        // number, colours, options, the ad copy itself. Chapters fold the
+        // scrape noise; the long tail stays one click away.
         layout: "listings",
       },
       sales,
