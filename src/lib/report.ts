@@ -691,8 +691,10 @@ function episodeMileage(listings: Listing[]): string {
   const unit = readings[0].unit;
   const min = Math.min(...readings.map((reading) => reading.amount));
   const max = Math.max(...readings.map((reading) => reading.amount));
-  const format = (amount: number) => `${amount.toLocaleString("en-US")} ${unit}`;
-  return min === max ? format(min) : `${format(min)}–${format(max)}`;
+  const format = (amount: number) => amount.toLocaleString("en-US");
+  return min === max
+    ? `${format(min)} ${unit}`
+    : `${format(min)}–${format(max)} ${unit}`;
 }
 
 /** Quiet period after which the same dealer/region is a new chapter. */
