@@ -483,10 +483,10 @@ export function normalizeVinAuditReport(
     buildSection(
       {
         key: "titles",
-        title: "Title & registration history",
-        navLabel: "Titles",
+        title: "Title, registration & mileage",
+        navLabel: "Titles & mileage",
         description:
-          "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
+          "Each title and registration event we found for this VIN, newest first, with the mileage reported at that event.",
         emptyLabel: "No title or registration events came back for this VIN.",
         columns: ["Date", "State", "Mileage", "Event", "Brand", "Current"],
       },

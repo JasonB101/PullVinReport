@@ -83,6 +83,37 @@ describe("section tables", () => {
     ]);
   });
 
+  it("marks a mileage that did not move from the older row, so it is not listed twice", () => {
+    const table = sectionTable(
+      section({
+        columns: ["Date", "State", "Mileage"],
+        records: [
+          [
+            { label: "Date", value: "Apr 2, 2020" },
+            { label: "State", value: "TN" },
+            { label: "Mileage", value: "78,930 mi" },
+          ],
+          [
+            { label: "Date", value: "Mar 8, 2019" },
+            { label: "State", value: "TN" },
+            { label: "Mileage", value: "78,930 mi" },
+          ],
+          [
+            { label: "Date", value: "Jun 19, 2015" },
+            { label: "State", value: "KY" },
+            { label: "Mileage", value: "41,204 mi" },
+          ],
+        ],
+      }),
+    );
+
+    assert.ok(table);
+    assert.deepEqual(
+      table.rows.map((row) => row.mileageUnchanged),
+      [true, false, false],
+    );
+  });
+
   it("drops a column no record filled in rather than printing dashes", () => {
     const table = sectionTable(
       section({
@@ -624,7 +655,6 @@ describe("the header of a report", () => {
   it("puts nothing in the outline that has nothing to show", () => {
     assert.deepEqual(reportNavItems(report()), [
       { href: "#summary", label: "Summary" },
-      { href: "#odometer", label: "Odometer" },
       { href: "#titles", label: "Titles" },
     ]);
   });
@@ -652,10 +682,10 @@ describe("the header of a report", () => {
     );
   });
 
-  it("drops the odometer from the outline when no reading came back", () => {
-    const items = reportNavItems(report({ odometer: [] }));
+  it("does not give mileage its own outline entry — it lives on the title rows", () => {
+    const items = reportNavItems(report());
     assert.equal(
-      items.some((item) => item.href === "#odometer"),
+      items.some((item) => item.href === "#odometer" || /odometer/i.test(item.label)),
       false,
     );
   });

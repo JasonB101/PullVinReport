@@ -14,8 +14,17 @@
  * before the brief existed.
  */
 import { anthropic, isAnthropicConfigured } from "@/lib/config";
-import type { VehicleReport, VehicleSummary } from "@/lib/report";
-import { hasOdometerRollback, vehicleTitle } from "@/lib/report";
+import type {
+  Listing,
+  ListingGroup,
+  VehicleReport,
+  VehicleSummary,
+} from "@/lib/report";
+import {
+  hasOdometerRollback,
+  sectionListingGroups,
+  vehicleTitle,
+} from "@/lib/report";
 
 export type VehicleBrief = {
   /** Bullets written only from the records on this order. */
@@ -37,6 +46,17 @@ const MAX_ODOMETER_ROWS = 30;
 const MAX_SPECIFICATIONS = 12;
 const MAX_VALUE_LENGTH = 120;
 
+export type BriefSaleGroup = {
+  price: string;
+  date: string;
+  location: string;
+  headline: string;
+  listingCount: number;
+  channels: string[];
+  sellers: string[];
+  listings: string[];
+};
+
 export type BriefFacts = {
   vehicle: string;
   /**
@@ -48,6 +68,11 @@ export type BriefFacts = {
   checks: { check: string; result: string }[];
   odometer: string[];
   odometerDirection: "consistent" | "a lower reading follows a higher one" | "unknown";
+  /**
+   * Sales and listing history, already grouped by shared sale total.
+   * Null when the feed sent no listings — the brief must not invent any.
+   */
+  sales: { groups: BriefSaleGroup[]; patterns: string[] } | null;
   records: { section: string; rows: string[] }[];
 };
 
@@ -75,6 +100,116 @@ export function exactYearMakeModel(vehicle: VehicleSummary): string {
     .map((part) => part?.trim())
     .filter((part): part is string => Boolean(part));
   return parts.length === 3 ? parts.join(" ") : "";
+}
+
+function listingField(listing: Listing, label: string): string {
+  return (
+    listing.summary.find((field) => field.label === label)?.value ??
+    listing.detail.find((field) => field.label === label)?.value ??
+    ""
+  );
+}
+
+function listingLine(listing: Listing): string {
+  const sellers = [listingField(listing, "Seller type"), listingField(listing, "Seller")]
+    .filter(Boolean)
+    .join(" / ");
+  return [
+    listing.date,
+    listing.headline,
+    listing.price,
+    listingField(listing, "Location"),
+    sellers,
+  ]
+    .filter((part) => part.length > 0)
+    .join(" · ");
+}
+
+function saleGroupFact(group: ListingGroup): BriefSaleGroup {
+  const channels = [...new Set(group.listings.map((listing) => listing.headline))];
+  const sellers = [
+    ...new Set(
+      group.listings
+        .flatMap((listing) => [
+          listingField(listing, "Seller type"),
+          listingField(listing, "Seller"),
+        ])
+        .filter((value) => value.length > 0),
+    ),
+  ];
+  return {
+    price: group.price,
+    date: group.date,
+    location: group.location,
+    headline: group.headline,
+    listingCount: group.listings.length,
+    channels,
+    sellers,
+    listings: group.listings.map(listingLine),
+  };
+}
+
+function salePatterns(groups: ListingGroup[]): string[] {
+  const patterns: string[] = [];
+
+  for (const group of groups) {
+    if (group.listings.length > 1 && group.price) {
+      patterns.push(
+        `${group.listings.length} listings share the ${group.price} total${
+          group.date ? ` around ${group.date}` : ""
+        }${group.location ? ` in ${group.location}` : ""}`,
+      );
+    }
+  }
+
+  const byDate = new Map<string, Listing[]>();
+  for (const group of groups) {
+    for (const listing of group.listings) {
+      if (!listing.date) continue;
+      const bucket = byDate.get(listing.date) ?? [];
+      bucket.push(listing);
+      byDate.set(listing.date, bucket);
+    }
+  }
+  for (const [date, listings] of byDate) {
+    if (listings.length < 2) continue;
+    const text = listings
+      .map((listing) =>
+        [listing.headline, listing.price, ...listing.summary, ...listing.detail]
+          .map((part) => (typeof part === "string" ? part : part.value))
+          .join(" "),
+      )
+      .join(" | ");
+    const sold = /\bsold\b/i.test(text);
+    const open = /\b(tbd|pending|not sold|unsold|no sale)\b/i.test(text);
+    if (sold && open) {
+      patterns.push(
+        `Same-day ${date} listings include both a sold result and a TBD or unsold result`,
+      );
+    }
+  }
+
+  const channels = groups.flatMap((group) => group.listings.map((listing) => listing.headline));
+  if (
+    channels.some((channel) => /auction/i.test(channel)) &&
+    channels.some((channel) => /dealer/i.test(channel))
+  ) {
+    patterns.push("History includes both auction and dealer listings");
+  }
+
+  return patterns;
+}
+
+function briefSales(report: VehicleReport): BriefFacts["sales"] {
+  const section = report.sections.find(
+    (entry) => entry.key === "sales" && entry.records.length > 0,
+  );
+  if (!section) return null;
+  const groups = sectionListingGroups(section);
+  return {
+    groups: groups.map(saleGroupFact),
+    patterns: salePatterns(groups),
+  };
 }
 
 export function briefFacts(report: VehicleReport): BriefFacts {
@@ -105,8 +240,9 @@ export function briefFacts(report: VehicleReport): BriefFacts {
         : hasOdometerRollback(report.odometer)
           ? "a lower reading follows a higher one"
           : "consistent",
+    sales: briefSales(report),
     records: report.sections
-      .filter((section) => section.records.length > 0)
+      .filter((section) => section.records.length > 0 && section.layout !== "listings")
       .map((section) => ({
         section: section.title,
         rows: [
@@ -150,12 +286,14 @@ When a bullet reports a title brand, a junk, salvage or insurance-loss entry, an
 
 Write those consequences as what usually or often happens, never as what has happened to this car. State the record, then what it usually means, then stop. Two sentences at the outside.
 
-Records with nothing worrying in them do not need this. Do not manufacture a consequence for a routine registration renewal.
+When FACTS.sales is present, at least one fromReport bullet MUST cover the sales and listing story. Use the grouped totals, dates, locations, seller types and channels. Say why the pattern matters: several near-identical cards at the same total are usually one car advertised in more than one place, not several sales; an auction sold result next to a TBD or unsold the same day is often the same run; a later lower ask is often a car that did not find a buyer at the first price; a mix of auction and dealer listings is the shopping path, not two unrelated lives. Cite only dates, totals and places that appear in FACTS.sales. Do not invent a sale.
+
+Records with nothing worrying in them do not need a consequence. Do not manufacture one for a routine registration renewal.
 
 Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
-fromReport: 2 to 5 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries. Use the actual counts and dates from FACTS.
+fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the sales/listing story when FACTS.sales is present. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth.
 commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
 questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
 
@@ -172,7 +310,7 @@ questions: 0 to 4 short questions for the seller, each one following from a bull
  */
 const MAX_BULLET_LENGTH = 400;
 
-const LIMITS = { fromReport: 5, commonForModel: 4, questions: 4 } as const;
+const LIMITS = { fromReport: 6, commonForModel: 4, questions: 4 } as const;
 
 /** Claims about this specific car have no business in the model-level list. */
 const VIN_CLAIM = /\b(this|the)\s+(vin|vehicle|car|truck|suv)\b/i;
@@ -186,11 +324,15 @@ const VIN_CLAIM = /\b(this|the)\s+(vin|vehicle|car|truck|suv)\b/i;
  * and exactly what the brief is for, and the earlier version of this threw
  * such a bullet away for containing the word "worth".
  */
-const PRICED_CLAIMS = [
+const VALUATION_CLAIMS = [
+  /\b(?:worth|market value|valued at|price of|resale value of|sells? for)\s+(?:about|around|roughly|approximately|some|up to|at least|over|under)?\s*\$?\d/i,
+  /\b(?:grade|score|rating)\s+(?:of\s+)?(?:[a-f]\b|\d)/i,
+];
+
+/** Dollar amounts that are not a valuation — listing totals belong in fromReport. */
+const AMOUNT_CLAIMS = [
   /\$\s?\d/,
   /\b\d[\d,]{2,}(?:\.\d+)?\s*(?:dollars|usd)\b/i,
-  /\b(?:worth|market value|valued at|price of|resale value of|sells for)\s+(?:about|around|roughly|approximately|some|up to|at least|over|under)?\s*\$?\d/i,
-  /\b(?:grade|score|rating)\s+(?:of\s+)?(?:[a-f]\b|\d)/i,
 ];
 
 function escapeRe(value: string): string {
@@ -273,13 +415,21 @@ export function pinCommonForModel(
   return `On the ${ymm}: ${bullet}`;
 }
 
-function bullets(value: unknown, limit: number): string[] {
+function bullets(
+  value: unknown,
+  limit: number,
+  options: { allowAmounts?: boolean } = {},
+): string[] {
   if (!Array.isArray(value)) return [];
   return value
     .filter((entry): entry is string => typeof entry === "string")
     .map((entry) => entry.trim().replace(/^[-•*]\s*/, ""))
     .filter((entry) => entry.length > 0 && entry.length <= MAX_BULLET_LENGTH)
-    .filter((entry) => !PRICED_CLAIMS.some((pattern) => pattern.test(entry)))
+    .filter((entry) => !VALUATION_CLAIMS.some((pattern) => pattern.test(entry)))
+    .filter(
+      (entry) =>
+        options.allowAmounts || !AMOUNT_CLAIMS.some((pattern) => pattern.test(entry)),
+    )
     .slice(0, limit);
 }
 
@@ -309,7 +459,9 @@ export function parseBrief(
   if (typeof parsed !== "object" || parsed === null) return null;
 
   const payload = parsed as Record<string, unknown>;
-  const fromReport = bullets(payload.fromReport, LIMITS.fromReport);
+  const fromReport = bullets(payload.fromReport, LIMITS.fromReport, {
+    allowAmounts: true,
+  });
   if (fromReport.length === 0) return null;
 
   const common = bullets(payload.commonForModel, LIMITS.commonForModel)

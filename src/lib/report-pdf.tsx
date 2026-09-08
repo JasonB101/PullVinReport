@@ -36,7 +36,6 @@ import type {
 } from "@/lib/report";
 import {
   currentEvent,
-  formatEventDate,
   hasOdometerRollback,
   reportChips,
   reportNavItems,
@@ -407,13 +406,20 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
   );
 }
 
-function Section({ section }: { section: ReportSection }) {
+function Section({
+  section,
+  odometerRollback = false,
+}: {
+  section: ReportSection;
+  odometerRollback?: boolean;
+}) {
   const listings =
     section.layout === "listings" ? sectionListingGroups(section) : null;
   const table = listings ? null : sectionTable(section);
   const width = table ? `${(100 / table.columns.length).toFixed(3)}%` : "100%";
   const wraps = section.records.length > KEEP_TOGETHER;
   const current = currentEvent(section);
+  const mileageIndex = table?.columns.indexOf("Mileage") ?? -1;
 
   return (
     // A short section moves to the next page whole rather than leaving its
@@ -422,7 +428,12 @@ function Section({ section }: { section: ReportSection }) {
     <View style={styles.section} wrap={wraps}>
       <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
-        <Text style={styles.sectionNote}>{section.description}</Text>
+        <Text style={styles.sectionNote}>
+          {section.description}
+          {odometerRollback
+            ? " A reading lower than an earlier one is a possible rollback."
+            : ""}
+        </Text>
         {current && (
           <Text style={styles.currentNote}>
             {current.label}: {current.fields.map((field) => field.value).join("  ·  ")}
@@ -459,11 +470,19 @@ function Section({ section }: { section: ReportSection }) {
                     key={cellIndex}
                     style={{
                       width,
-                      color: cellIndex === 0 ? INK : MUTED,
+                      color:
+                        cellIndex === 0
+                          ? INK
+                          : row.mileageUnchanged && cellIndex === mileageIndex
+                            ? FAINT
+                            : MUTED,
                       fontFamily: cellIndex === 0 ? "Helvetica-Bold" : "Helvetica",
                     }}
                   >
                     {cell || "—"}
+                    {cellIndex === mileageIndex && row.mileageUnchanged
+                      ? "  (unchanged)"
+                      : ""}
                   </Text>
                 ))}
               </View>
@@ -501,7 +520,7 @@ export function ReportDocument({
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
   const contents = reportNavItems(report).map((item) => item.label);
-  const odometer = [...report.odometer].reverse();
+  const odometerRollback = hasOdometerRollback(report.odometer);
 
   return (
     <Document
@@ -572,48 +591,12 @@ export function ReportDocument({
           </Text>
         </View>
 
-        {odometer.length > 0 && (
-          <View style={styles.section} wrap={odometer.length > KEEP_TOGETHER}>
-            <View minPresenceAhead={96} wrap={false}>
-              <Text style={styles.sectionTitle}>Odometer readings</Text>
-              <Text style={styles.sectionNote}>
-                Mileage as reported at each title event, newest first.
-                {hasOdometerRollback(report.odometer)
-                  ? " A reading lower than an earlier one is marked as a possible rollback."
-                  : ""}
-              </Text>
-            </View>
-            <View style={styles.table}>
-              <View style={styles.tableHead}>
-                <Text style={[styles.th, { width: "34%" }]}>DATE</Text>
-                <Text style={[styles.th, { width: "33%" }]}>READING</Text>
-                <Text style={[styles.th, { width: "33%" }]}>SOURCE</Text>
-              </View>
-              {odometer.map((reading, index) => {
-                const unchanged = odometer[index + 1]?.value === reading.value;
-                return (
-                  <View
-                    key={index}
-                    style={[styles.tableRow, styles.tableGroup]}
-                    wrap={false}
-                  >
-                    <Text style={{ width: "34%", fontFamily: "Helvetica-Bold" }}>
-                      {formatEventDate(reading.date)}
-                    </Text>
-                    <Text style={{ width: "33%", color: unchanged ? FAINT : INK }}>
-                      {reading.value.toLocaleString("en-US")} {reading.unit}
-                      {unchanged ? "  (unchanged)" : ""}
-                    </Text>
-                    <Text style={{ width: "33%", color: MUTED }}>{reading.source}</Text>
-                  </View>
-                );
-              })}
-            </View>
-          </View>
-        )}
-
         {sections.map((section) => (
-          <Section key={section.key} section={section} />
+          <Section
+            key={section.key}
+            section={section}
+            odometerRollback={section.key === "titles" && odometerRollback}
+          />
         ))}
 
         <View style={styles.footer} fixed>

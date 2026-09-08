@@ -67,7 +67,8 @@ describe("re-laying out a stored report", () => {
         assert.doesNotMatch(field.label, /unit/i);
       }
     }
-    assert.equal(titles.navLabel, "Titles");
+    assert.equal(titles.navLabel, "Titles & mileage");
+    assert.equal(titles.title, "Title, registration & mileage");
   });
 
   it("keeps saying when the report was generated, not when it was re-laid out", () => {

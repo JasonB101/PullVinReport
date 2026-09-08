@@ -31,6 +31,7 @@ export function buildSampleBrief(): VehicleBrief {
     fromReport: [
       "Five title records across Kentucky and Tennessee, with no salvage, junk or insurance-loss brand on any of them — the clean-title history that lenders and insurers price normally.",
       "Mileage rises steadily from 12 miles in 2012 to 121,477 in 2024, and the 2020 re-registration reported the same reading as 2019, which is normal for a car re-registered without being driven much.",
+      "Three August 2024 dealer and marketplace cards share the same $11,450 asking price around Nashville, which is usually one listing campaign rather than three sales; a February 2019 auction listing at $9,995 is a separate earlier sale.",
       "One minor rear-bumper damage record from November 2018 in Knoxville, with no airbag deployment reported; light damage like this is usually repaired without ever reaching a title brand, but the quality of the repair is only visible in person.",
       "A lien recorded in Kentucky in 2015 is shown as released in February 2019, meaning the loan behind it was settled and the seller should be able to hand over a clear title.",
       "One open recall campaign is listed for the air bag inflator, which a dealer is required to fix free of charge and which stays open until someone books it in.",
@@ -151,10 +152,10 @@ export function buildSampleReport(): VehicleReport {
     sections: [
       {
         key: "titles",
-        title: "Title & registration history",
-        navLabel: "Titles",
+        title: "Title, registration & mileage",
+        navLabel: "Titles & mileage",
         description:
-          "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
+          "Each title and registration event we found for this VIN, newest first, with the mileage reported at that event.",
         emptyLabel: "No title or registration events came back for this VIN.",
         columns: ["Date", "State", "Mileage", "Event", "Current"],
         // The provider reports the use on every event, so it is stated once.

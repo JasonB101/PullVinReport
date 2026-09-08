@@ -68,7 +68,22 @@ describe("what the brief is allowed to see", () => {
   it("leaves out categories that came back with nothing", () => {
     assert.deepEqual(
       facts.records.map((entry) => entry.section),
-      ["Title & registration history"],
+      ["Title, registration & mileage"],
+    );
+    assert.equal(facts.sales, null);
+  });
+
+  it("sends grouped sales listings, not a card dump, when the feed has them", () => {
+    const withSales = briefFacts(buildSampleReport());
+    assert.ok(withSales.sales);
+    assert.equal(withSales.sales.groups.length, 2);
+    assert.equal(withSales.sales.groups[0].listingCount, 3);
+    assert.equal(withSales.sales.groups[0].price, "$11,450.00");
+    assert.match(withSales.sales.patterns.join(" "), /3 listings share/);
+    assert.match(withSales.sales.patterns.join(" "), /auction and dealer/);
+    assert.equal(
+      withSales.records.some((entry) => /sales/i.test(entry.section)),
+      false,
     );
   });
 
@@ -132,6 +147,19 @@ describe("reading a brief out of a reply", () => {
       "test-model",
     );
     assert.deepEqual(brief?.fromReport, ["Clean title history."]);
+  });
+
+  it("lets fromReport cite a listing total that came from the records", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "Three dealer cards share the same $11,450 asking price, which is usually one listing campaign rather than three sales.",
+        ],
+      }),
+      "test-model",
+    );
+    assert.equal(brief?.fromReport.length, 1);
+    assert.match(brief?.fromReport[0] ?? "", /\$11,450/);
   });
 
   it("keeps a bullet that says what a record costs without naming a number", () => {
@@ -268,6 +296,8 @@ describe("generating a brief", () => {
     assert.match(system, /FACTS\.yearMakeModel/);
     assert.match(system, /Every bullet MUST name that full year, make and model/);
     assert.match(system, /Never name a sibling/);
+    assert.match(system, /FACTS\.sales/);
+    assert.match(system, /sales and listing story/);
   });
 
   it("sends no temperature, which current models reject outright", async () => {
@@ -436,6 +466,8 @@ describe("the sample's brief", () => {
 
     const brief = buildSampleBrief();
     assert.match(brief.fromReport.join(" "), /Five title records/);
+    assert.match(brief.fromReport.join(" "), /\$11,450/);
+    assert.match(brief.fromReport.join(" "), /listing campaign/);
     // The model-level notes must not read as findings about the sample car.
     for (const bullet of brief.commonForModel) {
       assert.doesNotMatch(bullet, /\bthis (vehicle|car|vin)\b/i);

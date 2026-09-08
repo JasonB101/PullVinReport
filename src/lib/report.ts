@@ -141,6 +141,8 @@ export type TableRow = {
   cells: string[];
   /** Fields that do not belong to a column, shown beneath the row. */
   extras: Field[];
+  /** True when this row's mileage matches the older row beneath it. */
+  mileageUnchanged?: boolean;
 };
 
 export type SectionTable = {
@@ -225,14 +227,27 @@ export function sectionTable(section: ReportSection): SectionTable | null {
     declared.length >= MIN_TABLE_COLUMNS ? declared : derivedColumns(section);
   if (columns.length < MIN_TABLE_COLUMNS) return null;
 
-  const rows = section.records.map((record) => ({
-    cells: columns.map(
+  const mileageIndex = columns.indexOf("Mileage");
+  const rows = section.records.map((record, index) => {
+    const cells = columns.map(
       (column) => record.find((field) => field.label === column)?.value ?? "",
-    ),
-    extras: record.filter(
-      (field) => !columns.includes(field.label) && field.value.length > 0,
-    ),
-  }));
+    );
+    const older = section.records[index + 1];
+    const olderMileage =
+      mileageIndex >= 0
+        ? (older?.find((field) => field.label === "Mileage")?.value ?? "")
+        : "";
+    return {
+      cells,
+      extras: record.filter(
+        (field) => !columns.includes(field.label) && field.value.length > 0,
+      ),
+      mileageUnchanged:
+        mileageIndex >= 0 &&
+        cells[mileageIndex].length > 0 &&
+        cells[mileageIndex] === olderMileage,
+    };
+  });
 
   return { columns, rows };
 }
@@ -591,9 +606,6 @@ export function reportNavItems(
   const items: ReportNavItem[] = [];
   if (options.hasBrief) items.push({ href: "#brief", label: "What to know" });
   items.push({ href: "#summary", label: "Summary" });
-  if (report.odometer.length > 0) {
-    items.push({ href: "#odometer", label: "Odometer" });
-  }
   for (const section of report.sections) {
     if (section.records.length === 0) continue;
     items.push({

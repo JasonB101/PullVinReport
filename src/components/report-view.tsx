@@ -15,7 +15,6 @@ import type {
 import {
   LEAD_FIELDS,
   currentEvent,
-  formatEventDate,
   hasOdometerRollback,
   reportChips,
   reportNavItems,
@@ -157,7 +156,7 @@ function RecordCard({ fields }: { fields: Field[] }) {
  * the default on nearly every row, so it stays quiet text instead of adding a
  * column of identical chips.
  */
-function Cell({ value }: { value: string }) {
+function Cell({ value, note }: { value: string; note?: string }) {
   if (value === "Yes") {
     return (
       <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
@@ -166,7 +165,12 @@ function Cell({ value }: { value: string }) {
     );
   }
   if (value === "No") return <span className="text-slate-400">No</span>;
-  return <>{value || "—"}</>;
+  return (
+    <>
+      {value || "—"}
+      {note && <span className="ml-1.5 text-xs font-normal text-slate-400">{note}</span>}
+    </>
+  );
 }
 
 /** Fields the provider repeated on every record, stated once for the section. */
@@ -188,6 +192,8 @@ function SharedFields({ fields, count }: { fields: Field[]; count: number }) {
 }
 
 function RecordTable({ table }: { table: SectionTable }) {
+  const mileageIndex = table.columns.indexOf("Mileage");
+
   return (
     <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full border-collapse text-left text-sm">
@@ -215,10 +221,19 @@ function RecordTable({ table }: { table: SectionTable }) {
                   } ${
                     cellIndex === 0
                       ? "whitespace-nowrap font-medium text-slate-900"
-                      : "text-slate-700"
+                      : row.mileageUnchanged && cellIndex === mileageIndex
+                        ? "text-slate-400"
+                        : "text-slate-700"
                   }`}
                 >
-                  <Cell value={cell} />
+                  <Cell
+                    value={cell}
+                    note={
+                      cellIndex === mileageIndex && row.mileageUnchanged
+                        ? "unchanged"
+                        : undefined
+                    }
+                  />
                 </td>
               ))}
             </tr>
@@ -356,7 +371,13 @@ function ListingGroupCard({ group }: { group: ListingGroup }) {
   );
 }
 
-function SectionBlock({ section }: { section: ReportSection }) {
+function SectionBlock({
+  section,
+  odometerRollback = false,
+}: {
+  section: ReportSection;
+  odometerRollback?: boolean;
+}) {
   const listings =
     section.layout === "listings" ? sectionListingGroups(section) : null;
   const table = listings ? null : sectionTable(section);
@@ -371,10 +392,17 @@ function SectionBlock({ section }: { section: ReportSection }) {
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
           {section.title}
         </h3>
-        <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
-          {section.records.length} record
-          {section.records.length === 1 ? "" : "s"}
-        </span>
+        <div className="flex flex-wrap items-center gap-2">
+          {odometerRollback && (
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-medium text-amber-800">
+              Possible rollback
+            </span>
+          )}
+          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
+            {section.records.length} record
+            {section.records.length === 1 ? "" : "s"}
+          </span>
+        </div>
       </div>
       <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">
         {section.description}
@@ -406,77 +434,6 @@ function SectionBlock({ section }: { section: ReportSection }) {
           ))}
         </div>
       )}
-    </section>
-  );
-}
-
-/**
- * Mileage as reported, one line per dated event.
- *
- * No bar chart: three registrations at the same mileage drew three identical
- * bars, which made a real history look like a copy-paste. A repeat is marked as
- * unchanged instead, and the reading itself is what the eye lands on.
- */
-function Odometer({ report }: { report: VehicleReport }) {
-  if (report.odometer.length === 0) return null;
-  const rollback = hasOdometerRollback(report.odometer);
-  const newestFirst = [...report.odometer].reverse();
-
-  return (
-    <section
-      id="odometer"
-      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <h3 className="text-base font-semibold tracking-tight text-slate-900">
-          Odometer readings
-        </h3>
-        <span
-          className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-            rollback
-              ? "bg-amber-100 text-amber-800"
-              : "bg-emerald-100 text-emerald-800"
-          }`}
-        >
-          {rollback ? "Possible rollback" : "Consistent progression"}
-        </span>
-      </div>
-      <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">
-        Mileage as reported at each title event, newest first.
-      </p>
-
-      <ul className="mt-4 divide-y divide-slate-100">
-        {newestFirst.map((reading, index) => {
-          const older = newestFirst[index + 1];
-          const unchanged = older?.value === reading.value;
-          return (
-            <li
-              key={`${reading.date}-${index}`}
-              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
-            >
-              <span className="w-28 shrink-0 text-xs text-slate-500">
-                {formatEventDate(reading.date)}
-              </span>
-              <span
-                className={`text-base font-semibold tabular-nums ${
-                  unchanged ? "text-slate-400" : "text-slate-900"
-                }`}
-              >
-                {reading.value.toLocaleString("en-US")}
-                <span className="ml-1 text-xs font-normal text-slate-400">
-                  {reading.unit}
-                </span>
-              </span>
-              {unchanged && (
-                <span className="text-xs text-slate-400">unchanged</span>
-              )}
-              <span className="ml-auto text-xs text-slate-500">
-                {reading.source}
-              </span>
-            </li>
-          );
-        })}
-      </ul>
     </section>
   );
 }
@@ -669,10 +626,14 @@ export function ReportView({
         </p>
       </section>
 
-      <Odometer report={report} />
-
       {sections.map((section) => (
-        <SectionBlock key={section.key} section={section} />
+        <SectionBlock
+          key={section.key}
+          section={section}
+          odometerRollback={
+            section.key === "titles" && hasOdometerRollback(report.odometer)
+          }
+        />
       ))}
 
       <p className="px-1 text-xs leading-relaxed text-slate-500">
