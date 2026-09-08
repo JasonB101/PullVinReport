@@ -157,6 +157,9 @@ const MAX_COLUMN_VALUE = 28;
 /** How many columns a derived table may reach before it is a dump again. */
 const MAX_DERIVED_COLUMNS = 4;
 
+/** How much of a record with no table to hang off is worth stating up front. */
+export const LEAD_FIELDS = 4;
+
 function hasValue(section: ReportSection, label: string): boolean {
   return section.records.some((record) =>
     record.some((field) => field.label === label && field.value.length > 0),
@@ -534,6 +537,12 @@ export function searchedAndEmpty(report: VehicleReport): string[] {
  *
  * Nothing new is derived: it is the record the provider flagged as current,
  * minus the flag itself.
+ *
+ * It says exactly what the row below it says — the table's own columns and no
+ * more. Written from every field the record held, this line was where a
+ * 17-digit title number and a claim code re-entered a report that had just
+ * finished putting them behind a disclosure, and it read the event out twice
+ * when two fields happened to agree.
  */
 export function currentEvent(
   section: ReportSection,
@@ -543,11 +552,49 @@ export function currentEvent(
   );
   if (!record) return null;
 
-  const fields = record.filter((field) => field.label !== "Current");
+  const columns = sectionTable(section)?.columns;
+  const scannable = columns
+    ? record.filter((field) => columns.includes(field.label))
+    : record.slice(0, LEAD_FIELDS);
+
+  const seen = new Set<string>();
+  const fields = scannable.filter((field) => {
+    if (field.label === "Current" || field.value.length === 0) return false;
+    if (seen.has(field.value)) return false;
+    seen.add(field.value);
+    return true;
+  });
   if (fields.length === 0) return null;
 
   return {
     label: section.key === "titles" ? "Current title" : "Current record",
     fields,
   };
+}
+
+/** Specs worth stating on the vehicle card before anyone opens the rest. */
+const HEADER_SPEC_LABELS = [
+  "Style",
+  "Engine",
+  "Drive type",
+  "Drivetrain",
+  "Fuel type",
+  "Transmission",
+];
+
+/**
+ * The two or three facts that belong next to the year, make and model.
+ *
+ * Everything else lives behind the header's disclosure — a twelve-row spec
+ * grid at the bottom of the report was a second place to look for the engine
+ * that the heading had already named the car by.
+ */
+export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {
+  const picked: Field[] = [];
+  for (const label of HEADER_SPEC_LABELS) {
+    if (picked.length === limit) break;
+    const spec = specifications.find((entry) => entry.label === label);
+    if (spec) picked.push(spec);
+  }
+  return picked.length > 0 ? picked : specifications.slice(0, limit);
 }

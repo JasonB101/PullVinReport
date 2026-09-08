@@ -11,7 +11,9 @@ import type {
   VehicleReport,
 } from "@/lib/report";
 import {
+  LEAD_FIELDS,
   currentEvent,
+  headerSpecSummary,
   formatEventDate,
   hasOdometerRollback,
   reportChips,
@@ -23,9 +25,6 @@ import {
   vehicleTitle,
 } from "@/lib/report";
 import { prettyVin } from "@/lib/vin";
-
-/** How much of a shapeless record is worth showing before anyone asks. */
-const LEAD_FIELDS = 4;
 
 function formatDateTime(iso: string): string {
   const date = new Date(iso);
@@ -427,20 +426,45 @@ function Odometer({ report }: { report: VehicleReport }) {
   );
 }
 
-function SpecGrid({ specifications }: { specifications: Field[] }) {
+/**
+ * Specs on the vehicle card, folded away.
+ *
+ * A twelve-row grid at the bottom of the report was a second place to look
+ * for the engine the heading had already named the car by. Three facts sit
+ * next to the year and make; the rest of the build record is a keystroke
+ * down. The jump-nav still lands here — the id moved with the section.
+ */
+function HeaderSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
+  const lead = headerSpecSummary(specifications);
+  const folded = specifications.length - lead.length;
+
   return (
-    <section
+    <details
       id="specifications"
-      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+      className="scroll-mt-32 border-t border-slate-200 bg-white px-5 py-4 sm:px-7"
     >
-      <h3 className="text-base font-semibold tracking-tight text-slate-900">
-        Vehicle specifications
-      </h3>
-      <p className="mt-1.5 text-sm text-slate-500">
+      <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 [&::-webkit-details-marker]:hidden">
+        <span className="text-sm font-semibold text-slate-900">
+          Vehicle specifications
+        </span>
+        {lead.map((spec, index) => (
+          <span key={`${spec.label}-${index}`} className="text-xs text-slate-500">
+            {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
+            <span className="text-slate-400">{spec.label}: </span>
+            <span className="text-slate-700">{spec.value}</span>
+          </span>
+        ))}
+        {folded > 0 && (
+          <span className="ml-auto text-xs">
+            <MoreHint count={folded} />
+          </span>
+        )}
+      </summary>
+      <p className="mt-3 text-xs text-slate-500">
         Decoded from the VIN and the manufacturer&apos;s build record.
       </p>
-      <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+      <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {specifications.map((spec, index) => (
           <div key={`${spec.label}-${index}`} className="border-t border-slate-100 pt-3">
             <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
@@ -450,7 +474,7 @@ function SpecGrid({ specifications }: { specifications: Field[] }) {
           </div>
         ))}
       </dl>
-    </section>
+    </details>
   );
 }
 
@@ -552,6 +576,8 @@ export function ReportView({
             {report.headline}
           </p>
         </div>
+
+        <HeaderSpecs specifications={report.specifications} />
       </header>
 
       <JumpNav report={report} hasBrief={Boolean(brief || briefToken)} />
@@ -605,8 +631,6 @@ export function ReportView({
       {sections.map((section) => (
         <SectionBlock key={section.key} section={section} />
       ))}
-
-      <SpecGrid specifications={report.specifications} />
 
       <p className="px-1 text-xs leading-relaxed text-slate-500">
         {report.isSample

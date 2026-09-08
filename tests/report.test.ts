@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
 import {
   currentEvent,
+  headerSpecSummary,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
@@ -403,6 +404,53 @@ describe("the record in force", () => {
     assert.equal(
       currentEvent(section({ records: [[{ label: "State", value: "TN" }]] })),
       null,
+    );
+  });
+
+  it("does not put a title number or a claim code back on the line above the table", () => {
+    const current = currentEvent(
+      section({
+        columns: ["Date", "State", "Mileage", "Event", "Current"],
+        records: [
+          [
+            { label: "Date", value: "May 11, 2026" },
+            { label: "State", value: "TX" },
+            { label: "Mileage", value: "146,820 mi" },
+            { label: "Event", value: "Salvage" },
+            { label: "Current", value: "Yes" },
+            { label: "Title number", value: "12345678901234567" },
+            { label: "Standard claim", value: "Salvage" },
+          ],
+        ],
+      }),
+    );
+
+    assert.deepEqual(
+      current?.fields.map((field) => field.label),
+      ["Date", "State", "Mileage", "Event"],
+    );
+    assert.equal(
+      current?.fields.some((field) => field.value === "12345678901234567"),
+      false,
+    );
+  });
+});
+
+describe("the specs on the vehicle card", () => {
+  it("picks engine and body before a long tail of build-record leftovers", () => {
+    assert.deepEqual(
+      headerSpecSummary([
+        { label: "Anti-brake system", value: "4-Wheel ABS" },
+        { label: "Engine", value: "2.5L L4" },
+        { label: "Style", value: "4 Door Sedan" },
+        { label: "Standard seating", value: "5" },
+        { label: "Fuel type", value: "Gasoline" },
+      ]),
+      [
+        { label: "Style", value: "4 Door Sedan" },
+        { label: "Engine", value: "2.5L L4" },
+        { label: "Fuel type", value: "Gasoline" },
+      ],
     );
   });
 });
