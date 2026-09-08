@@ -13,7 +13,6 @@ import type {
 import {
   LEAD_FIELDS,
   currentEvent,
-  headerSpecSummary,
   formatEventDate,
   hasOdometerRollback,
   reportChips,
@@ -427,39 +426,22 @@ function Odometer({ report }: { report: VehicleReport }) {
 }
 
 /**
- * Specs on the vehicle card, folded away.
+ * Specs on the vehicle card, closed until asked for.
  *
- * A twelve-row grid at the bottom of the report was a second place to look
- * for the engine the heading had already named the car by. Three facts sit
- * next to the year and make; the rest of the build record is a keystroke
- * down. The jump-nav still lands here — the id moved with the section.
+ * The card already states the year, make, model and the status chips. The
+ * engine, drivetrain, fuel and trim sit behind this disclosure so they stop
+ * being a second section at the bottom of the report. Print opens it.
  */
 function HeaderSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
-  const lead = headerSpecSummary(specifications);
-  const folded = specifications.length - lead.length;
 
   return (
-    <details
-      id="specifications"
-      className="scroll-mt-32 border-t border-slate-200 bg-white px-5 py-4 sm:px-7"
-    >
-      <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 [&::-webkit-details-marker]:hidden">
-        <span className="text-sm font-semibold text-slate-900">
+    <details className="border-t border-slate-200 bg-white px-5 py-4 sm:px-7">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-sm [&::-webkit-details-marker]:hidden">
+        <span className="font-semibold text-slate-900">
           Vehicle specifications
         </span>
-        {lead.map((spec, index) => (
-          <span key={`${spec.label}-${index}`} className="text-xs text-slate-500">
-            {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
-            <span className="text-slate-400">{spec.label}: </span>
-            <span className="text-slate-700">{spec.value}</span>
-          </span>
-        ))}
-        {folded > 0 && (
-          <span className="ml-auto text-xs">
-            <MoreHint count={folded} />
-          </span>
-        )}
+        <MoreHint count={specifications.length} />
       </summary>
       <p className="mt-3 text-xs text-slate-500">
         Decoded from the VIN and the manufacturer&apos;s build record.

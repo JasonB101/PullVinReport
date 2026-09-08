@@ -189,8 +189,9 @@ const styles = StyleSheet.create({
   listingSummary: { marginTop: 3 },
   listingDetail: { color: MUTED, fontSize: 7, marginTop: 4 },
 
-  specGrid: { flexDirection: "row", flexWrap: "wrap" },
-  spec: { width: "33.3%", paddingRight: 10, marginBottom: 8 },
+  headerSpecs: { marginTop: 10 },
+  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
+  spec: { width: "33.3%", paddingRight: 10, marginBottom: 6 },
   specLabel: { fontSize: 7, color: FAINT, textTransform: "uppercase", letterSpacing: 0.6 },
 
   footer: {
@@ -459,7 +460,19 @@ export function ReportDocument({
         <Text style={styles.vehicle}>{title}</Text>
         <Text style={styles.vin}>{prettyVin(report.vin)}</Text>
         <Chips report={report} />
-        {/* The kicker above says whether these are live or sample records. */}
+        {report.specifications.length > 0 && (
+          <View style={styles.headerSpecs} wrap={false}>
+            <Text style={styles.metaLabel}>Specifications</Text>
+            <View style={styles.specGrid}>
+              {report.specifications.map((spec, index) => (
+                <View key={`${spec.label}-${index}`} style={styles.spec}>
+                  <Text style={styles.specLabel}>{spec.label}</Text>
+                  <Text>{spec.value}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+        )}
         <View style={styles.metaRow}>
           <Meta label="Generated" value={`${generated} UTC`} />
         </View>
@@ -541,25 +554,6 @@ export function ReportDocument({
         {sections.map((section) => (
           <Section key={section.key} section={section} />
         ))}
-
-        {report.specifications.length > 0 && (
-          <View style={styles.section} wrap={false}>
-            <View minPresenceAhead={96} wrap={false}>
-              <Text style={styles.sectionTitle}>Vehicle specifications</Text>
-              <Text style={styles.sectionNote}>
-                Decoded from the VIN and the manufacturer&apos;s build record.
-              </Text>
-            </View>
-            <View style={styles.specGrid}>
-              {report.specifications.map((spec, index) => (
-                <View key={`${spec.label}-${index}`} style={styles.spec}>
-                  <Text style={styles.specLabel}>{spec.label}</Text>
-                  <Text>{spec.value}</Text>
-                </View>
-              ))}
-            </View>
-          </View>
-        )}
 
         <View style={styles.footer} fixed>
           <Text>

@@ -509,9 +509,6 @@ export function reportNavItems(
       label: section.navLabel ?? section.title,
     });
   }
-  if (report.specifications.length > 0) {
-    items.push({ href: "#specifications", label: "Specifications" });
-  }
   return items;
 }
 

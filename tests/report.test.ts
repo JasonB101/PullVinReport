@@ -546,6 +546,21 @@ describe("the header of a report", () => {
     );
   });
 
+  it("does not put specifications in the outline — they live on the vehicle card", () => {
+    const items = reportNavItems(
+      report({
+        specifications: [
+          { label: "Engine", value: "2.5L L4" },
+          { label: "Fuel type", value: "Gasoline" },
+        ],
+      }),
+    );
+    assert.equal(
+      items.some((item) => /spec/i.test(item.label) || item.href === "#specifications"),
+      false,
+    );
+  });
+
   it("drops the odometer from the outline when no reading came back", () => {
     const items = reportNavItems(report({ odometer: [] }));
     assert.equal(
