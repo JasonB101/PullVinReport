@@ -83,9 +83,9 @@ describe("provider report normalization", () => {
 
   it("folds the odometer and its unit code into one readable value", () => {
     const odometer = titles.records[0].find(
-      (field) => field.label === "Odometer",
+      (field) => field.label === "Mileage",
     );
-    assert.deepEqual(odometer, { label: "Odometer", value: "121,477 mi" });
+    assert.deepEqual(odometer, { label: "Mileage", value: "121,477 mi" });
   });
 
   it("reads flags as Yes and No rather than true and false", () => {
@@ -110,7 +110,7 @@ describe("provider report normalization", () => {
   it("lays titles out as a table of the fields that matter", () => {
     const table = sectionTable(titles);
     assert.ok(table);
-    assert.deepEqual(table.columns, ["Date", "State", "Odometer", "Current"]);
+    assert.deepEqual(table.columns, ["Date", "State", "Mileage", "Current"]);
     assert.deepEqual(table.rows[0].cells, [
       "Sep 27, 2024",
       "TN",

@@ -52,12 +52,12 @@ describe("section tables", () => {
   it("lays records out against the columns that are actually filled in", () => {
     const table = sectionTable(
       section({
-        columns: ["Date", "State", "Odometer", "Current"],
+        columns: ["Date", "State", "Mileage", "Current"],
         records: [
           [
             { label: "Date", value: "Sep 27, 2024" },
             { label: "State", value: "TN" },
-            { label: "Odometer", value: "121,477 mi" },
+            { label: "Mileage", value: "121,477 mi" },
             { label: "Current", value: "Yes" },
             { label: "Vehicle use", value: "Personal" },
           ],
@@ -67,7 +67,7 @@ describe("section tables", () => {
 
     assert.ok(table);
     // "Current" is filled in, so it stays; every column here has a value.
-    assert.deepEqual(table.columns, ["Date", "State", "Odometer", "Current"]);
+    assert.deepEqual(table.columns, ["Date", "State", "Mileage", "Current"]);
     assert.deepEqual(table.rows[0].cells, [
       "Sep 27, 2024",
       "TN",
@@ -82,7 +82,7 @@ describe("section tables", () => {
   it("drops a column no record filled in rather than printing dashes", () => {
     const table = sectionTable(
       section({
-        columns: ["Date", "State", "Odometer", "Current"],
+        columns: ["Date", "State", "Mileage", "Current"],
         records: [
           [
             { label: "Date", value: "Sep 27, 2024" },
@@ -145,11 +145,11 @@ describe("de-duplication", () => {
       dedupeConsecutiveRecords([
         [
           { label: "Date", value: "Sep 27, 2024" },
-          { label: "Odometer", value: "121,477 mi" },
+          { label: "Mileage", value: "121,477 mi" },
         ],
         [
           { label: "Date", value: "Sep 27, 2024" },
-          { label: "Odometer", value: "121,480 mi" },
+          { label: "Mileage", value: "121,480 mi" },
         ],
       ]).length,
       2,

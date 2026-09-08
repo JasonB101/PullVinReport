@@ -76,7 +76,7 @@ const KEY_LABELS: Record<string, string> = {
   vin: "VIN",
   jsi: "Junk, salvage & insurance",
   meterunit: "Odometer unit",
-  meter: "Odometer",
+  meter: "Mileage",
   titletype: "Event",
   transactiontype: "Event",
   transaction: "Event",
@@ -167,7 +167,9 @@ function toFields(record: Record<string, unknown>): Field[] {
     if (HIDDEN_KEYS.has(lower) || ODOMETER_UNIT_KEYS.has(lower)) continue;
 
     if (ODOMETER_KEYS.has(lower)) {
-      addField(fields, "Odometer", formatOdometer(value, unit));
+      // One column for the reading, whichever of meter/odometer/mileage the
+      // feed used, with its unit already folded in.
+      addField(fields, "Mileage", formatOdometer(value, unit));
       continue;
     }
 
@@ -436,7 +438,7 @@ export function normalizeVinAuditReport(
         description:
           "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
         emptyLabel: "No title or registration events came back for this VIN.",
-        columns: ["Date", "State", "Odometer", "Event", "Brand", "Current"],
+        columns: ["Date", "State", "Mileage", "Event", "Brand", "Current"],
       },
       titles,
     ),
@@ -459,7 +461,7 @@ export function normalizeVinAuditReport(
         navLabel: "Accidents",
         description: "Reported collision and damage events.",
         emptyLabel: "No accident or damage records came back.",
-        columns: ["Date", "State", "City", "Severity", "Damage", "Odometer"],
+        columns: ["Date", "State", "City", "Severity", "Damage", "Mileage"],
       },
       accidents,
     ),
@@ -515,7 +517,7 @@ export function normalizeVinAuditReport(
         description:
           "Prior retail and auction listings, including asking prices where available.",
         emptyLabel: "No prior sales listings came back.",
-        columns: ["Date", "Price", "Odometer", "Seller type", "City", "State"],
+        columns: ["Date", "Price", "Mileage", "Seller type", "City", "State"],
       },
       sales,
     ),

@@ -156,42 +156,42 @@ export function buildSampleReport(): VehicleReport {
         description:
           "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
         emptyLabel: "No title or registration events came back for this VIN.",
-        columns: ["Date", "State", "Odometer", "Event", "Current"],
+        columns: ["Date", "State", "Mileage", "Event", "Current"],
         // The provider reports the use on every event, so it is stated once.
         shared: [{ label: "Vehicle use", value: "Personal" }],
         records: [
           [
             { label: "Date", value: "Sep 27, 2024" },
             { label: "State", value: "TN" },
-            { label: "Odometer", value: "121,477 mi" },
+            { label: "Mileage", value: "121,477 mi" },
             { label: "Event", value: "Title transfer" },
             { label: "Current", value: "Yes" },
           ],
           [
             { label: "Date", value: "Apr 2, 2020" },
             { label: "State", value: "TN" },
-            { label: "Odometer", value: "78,930 mi" },
+            { label: "Mileage", value: "78,930 mi" },
             { label: "Event", value: "Registration renewal" },
             { label: "Current", value: "No" },
           ],
           [
             { label: "Date", value: "Mar 8, 2019" },
             { label: "State", value: "TN" },
-            { label: "Odometer", value: "78,930 mi" },
+            { label: "Mileage", value: "78,930 mi" },
             { label: "Event", value: "Title transfer" },
             { label: "Current", value: "No" },
           ],
           [
             { label: "Date", value: "Jun 19, 2015" },
             { label: "State", value: "KY" },
-            { label: "Odometer", value: "41,204 mi" },
+            { label: "Mileage", value: "41,204 mi" },
             { label: "Event", value: "Title transfer" },
             { label: "Current", value: "No" },
           ],
           [
             { label: "Date", value: "Apr 2, 2012" },
             { label: "State", value: "KY" },
-            { label: "Odometer", value: "12 mi" },
+            { label: "Mileage", value: "12 mi" },
             { label: "Event", value: "First title issued" },
             { label: "Current", value: "No" },
           ],
@@ -248,12 +248,12 @@ export function buildSampleReport(): VehicleReport {
         description:
           "Prior retail and auction listings, including asking prices where available.",
         emptyLabel: "No prior sales listings came back.",
-        columns: ["Date", "Price", "Odometer", "Seller type", "City", "State"],
+        columns: ["Date", "Price", "Mileage", "Seller type", "City", "State"],
         records: [
           [
             { label: "Date", value: "Aug 14, 2024" },
             { label: "Price", value: "$11,450" },
-            { label: "Odometer", value: "120,880 mi" },
+            { label: "Mileage", value: "120,880 mi" },
             { label: "Seller type", value: "Franchise dealer" },
             { label: "City", value: "Nashville" },
             { label: "State", value: "TN" },
@@ -261,7 +261,7 @@ export function buildSampleReport(): VehicleReport {
           [
             { label: "Date", value: "Feb 22, 2019" },
             { label: "Price", value: "$9,995" },
-            { label: "Odometer", value: "78,120 mi" },
+            { label: "Mileage", value: "78,120 mi" },
             { label: "Seller type", value: "Independent dealer" },
             { label: "City", value: "Bowling Green" },
             { label: "State", value: "KY" },
