@@ -12,6 +12,7 @@ import {
 import { isAdminConfigured } from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
 import { fulfillOrder } from "@/lib/fulfillment";
+import { briefForOrder } from "@/lib/order-brief";
 import { headers } from "next/headers";
 
 import { rateLimit } from "@/lib/rate-limit";
@@ -104,6 +105,32 @@ export async function resendEmailAction(
     return { message: `Re-sent to ${order.email}.` };
   }
   return { error: result.detail };
+}
+
+/**
+ * Writes the buyer's brief again for one order.
+ *
+ * The only way to spend tokens on a report twice: a page view always reuses the
+ * cached brief, so a wording problem or a model change is fixed from here.
+ */
+export async function rewriteBriefAction(
+  _previous: RetryState,
+  formData: FormData,
+): Promise<RetryState> {
+  if (!(await isAdminAuthenticated())) {
+    return { error: "Your session expired. Sign in again." };
+  }
+
+  const orderId = String(formData.get("orderId") ?? "");
+  const store = getStore();
+  const order = await store.getById(orderId);
+  if (!order) return { error: "Order not found." };
+
+  const outcome = await briefForOrder(order, { refresh: true });
+  revalidatePath("/admin");
+  return outcome.status === "ready"
+    ? { message: `Brief rewritten by ${outcome.brief.model}.` }
+    : { error: `No brief: ${outcome.reason}.` };
 }
 
 /**

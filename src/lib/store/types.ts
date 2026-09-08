@@ -1,3 +1,4 @@
+import type { VehicleBrief } from "@/lib/ai-brief";
 import type { VehicleReport } from "@/lib/report";
 
 export type OrderStatus =
@@ -27,6 +28,9 @@ export type Order = {
   stripePaymentIntentId: string | null;
   report: VehicleReport | null;
   providerError: string | null;
+  /** Cached buyer brief, written once so reopening the report costs nothing. */
+  aiBrief: VehicleBrief | null;
+  aiBriefGeneratedAt: string | null;
   fulfilledAt: string | null;
   emailSentAt: string | null;
   /** Set once the charge has been sent back to the customer. */
@@ -50,6 +54,8 @@ export type OrderPatch = Partial<
     | "stripePaymentIntentId"
     | "report"
     | "providerError"
+    | "aiBrief"
+    | "aiBriefGeneratedAt"
     | "fulfilledAt"
     | "emailSentAt"
     | "refundedAt"

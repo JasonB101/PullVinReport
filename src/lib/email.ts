@@ -133,7 +133,10 @@ async function reportAttachment(
 ): Promise<{ attachment?: ReportAttachment; detail: string }> {
   if (!order.report) return { detail: "no report to attach" };
   try {
-    const content = await renderReportPdf(withCurrentLayout(order.report));
+    const content = await renderReportPdf(
+      withCurrentLayout(order.report),
+      order.aiBrief,
+    );
     return {
       attachment: {
         filename: reportPdfFilename(order.vin),

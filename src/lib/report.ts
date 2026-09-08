@@ -327,8 +327,13 @@ export function reportChips(report: VehicleReport): ReportChip[] {
 export type ReportNavItem = { href: string; label: string };
 
 /** Outline of the report, listing only the parts that came back with content. */
-export function reportNavItems(report: VehicleReport): ReportNavItem[] {
-  const items: ReportNavItem[] = [{ href: "#summary", label: "Summary" }];
+export function reportNavItems(
+  report: VehicleReport,
+  options: { hasBrief?: boolean } = {},
+): ReportNavItem[] {
+  const items: ReportNavItem[] = [];
+  if (options.hasBrief) items.push({ href: "#brief", label: "What to know" });
+  items.push({ href: "#summary", label: "Summary" });
   if (report.odometer.length > 0) {
     items.push({ href: "#odometer", label: "Odometer" });
   }

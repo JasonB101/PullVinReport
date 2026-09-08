@@ -3,7 +3,7 @@ import { describe, it } from "node:test";
 
 import { sendReportEmail } from "@/lib/email";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
-import { buildSampleReport } from "@/lib/sample-report";
+import { buildSampleBrief, buildSampleReport } from "@/lib/sample-report";
 import type { Order } from "@/lib/store";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -59,6 +59,19 @@ describe("report PDF", () => {
   it("renders the sample too, so the layout cannot rot unnoticed", async () => {
     const pdf = await renderReportPdf(buildSampleReport());
     assert.equal(pdf.subarray(0, 5).toString("latin1"), "%PDF-");
+  });
+
+  it("carries the written brief into the forwarded copy", async () => {
+    const withBrief = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+    );
+    const withoutBrief = await renderReportPdf(buildSampleReport());
+    assert.equal(withBrief.subarray(0, 5).toString("latin1"), "%PDF-");
+    assert.ok(
+      withBrief.byteLength > withoutBrief.byteLength,
+      "the brief should add content, not vanish",
+    );
   });
 });
 

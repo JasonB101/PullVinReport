@@ -1,3 +1,5 @@
+import { AiBrief } from "@/components/ai-brief";
+import type { VehicleBrief } from "@/lib/ai-brief";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
@@ -341,8 +343,14 @@ function SpecGrid({ specifications }: { specifications: Field[] }) {
 }
 
 /** Outline of the report. Only parts that came back with something are listed. */
-function JumpNav({ report }: { report: VehicleReport }) {
-  const items = reportNavItems(report);
+function JumpNav({
+  report,
+  hasBrief,
+}: {
+  report: VehicleReport;
+  hasBrief: boolean;
+}) {
+  const items = reportNavItems(report, { hasBrief });
   if (items.length < 2) return null;
 
   return (
@@ -368,7 +376,17 @@ function JumpNav({ report }: { report: VehicleReport }) {
 
 /* -------------------------------------------------------------------------- */
 
-export function ReportView({ report }: { report: VehicleReport }) {
+export function ReportView({
+  report,
+  brief = null,
+  briefToken,
+}: {
+  report: VehicleReport;
+  /** A brief already written for this report, if there is one. */
+  brief?: VehicleBrief | null;
+  /** Access token, given only when a missing brief may be requested. */
+  briefToken?: string;
+}) {
   const chips = reportChips(report);
   const flags = report.checks.filter((check) => check.status === "found");
   const clear = searchedAndEmpty(report);
@@ -424,7 +442,9 @@ export function ReportView({ report }: { report: VehicleReport }) {
         </div>
       </header>
 
-      <JumpNav report={report} />
+      <JumpNav report={report} hasBrief={Boolean(brief || briefToken)} />
+
+      <AiBrief brief={brief} token={briefToken} />
 
       <section
         id="summary"

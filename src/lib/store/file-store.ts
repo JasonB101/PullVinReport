@@ -84,6 +84,8 @@ export class FileOrderStore implements OrderStore {
       stripePaymentIntentId: null,
       report: null,
       providerError: null,
+      aiBrief: null,
+      aiBriefGeneratedAt: null,
       fulfilledAt: null,
       emailSentAt: null,
       refundedAt: null,

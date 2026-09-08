@@ -18,6 +18,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 
+import type { VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type { Field, ReportCheck, ReportSection, VehicleReport } from "@/lib/report";
@@ -97,6 +98,30 @@ const styles = StyleSheet.create({
   sharedNote: { color: FAINT, fontSize: 7.5, marginBottom: 6, lineHeight: 1.3 },
   currentNote: { marginBottom: 6, lineHeight: 1.3 },
   clearNote: { color: MUTED, marginTop: 8, lineHeight: 1.4 },
+  briefHeading: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 7,
+    letterSpacing: 0.6,
+    color: MUTED,
+    marginTop: 6,
+    marginBottom: 3,
+  },
+  bullet: { marginBottom: 3, lineHeight: 1.35, paddingLeft: 4 },
+  briefAside: {
+    marginTop: 8,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    padding: 8,
+  },
+  briefAsideHeading: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 7,
+    letterSpacing: 0.6,
+    color: "#92400e",
+    marginBottom: 4,
+  },
   caveat: { color: FAINT, fontSize: 7.5, marginTop: 4, lineHeight: 1.3 },
 
   checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
@@ -208,6 +233,57 @@ function Flags({ checks }: { checks: ReportCheck[] }) {
   );
 }
 
+/**
+ * The written brief, carried into the forwarded copy.
+ *
+ * The heading on the model-level list carries its own disclaimer, exactly as on
+ * the web report: a PDF gets forwarded to people who never saw the page, and a
+ * tendency of the model must not read as a finding about the car.
+ */
+function Brief({ brief }: { brief: VehicleBrief }) {
+  return (
+    <View style={styles.section} wrap>
+      <View minPresenceAhead={96}>
+        <Text style={styles.sectionTitle}>What to know</Text>
+        <Text style={styles.sectionNote}>
+          Written automatically from the records in this report.
+        </Text>
+      </View>
+
+      <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
+      {brief.fromReport.map((item, index) => (
+        <Text key={index} style={styles.bullet}>
+          • {item}
+        </Text>
+      ))}
+
+      {brief.commonForModel.length > 0 && (
+        <View style={styles.briefAside} wrap={false}>
+          <Text style={styles.briefAsideHeading}>
+            COMMON FOR THIS MODEL — NOT CONFIRMED ON THIS VIN
+          </Text>
+          {brief.commonForModel.map((item, index) => (
+            <Text key={index} style={[styles.bullet, { color: "#92400e" }]}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {brief.questions.length > 0 && (
+        <>
+          <Text style={styles.briefHeading}>QUESTIONS TO ASK THE SELLER</Text>
+          {brief.questions.map((item, index) => (
+            <Text key={index} style={styles.bullet}>
+              • {item}
+            </Text>
+          ))}
+        </>
+      )}
+    </View>
+  );
+}
+
 function fieldList(fields: Field[]): string {
   return fields.map((field) => `${field.label}: ${field.value}`).join("  ·  ");
 }
@@ -288,7 +364,13 @@ function Section({ section }: { section: ReportSection }) {
   );
 }
 
-export function ReportDocument({ report }: { report: VehicleReport }) {
+export function ReportDocument({
+  report,
+  brief = null,
+}: {
+  report: VehicleReport;
+  brief?: VehicleBrief | null;
+}) {
   const title = vehicleTitle(report.vehicle);
   const generated = report.generatedAt.replace("T", " ").slice(0, 16);
   const flags = report.checks.filter((check) => check.status === "found");
@@ -324,6 +406,8 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
         <View style={[styles.summary, { marginTop: 16 }]}>
           <Text>{report.headline}</Text>
         </View>
+
+        {brief && <Brief brief={brief} />}
 
         <View style={styles.section} wrap={false}>
           <Text style={styles.sectionTitle}>What we found</Text>
@@ -438,6 +522,9 @@ export function reportPdfFilename(vin: string): string {
   return `${BRAND.name}-${normalizeVin(vin).replace(/[^A-Z0-9]/g, "")}.pdf`;
 }
 
-export async function renderReportPdf(report: VehicleReport): Promise<Buffer> {
-  return renderToBuffer(<ReportDocument report={report} />);
+export async function renderReportPdf(
+  report: VehicleReport,
+  brief: VehicleBrief | null = null,
+): Promise<Buffer> {
+  return renderToBuffer(<ReportDocument report={report} brief={brief} />);
 }

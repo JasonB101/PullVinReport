@@ -1,3 +1,4 @@
+import type { VehicleBrief } from "@/lib/ai-brief";
 import type { VehicleReport } from "@/lib/report";
 
 /**
@@ -15,6 +16,39 @@ import type { VehicleReport } from "@/lib/report";
 export const SAMPLE_VIN = "4T1BF1FK8CU512345";
 
 export const SAMPLE_VEHICLE_LABEL = "2012 Toyota Camry SE";
+
+/**
+ * The sample's brief, written by hand rather than generated.
+ *
+ * A shopper browsing the sample should see the shape of the brief they will get,
+ * and generating one for a vehicle that does not exist would spend tokens on
+ * every visit to say the same thing. The wording deliberately matches the rules
+ * a generated brief is held to: nothing claimed that the sample records do not
+ * show, and the model-level notes kept separate from the car.
+ */
+export function buildSampleBrief(): VehicleBrief {
+  return {
+    fromReport: [
+      "Five title records across Kentucky and Tennessee, with no salvage, junk or insurance-loss brand on any of them.",
+      "Mileage rises steadily from 12 miles in 2012 to 121,477 in 2024, and the 2020 re-registration reported the same reading as 2019.",
+      "One minor rear-bumper damage record from November 2018 in Knoxville, with no airbag deployment reported.",
+      "A lien recorded in Kentucky in 2015 is shown as released in February 2019.",
+      "One open recall campaign is listed for the air bag inflator.",
+    ],
+    commonForModel: [
+      "This generation of Camry is known for excessive oil consumption on some four-cylinder engines.",
+      "Water pump and AC condenser failures are frequently reported around 100,000 miles.",
+      "Dashboard material becoming sticky or shiny in hot climates was widespread enough to prompt a warranty extension.",
+    ],
+    questions: [
+      "Was the 2018 rear-end damage repaired by a shop, and are the receipts available?",
+      "Has the open air bag recall been completed at a dealer?",
+      "Why did the odometer not move between the 2019 and 2020 registrations?",
+      "Can you show maintenance records covering oil consumption checks?",
+    ],
+    model: "sample",
+  };
+}
 
 export function buildSampleReport(): VehicleReport {
   return {

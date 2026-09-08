@@ -175,7 +175,11 @@ export default async function ReportPage({
         <div className="container-page py-10">
           {/* Laid out from the payload stored with the order, so a report bought
               before a layout change still reads the way today's does. */}
-          <ReportView report={withCurrentLayout(order.report)} />
+          <ReportView
+            report={withCurrentLayout(order.report)}
+            brief={order.aiBrief}
+            briefToken={token}
+          />
         </div>
       </main>
 

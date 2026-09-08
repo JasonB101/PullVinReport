@@ -92,6 +92,31 @@ export function missingVinAuditKeys(): string[] {
   return missing;
 }
 
+/**
+ * The model that writes the buyer's brief.
+ *
+ * Optional everywhere: with no key the brief is simply not offered, and nothing
+ * about buying or reading a report changes.
+ */
+export const anthropic = {
+  get apiKey(): string | undefined {
+    return env("ANTHROPIC_API_KEY");
+  },
+  get model(): string {
+    return env("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+  },
+  get baseUrl(): string {
+    return env("ANTHROPIC_API_BASE") ?? "https://api.anthropic.com";
+  },
+  get timeoutMs(): number {
+    return intEnv("ANTHROPIC_TIMEOUT_MS", 20_000);
+  },
+};
+
+export function isAnthropicConfigured(): boolean {
+  return Boolean(anthropic.apiKey);
+}
+
 export const stripeConfig = {
   get secretKey(): string | undefined {
     return env("STRIPE_SECRET_KEY");

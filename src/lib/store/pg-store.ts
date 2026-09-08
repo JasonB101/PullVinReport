@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { Pool } from "pg";
 
+import type { VehicleBrief } from "@/lib/ai-brief";
 import { databaseUrl } from "@/lib/config";
 import type { VehicleReport } from "@/lib/report";
 import type {
@@ -28,6 +29,8 @@ type Row = {
   stripe_payment_intent_id: string | null;
   report: unknown;
   provider_error: string | null;
+  ai_brief: unknown;
+  ai_brief_generated_at: Date | string | null;
   fulfilled_at: Date | string | null;
   email_sent_at: Date | string | null;
   refunded_at: Date | string | null;
@@ -54,6 +57,8 @@ function toOrder(row: Row): Order {
     stripePaymentIntentId: row.stripe_payment_intent_id,
     report: (row.report as VehicleReport | null) ?? null,
     providerError: row.provider_error,
+    aiBrief: (row.ai_brief as VehicleBrief | null) ?? null,
+    aiBriefGeneratedAt: iso(row.ai_brief_generated_at),
     fulfilledAt: iso(row.fulfilled_at),
     emailSentAt: iso(row.email_sent_at),
     refundedAt: iso(row.refunded_at),
@@ -68,6 +73,8 @@ const PATCH_COLUMNS: Record<keyof OrderPatch, string> = {
   stripePaymentIntentId: "stripe_payment_intent_id",
   report: "report",
   providerError: "provider_error",
+  aiBrief: "ai_brief",
+  aiBriefGeneratedAt: "ai_brief_generated_at",
   fulfilledAt: "fulfilled_at",
   emailSentAt: "email_sent_at",
   refundedAt: "refunded_at",
@@ -121,14 +128,18 @@ export class PostgresOrderStore implements OrderStore {
             fulfilled_at TIMESTAMPTZ,
             email_sent_at TIMESTAMPTZ,
             refunded_at TIMESTAMPTZ,
-            stripe_refund_id TEXT
+            stripe_refund_id TEXT,
+            ai_brief JSONB,
+            ai_brief_generated_at TIMESTAMPTZ
           );
         `);
-        // Tables created before refunds existed need the new columns.
+        // Tables created before refunds and the buyer brief need the columns.
         await this.getPool().query(`
           ALTER TABLE ${TABLE}
             ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ,
-            ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT;
+            ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT,
+            ADD COLUMN IF NOT EXISTS ai_brief JSONB,
+            ADD COLUMN IF NOT EXISTS ai_brief_generated_at TIMESTAMPTZ;
         `);
         await this.getPool().query(
           `CREATE INDEX IF NOT EXISTS ${TABLE}_created_at_idx ON ${TABLE} (created_at DESC);`,
@@ -207,7 +218,8 @@ export class PostgresOrderStore implements OrderStore {
     ][]) {
       if (!(key in patch)) continue;
       const value = patch[key];
-      values.push(key === "report" ? (value ? JSON.stringify(value) : null) : value);
+      const jsonColumn = key === "report" || key === "aiBrief";
+      values.push(jsonColumn ? (value ? JSON.stringify(value) : null) : value);
       assignments.push(`${column} = $${values.length}`);
     }
 

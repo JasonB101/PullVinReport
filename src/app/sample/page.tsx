@@ -6,7 +6,11 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { VinForm } from "@/components/vin-form";
 import { formatPrice } from "@/lib/config";
-import { buildSampleReport, SAMPLE_VEHICLE_LABEL } from "@/lib/sample-report";
+import {
+  buildSampleBrief,
+  buildSampleReport,
+  SAMPLE_VEHICLE_LABEL,
+} from "@/lib/sample-report";
 
 export const metadata: Metadata = {
   title: "Sample vehicle history report",
@@ -49,7 +53,9 @@ export default function SamplePage() {
         </div>
 
         <div className="container-page py-10 sm:py-14">
-          <ReportView report={report} />
+          {/* The sample's brief is written by hand, so browsing the sample never
+              spends a token on a vehicle that does not exist. */}
+          <ReportView report={report} brief={buildSampleBrief()} />
         </div>
       </main>
 

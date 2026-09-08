@@ -7,6 +7,7 @@ import {
   refundOrderAction,
   resendEmailAction,
   retryFulfillmentAction,
+  rewriteBriefAction,
   type RetryState,
 } from "@/app/admin/actions";
 import type { OrderStatus } from "@/lib/store";
@@ -44,16 +45,22 @@ export function OrderActions({
     refundOrderAction,
     INITIAL,
   );
+  const [briefState, rewriteBrief, rewriting] = useActionState(
+    rewriteBriefAction,
+    INITIAL,
+  );
 
   const feedback =
     retryState.error ??
     emailState.error ??
     refundState.error ??
+    briefState.error ??
     retryState.message ??
     emailState.message ??
-    refundState.message;
+    refundState.message ??
+    briefState.message;
   const isError = Boolean(
-    retryState.error ?? emailState.error ?? refundState.error,
+    retryState.error ?? emailState.error ?? refundState.error ?? briefState.error,
   );
 
   return (
@@ -91,6 +98,19 @@ export function OrderActions({
               className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
             >
               {resending ? "Sending…" : "Re-send email"}
+            </button>
+          </form>
+        )}
+
+        {status === "fulfilled" && (
+          <form action={rewriteBrief}>
+            <input type="hidden" name="orderId" value={orderId} />
+            <button
+              type="submit"
+              disabled={rewriting}
+              className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-60"
+            >
+              {rewriting ? "Writing…" : "Rewrite brief"}
             </button>
           </form>
         )}
