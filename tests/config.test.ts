@@ -16,6 +16,7 @@ const ENV_KEYS = [
   "SUPPORT_EMAIL",
   "REPORT_PRICE_CENTS",
   "ANTHROPIC_MODEL",
+  "ANTHROPIC_TIMEOUT_MS",
 ];
 
 afterEach(() => {
@@ -92,6 +93,12 @@ describe("the model that writes the brief", () => {
   it("takes an override", () => {
     process.env.ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
     assert.equal(anthropic.model, "claude-haiku-4-5-20251001");
+  });
+
+  it("waits long enough for a brief that explains itself", () => {
+    // 20s and 1000 tokens cut the JSON off around 428 characters on ZOO.
+    delete process.env.ANTHROPIC_TIMEOUT_MS;
+    assert.equal(anthropic.timeoutMs, 45_000);
   });
 
   it("is off, not broken, when no key is set", () => {

@@ -237,6 +237,14 @@ const MAX_ERROR_DETAIL = 500;
  * consumed — and a failure to explain a failure must not become the failure
  * the caller sees.
  */
+const SNIPPET = 240;
+
+function snippet(text: string): string {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return "(empty reply)";
+  return trimmed.length <= SNIPPET ? trimmed : `${trimmed.slice(0, SNIPPET)}…`;
+}
+
 async function errorDetail(response: Response): Promise<string> {
   try {
     const body = (await response.text()).trim();
@@ -284,7 +292,7 @@ export async function generateBrief(
         // Room for the clause that says why a record matters. At the old
         // ceiling a brief that explained itself ran out mid-sentence, and an
         // unterminated JSON string parses as nothing at all.
-        max_tokens: 2_000,
+        max_tokens: 2_048,
         // No `temperature`. Sonnet 5 rejects the whole request with a 400 when
         // it is present, and the guards below are what keep the output in line
         // anyway — a sampling knob was never what made the brief trustworthy.
@@ -317,7 +325,12 @@ export async function generateBrief(
       .trim();
 
     const brief = parseBrief(text, model);
-    if (!brief) console.error("[brief] could not read a brief out of the reply");
+    if (!brief) {
+      // The reply that failed to parse is the only way to tell a cut-off
+      // JSON string from a refusal. 428 characters of unterminated JSON is
+      // how we learned 20s and 1000 tokens were not enough.
+      console.error(`[brief] could not read a brief out of the reply: ${snippet(text)}`);
+    }
     return brief;
   } catch (error) {
     const reason =

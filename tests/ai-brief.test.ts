@@ -288,6 +288,7 @@ describe("generating a brief", () => {
       false,
       "Sonnet 5 rejects the whole request with a 400 when temperature is set",
     );
+    assert.equal(body.max_tokens, 2048);
   });
 
   it("logs what the model said when it says no, not just the status", async () => {
@@ -327,6 +328,27 @@ describe("generating a brief", () => {
         JSON.stringify({ content: [{ type: "text", text: "I can't do that." }] }),
       )) as typeof fetch;
     assert.equal(await generateBrief(paidReport()), null);
+  });
+
+  it("logs a snippet of the reply when it cannot parse one", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const cutOff = '{"fromReport":["There are junk and salvage records dated May 11';
+    globalThis.fetch = (async () =>
+      new Response(
+        JSON.stringify({ content: [{ type: "text", text: cutOff }] }),
+      )) as typeof fetch;
+
+    const logged: string[] = [];
+    const realError = console.error;
+    console.error = (message: unknown) => logged.push(String(message));
+    try {
+      assert.equal(await generateBrief(paidReport()), null);
+    } finally {
+      console.error = realError;
+    }
+
+    assert.match(logged.join("\n"), /could not read a brief/);
+    assert.match(logged.join("\n"), /junk and salvage records dated May 11/);
   });
 });
 

@@ -66,7 +66,7 @@ version:
 | `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
 | `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
-| `ANTHROPIC_TIMEOUT_MS` | No (default `20000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
+| `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
 | `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |

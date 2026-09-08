@@ -123,7 +123,7 @@ export const anthropic = {
    * them.
    */
   get timeoutMs(): number {
-    return intEnv("ANTHROPIC_TIMEOUT_MS", 30_000);
+    return intEnv("ANTHROPIC_TIMEOUT_MS", 45_000);
   },
 };
 
