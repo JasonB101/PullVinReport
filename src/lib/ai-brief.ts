@@ -206,12 +206,16 @@ type MessagesResponse = {
  */
 export async function generateBrief(
   report: VehicleReport,
+  options: { timeoutMs?: number } = {},
 ): Promise<VehicleBrief | null> {
   if (!isAnthropicConfigured()) return null;
 
   const model = anthropic.model;
+  // Callers on a deadline of their own — fulfillment answers a Stripe webhook
+  // — can ask for less time than the page view is willing to wait.
+  const timeoutMs = options.timeoutMs ?? anthropic.timeoutMs;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), anthropic.timeoutMs);
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
     const response = await fetch(`${anthropic.baseUrl}/v1/messages`, {
@@ -255,7 +259,7 @@ export async function generateBrief(
   } catch (error) {
     const reason =
       error instanceof Error && error.name === "AbortError"
-        ? `no reply within ${anthropic.timeoutMs}ms`
+        ? `no reply within ${timeoutMs}ms`
         : (error as Error).message;
     console.error(`[brief] not generated: ${reason}`);
     return null;

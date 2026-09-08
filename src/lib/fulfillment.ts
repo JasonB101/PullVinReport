@@ -4,6 +4,7 @@ import {
   missingVinAuditKeys,
 } from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
+import { briefForOrder } from "@/lib/order-brief";
 import { refundOrder } from "@/lib/refund";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
@@ -30,6 +31,36 @@ async function autoRefund(orderId: string): Promise<void> {
   } catch (error) {
     console.error(`[fulfillment] Auto-refund failed for ${orderId}`, error);
   }
+}
+
+/**
+ * How long fulfillment will wait for the brief before sending without it.
+ *
+ * Shorter than a page view's budget on purpose. Fulfillment usually runs inside
+ * a Stripe webhook, and Stripe gives the endpoint about 30 seconds before it
+ * calls the delivery failed and retries — a report pull plus a full-length model
+ * call can cross that line. Twelve seconds leaves room for both.
+ */
+const BRIEF_BUDGET_MS = 12_000;
+
+/**
+ * Writes the brief before the receipt goes out.
+ *
+ * The PDF is the copy a buyer forwards to a mechanic or a seller, so it has to
+ * say what the page says; without this it never carried a brief at all, because
+ * the brief was not written until someone opened the report. Best-effort: a
+ * brief that does not arrive in time is written on the first page view instead,
+ * and the receipt leaves on schedule either way.
+ */
+async function withBrief(order: Order): Promise<Order> {
+  try {
+    const outcome = await briefForOrder(order, { timeoutMs: BRIEF_BUDGET_MS });
+    if (outcome.status === "ready") return { ...order, aiBrief: outcome.brief };
+    console.info(`[fulfillment] No brief for ${order.id}: ${outcome.reason}`);
+  } catch (error) {
+    console.error(`[fulfillment] Brief failed for ${order.id}`, error);
+  }
+  return order;
 }
 
 /**
@@ -78,10 +109,12 @@ export async function fulfillOrder(orderId: string): Promise<FulfillmentResult> 
     fulfilledAt: new Date().toISOString(),
   });
 
-  const email = await sendReportEmail(fulfilled);
+  const briefed = await withBrief(fulfilled);
+
+  const email = await sendReportEmail(briefed);
   const finalOrder = email.sent
-    ? await store.update(fulfilled.id, { emailSentAt: new Date().toISOString() })
-    : fulfilled;
+    ? await store.update(briefed.id, { emailSentAt: new Date().toISOString() })
+    : briefed;
 
   return {
     order: finalOrder,

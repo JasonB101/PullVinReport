@@ -19,7 +19,7 @@ export type BriefOutcome =
  */
 export async function briefForOrder(
   order: Order,
-  options: { refresh?: boolean } = {},
+  options: { refresh?: boolean; timeoutMs?: number } = {},
 ): Promise<BriefOutcome> {
   if (!order.report) {
     return { status: "unavailable", reason: "this order has no report yet" };
@@ -31,7 +31,9 @@ export async function briefForOrder(
     return { status: "unavailable", reason: "ANTHROPIC_API_KEY is not set" };
   }
 
-  const brief = await generateBrief(withCurrentLayout(order.report));
+  const brief = await generateBrief(withCurrentLayout(order.report), {
+    timeoutMs: options.timeoutMs,
+  });
   if (!brief) {
     return { status: "unavailable", reason: "the brief could not be written" };
   }
