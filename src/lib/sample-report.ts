@@ -36,9 +36,9 @@ export function buildSampleBrief(): VehicleBrief {
       "One open recall campaign is listed for the air bag inflator, which a dealer is required to fix free of charge and which stays open until someone books it in.",
     ],
     commonForModel: [
-      "This generation of Camry is known for excessive oil consumption on some four-cylinder engines.",
-      "Water pump and AC condenser failures are frequently reported around 100,000 miles.",
-      "Dashboard material becoming sticky or shiny in hot climates was widespread enough to prompt a warranty extension.",
+      "On the 2012 Toyota Camry, some four-cylinder engines are known for excessive oil consumption.",
+      "On the 2012 Toyota Camry, water pump and AC condenser failures are frequently reported around 100,000 miles.",
+      "On the 2012 Toyota Camry, dashboard material becoming sticky or shiny in hot climates was widespread enough to prompt a warranty extension.",
     ],
     questions: [
       "Was the 2018 rear-end damage repaired by a shop, and are the receipts available?",

@@ -14,7 +14,7 @@
  * before the brief existed.
  */
 import { anthropic, isAnthropicConfigured } from "@/lib/config";
-import type { VehicleReport } from "@/lib/report";
+import type { VehicleReport, VehicleSummary } from "@/lib/report";
 import { hasOdometerRollback, vehicleTitle } from "@/lib/report";
 
 export type VehicleBrief = {
@@ -39,6 +39,11 @@ const MAX_VALUE_LENGTH = 120;
 
 export type BriefFacts = {
   vehicle: string;
+  /**
+   * Year, make and model only — the string every model-level bullet must use.
+   * `unknown` when we cannot name one, in which case commonForModel stays empty.
+   */
+  yearMakeModel: string;
   specifications: string[];
   checks: { check: string; result: string }[];
   odometer: string[];
@@ -59,9 +64,23 @@ function clip(value: string): string {
  * payload are all left behind. What goes out is the same summary a reader sees
  * on the page, which is the only thing the brief is allowed to be about.
  */
+/**
+ * Year, make and model — not the trim.
+ *
+ * The brief is allowed to talk about this and only this. A sibling (Legacy
+ * for an Outback, Camry for an Avalon) is a different car.
+ */
+export function exactYearMakeModel(vehicle: VehicleSummary): string {
+  const parts = [vehicle.year, vehicle.make, vehicle.model]
+    .map((part) => part?.trim())
+    .filter((part): part is string => Boolean(part));
+  return parts.length === 3 ? parts.join(" ") : "";
+}
+
 export function briefFacts(report: VehicleReport): BriefFacts {
   return {
     vehicle: vehicleTitle(report.vehicle),
+    yearMakeModel: exactYearMakeModel(report.vehicle) || "unknown",
     specifications: report.specifications
       .slice(0, MAX_SPECIFICATIONS)
       .map((spec) => `${spec.label}: ${clip(spec.value)}`),
@@ -137,7 +156,7 @@ Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
 fromReport: 2 to 5 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries. Use the actual counts and dates from FACTS.
-commonForModel: 0 to 4 bullets on well-known trouble spots for the exact year, make and model named in FACTS.vehicle, and nothing else. Do not write about a different model year, a different generation, or the make in general. Write them as tendencies of the model. Use an empty array if FACTS.vehicle does not name a year, make and model, or if you are not confident about that exact vehicle.
+commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
 questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
 
 /* -------------------------------------------------------------------------- */
@@ -174,6 +193,86 @@ const PRICED_CLAIMS = [
   /\b(?:grade|score|rating)\s+(?:of\s+)?(?:[a-f]\b|\d)/i,
 ];
 
+function escapeRe(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+const AFTER_TOKEN = /([A-Za-z][A-Za-z0-9-]+)/;
+
+/**
+ * Words that may follow the year or the make without being a model name.
+ *
+ * "2021 Subaru" and "Subaru wagons" are about this car. "2021 Legacy" is not.
+ */
+const AFTER_YEAR_OK = new Set(["the", "this", "these", "those"]);
+const AFTER_MAKE_OK = new Set([
+  "vehicles",
+  "models",
+  "cars",
+  "trucks",
+  "suvs",
+  "wagons",
+  "sedans",
+]);
+
+/**
+ * Keeps a model-level bullet only if it is about this year, make and model.
+ *
+ * Sonnet has written "2021 Legacy" on an Outback. The prompt forbids that;
+ * this is the last place it can be caught. A bullet that never names a
+ * different model is rewritten so it leads with the exact year/make/model,
+ * because "this generation" without a name is how the slip starts.
+ */
+export function pinCommonForModel(
+  bullet: string,
+  vehicle: VehicleSummary,
+): string | null {
+  const ymm = exactYearMakeModel(vehicle);
+  if (!ymm) return null;
+
+  const year = vehicle.year?.trim() ?? "";
+  const make = vehicle.make?.trim() ?? "";
+  const model = vehicle.model?.trim() ?? "";
+  const modelHead = model.split(/\s+/)[0] ?? "";
+
+  for (const match of bullet.matchAll(/\b((?:19|20)\d{2})\b/g)) {
+    if (match[1] !== year) return null;
+  }
+
+  const afterYear = new RegExp(
+    `\\b${escapeRe(year)}\\s+${AFTER_TOKEN.source}`,
+    "gi",
+  );
+  for (const match of bullet.matchAll(afterYear)) {
+    const word = match[1];
+    if (
+      word.toLowerCase() !== make.toLowerCase() &&
+      word.toLowerCase() !== modelHead.toLowerCase() &&
+      !AFTER_YEAR_OK.has(word.toLowerCase())
+    ) {
+      return null;
+    }
+  }
+
+  const afterMake = new RegExp(
+    `\\b${escapeRe(make)}\\s+${AFTER_TOKEN.source}`,
+    "gi",
+  );
+  for (const match of bullet.matchAll(afterMake)) {
+    const word = match[1];
+    if (
+      word.toLowerCase() !== modelHead.toLowerCase() &&
+      !AFTER_MAKE_OK.has(word.toLowerCase())
+    ) {
+      return null;
+    }
+  }
+
+  if (new RegExp(escapeRe(ymm), "i").test(bullet)) return bullet;
+
+  return `On the ${ymm}: ${bullet}`;
+}
+
 function bullets(value: unknown, limit: number): string[] {
   if (!Array.isArray(value)) return [];
   return value
@@ -192,7 +291,11 @@ function bullets(value: unknown, limit: number): string[] {
  * The guards that follow are not politeness — they are the last place a claim
  * about this car can be caught before a buyer reads it as fact.
  */
-export function parseBrief(text: string, model: string): VehicleBrief | null {
+export function parseBrief(
+  text: string,
+  model: string,
+  vehicle?: VehicleSummary,
+): VehicleBrief | null {
   const start = text.indexOf("{");
   const end = text.lastIndexOf("}");
   if (start === -1 || end <= start) return null;
@@ -209,11 +312,14 @@ export function parseBrief(text: string, model: string): VehicleBrief | null {
   const fromReport = bullets(payload.fromReport, LIMITS.fromReport);
   if (fromReport.length === 0) return null;
 
+  const common = bullets(payload.commonForModel, LIMITS.commonForModel)
+    .filter((bullet) => !VIN_CLAIM.test(bullet))
+    .map((bullet) => (vehicle ? pinCommonForModel(bullet, vehicle) : bullet))
+    .filter((bullet): bullet is string => Boolean(bullet));
+
   return {
     fromReport,
-    commonForModel: bullets(payload.commonForModel, LIMITS.commonForModel).filter(
-      (bullet) => !VIN_CLAIM.test(bullet),
-    ),
+    commonForModel: vehicle && !exactYearMakeModel(vehicle) ? [] : common,
     questions: bullets(payload.questions, LIMITS.questions),
     model,
   };
@@ -324,7 +430,7 @@ export async function generateBrief(
       .join("\n")
       .trim();
 
-    const brief = parseBrief(text, model);
+    const brief = parseBrief(text, model, report.vehicle);
     if (!brief) {
       // The reply that failed to parse is the only way to tell a cut-off
       // JSON string from a refusal. 428 characters of unterminated JSON is

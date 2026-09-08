@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
-import { briefFacts, generateBrief, parseBrief } from "@/lib/ai-brief";
+import {
+  briefFacts,
+  exactYearMakeModel,
+  generateBrief,
+  parseBrief,
+} from "@/lib/ai-brief";
 import { buildSampleBrief, buildSampleReport } from "@/lib/sample-report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -41,6 +46,7 @@ describe("what the brief is allowed to see", () => {
 
   it("sends the vehicle and the records, and nothing that identifies anyone", () => {
     assert.equal(facts.vehicle, "2012 Toyota Camry");
+    assert.equal(facts.yearMakeModel, "2012 Toyota Camry");
     assert.doesNotMatch(serialized, new RegExp(VIN, "i"));
     assert.doesNotMatch(serialized, /provider\.example/);
     assert.doesNotMatch(serialized, /accessToken|access_token|@/i);
@@ -259,8 +265,9 @@ describe("generating a brief", () => {
     // ...but a consequence is still what usually happens, not what happened here.
     assert.match(system, /never as what has happened to this car/);
     // The model-level list stays pinned to the vehicle we actually decoded.
-    assert.match(system, /exact year, make and model named in FACTS\.vehicle/);
-    assert.match(system, /Do not write about a different model year/);
+    assert.match(system, /FACTS\.yearMakeModel/);
+    assert.match(system, /Every bullet MUST name that full year, make and model/);
+    assert.match(system, /Never name a sibling/);
   });
 
   it("sends no temperature, which current models reject outright", async () => {
@@ -352,6 +359,69 @@ describe("generating a brief", () => {
   });
 });
 
+describe("pinning model-level notes to this year, make and model", () => {
+  const outback = { year: "2021", make: "Subaru", model: "Outback" };
+
+  it("names the exact vehicle, not a sibling", () => {
+    assert.equal(exactYearMakeModel(outback), "2021 Subaru Outback");
+  });
+
+  it("drops a bullet that names a sibling the way Sonnet named Legacy for an Outback", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: ["Clean title history."],
+        commonForModel: [
+          "The 2021 Legacy is known for CVT shudder.",
+          "2021 Subaru Outback CVTs can shudder at low speed.",
+        ],
+      }),
+      "test-model",
+      outback,
+    );
+    assert.deepEqual(brief?.commonForModel, [
+      "2021 Subaru Outback CVTs can shudder at low speed.",
+    ]);
+  });
+
+  it("drops a bullet that names a different model year", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: ["Clean title history."],
+        commonForModel: ["The 2019 Subaru Outback had early EyeSight issues."],
+      }),
+      "test-model",
+      outback,
+    );
+    assert.deepEqual(brief?.commonForModel, []);
+  });
+
+  it("rewrites a nameless bullet so it leads with the exact year, make and model", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: ["Clean title history."],
+        commonForModel: ["CVT shudder is commonly reported at low speed."],
+      }),
+      "test-model",
+      outback,
+    );
+    assert.deepEqual(brief?.commonForModel, [
+      "On the 2021 Subaru Outback: CVT shudder is commonly reported at low speed.",
+    ]);
+  });
+
+  it("writes nothing about the model when we cannot name one", () => {
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: ["Clean title history."],
+        commonForModel: ["Some engines in this generation use oil."],
+      }),
+      "test-model",
+      { year: "2012" },
+    );
+    assert.deepEqual(brief?.commonForModel, []);
+  });
+});
+
 describe("the sample's brief", () => {
   it("is written by hand, so browsing the sample spends nothing", () => {
     const brief = buildSampleBrief();
@@ -374,7 +444,11 @@ describe("the sample's brief", () => {
 
   it("survives the same guards a generated brief goes through", () => {
     const brief = buildSampleBrief();
-    const reparsed = parseBrief(JSON.stringify(brief), "sample");
+    const reparsed = parseBrief(
+      JSON.stringify(brief),
+      "sample",
+      buildSampleReport().vehicle,
+    );
     assert.deepEqual(reparsed?.fromReport, brief.fromReport);
     assert.deepEqual(reparsed?.commonForModel, brief.commonForModel);
     assert.deepEqual(reparsed?.questions, brief.questions);
