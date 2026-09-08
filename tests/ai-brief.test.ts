@@ -207,6 +207,56 @@ describe("generating a brief", () => {
     assert.doesNotMatch(String(sent.init.body), /test-key/);
   });
 
+  it("sends no temperature, which current models reject outright", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    let body: Record<string, unknown> = {};
+
+    globalThis.fetch = (async (_url: string, init: RequestInit) => {
+      body = JSON.parse(String(init.body));
+      return new Response(
+        JSON.stringify({
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify({ fromReport: ["Two title records."] }),
+            },
+          ],
+        }),
+        { status: 200 },
+      );
+    }) as unknown as typeof fetch;
+
+    await generateBrief(paidReport());
+    assert.equal(
+      "temperature" in body,
+      false,
+      "Sonnet 5 rejects the whole request with a 400 when temperature is set",
+    );
+  });
+
+  it("logs what the model said when it says no, not just the status", async () => {
+    process.env.ANTHROPIC_API_KEY = "test-key";
+    const rejection =
+      '{"type":"error","error":{"type":"invalid_request_error","message":"temperature is deprecated for this model"}}';
+    globalThis.fetch = (async () =>
+      new Response(rejection, { status: 400 })) as typeof fetch;
+
+    const logged: string[] = [];
+    const realError = console.error;
+    console.error = (message: unknown) => logged.push(String(message));
+
+    try {
+      assert.equal(await generateBrief(paidReport()), null);
+    } finally {
+      console.error = realError;
+    }
+
+    // A 400 for an unsupported parameter and a 400 for a bad prompt look the
+    // same until the body is in the log.
+    assert.match(logged.join("\n"), /HTTP 400/);
+    assert.match(logged.join("\n"), /temperature is deprecated for this model/);
+  });
+
   it("gives up quietly when the model errors", async () => {
     process.env.ANTHROPIC_API_KEY = "test-key";
     globalThis.fetch = (async () =>

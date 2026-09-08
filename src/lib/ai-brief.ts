@@ -197,6 +197,28 @@ type MessagesResponse = {
   content?: { type?: string; text?: string }[];
 };
 
+/** How much of a rejection is worth putting in the log. */
+const MAX_ERROR_DETAIL = 500;
+
+/**
+ * Reads a rejection back for the operator's log.
+ *
+ * Reading the body can itself fail — a truncated response, a body already
+ * consumed — and a failure to explain a failure must not become the failure
+ * the caller sees.
+ */
+async function errorDetail(response: Response): Promise<string> {
+  try {
+    const body = (await response.text()).trim();
+    if (body.length === 0) return "(empty body)";
+    return body.length <= MAX_ERROR_DETAIL
+      ? body
+      : `${body.slice(0, MAX_ERROR_DETAIL)}… (truncated)`;
+  } catch {
+    return "(body could not be read)";
+  }
+}
+
 /**
  * Writes the brief for a report.
  *
@@ -230,7 +252,9 @@ export async function generateBrief(
       body: JSON.stringify({
         model,
         max_tokens: 1_000,
-        temperature: 0.2,
+        // No `temperature`. Sonnet 5 rejects the whole request with a 400 when
+        // it is present, and the guards below are what keep the output in line
+        // anyway — a sampling knob was never what made the brief trustworthy.
         system: SYSTEM_PROMPT,
         messages: [
           {
@@ -242,7 +266,13 @@ export async function generateBrief(
     });
 
     if (!response.ok) {
-      console.error(`[brief] model returned HTTP ${response.status}`);
+      // The status alone cost an afternoon once: a 400 for an unsupported
+      // parameter and a 400 for a malformed prompt look identical until you
+      // read what came back. The body is the model's own error, not ours, and
+      // the key never travels in it.
+      console.error(
+        `[brief] model returned HTTP ${response.status}: ${await errorDetail(response)}`,
+      );
       return null;
     }
 
