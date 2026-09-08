@@ -3,6 +3,7 @@ import { Resend } from "resend";
 import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from "@/lib/config";
 import { REPORT_DISCLAIMER_SHORT } from "@/lib/customer-copy";
 import { vehicleTitle } from "@/lib/report";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
 import type { Order } from "@/lib/store";
 
@@ -132,7 +133,7 @@ async function reportAttachment(
 ): Promise<{ attachment?: ReportAttachment; detail: string }> {
   if (!order.report) return { detail: "no report to attach" };
   try {
-    const content = await renderReportPdf(order.report);
+    const content = await renderReportPdf(withCurrentLayout(order.report));
     return {
       attachment: {
         filename: reportPdfFilename(order.vin),

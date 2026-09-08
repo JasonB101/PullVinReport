@@ -21,7 +21,17 @@ import {
 import { BRAND } from "@/lib/config";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type { Field, ReportCheck, ReportSection, VehicleReport } from "@/lib/report";
-import { formatEventDate, sectionTable, vehicleTitle } from "@/lib/report";
+import {
+  currentEvent,
+  formatEventDate,
+  hasOdometerRollback,
+  reportChips,
+  reportNavItems,
+  searchedAndEmpty,
+  sectionTable,
+  sectionsWithRecords,
+  vehicleTitle,
+} from "@/lib/report";
 import { normalizeVin, prettyVin } from "@/lib/vin";
 
 const INK = "#0f172a";
@@ -55,6 +65,15 @@ const styles = StyleSheet.create({
   },
   vehicle: { fontFamily: "Helvetica-Bold", fontSize: 17, marginTop: 12 },
   vin: { fontFamily: "Courier", fontSize: 10, color: MUTED, marginTop: 3 },
+  chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 4, marginTop: 10 },
+  chip: {
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    fontSize: 7.5,
+  },
+  contents: { color: FAINT, fontSize: 7.5, marginTop: 10 },
   metaRow: { flexDirection: "row", marginTop: 10, gap: 24 },
   metaLabel: { fontSize: 7, letterSpacing: 0.8, color: FAINT, textTransform: "uppercase" },
   metaValue: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 2 },
@@ -75,6 +94,10 @@ const styles = StyleSheet.create({
   section: { marginTop: 16 },
   sectionTitle: { fontFamily: "Helvetica-Bold", fontSize: 11, marginBottom: 2 },
   sectionNote: { color: MUTED, marginBottom: 6, lineHeight: 1.4 },
+  sharedNote: { color: FAINT, fontSize: 7.5, marginBottom: 6, lineHeight: 1.3 },
+  currentNote: { marginBottom: 6, lineHeight: 1.3 },
+  clearNote: { color: MUTED, marginTop: 8, lineHeight: 1.4 },
+  caveat: { color: FAINT, fontSize: 7.5, marginTop: 4, lineHeight: 1.3 },
 
   checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   check: {
@@ -120,7 +143,6 @@ const styles = StyleSheet.create({
     marginBottom: 6,
   },
   cardText: { color: MUTED, lineHeight: 1 },
-  empty: { color: MUTED },
 
   specGrid: { flexDirection: "row", flexWrap: "wrap" },
   spec: { width: "33.3%", paddingRight: 10, marginBottom: 8 },
@@ -150,19 +172,33 @@ function Meta({ label, value }: { label: string; value: string }) {
   );
 }
 
-function Checks({ checks }: { checks: ReportCheck[] }) {
+/** Header chips, matching the web report: only what the records already say. */
+function Chips({ report }: { report: VehicleReport }) {
+  const tones = {
+    clear: { backgroundColor: "#ecfdf5", borderColor: "#a7f3d0", color: "#065f46" },
+    flag: { backgroundColor: "#fffbeb", borderColor: "#fde68a", color: "#92400e" },
+    neutral: { backgroundColor: "#f8fafc", borderColor: LINE, color: MUTED },
+  };
+
+  return (
+    <View style={styles.chipRow}>
+      {reportChips(report).map((chip) => (
+        <Text key={chip.key} style={[styles.chip, tones[chip.tone]]}>
+          {chip.label}
+        </Text>
+      ))}
+    </View>
+  );
+}
+
+/** Only the checks that fired get a box. A wall of "clear" boxes says nothing. */
+function Flags({ checks }: { checks: ReportCheck[] }) {
   return (
     <View style={styles.checkGrid}>
       {checks.map((check) => (
         <View
           key={check.key}
-          style={[
-            styles.check,
-            {
-              backgroundColor: check.status === "found" ? "#fffbeb" : "#f8fafc",
-              borderColor: check.status === "found" ? "#fde68a" : LINE,
-            },
-          ]}
+          style={[styles.check, { backgroundColor: "#fffbeb", borderColor: "#fde68a" }]}
         >
           <Text style={styles.checkLabel}>{check.label}</Text>
           <Text style={styles.checkDetail}>{check.detail}</Text>
@@ -183,6 +219,7 @@ function Section({ section }: { section: ReportSection }) {
   const table = sectionTable(section);
   const width = table ? `${(100 / table.columns.length).toFixed(3)}%` : "100%";
   const wraps = section.records.length > KEEP_TOGETHER;
+  const current = currentEvent(section);
 
   return (
     // A short section moves to the next page whole rather than leaving its
@@ -192,11 +229,19 @@ function Section({ section }: { section: ReportSection }) {
       <View minPresenceAhead={96}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
         <Text style={styles.sectionNote}>{section.description}</Text>
+        {current && (
+          <Text style={styles.currentNote}>
+            {current.label}: {current.fields.map((field) => field.value).join("  ·  ")}
+          </Text>
+        )}
+        {section.shared && section.shared.length > 0 && (
+          <Text style={styles.sharedNote}>
+            Same on all {section.records.length} records — {fieldList(section.shared)}
+          </Text>
+        )}
       </View>
 
-      {section.records.length === 0 ? (
-        <Text style={styles.empty}>{section.emptyLabel}</Text>
-      ) : table ? (
+      {table ? (
         <View style={styles.table}>
           {/* A table that spans a page break repeats its header there. */}
           <View style={styles.tableHead} fixed={wraps}>
@@ -246,6 +291,11 @@ function Section({ section }: { section: ReportSection }) {
 export function ReportDocument({ report }: { report: VehicleReport }) {
   const title = vehicleTitle(report.vehicle);
   const generated = report.generatedAt.replace("T", " ").slice(0, 16);
+  const flags = report.checks.filter((check) => check.status === "found");
+  const clear = searchedAndEmpty(report);
+  const sections = sectionsWithRecords(report);
+  const contents = reportNavItems(report).map((item) => item.label);
+  const odometer = [...report.odometer].reverse();
 
   return (
     <Document
@@ -261,37 +311,56 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
           </Text>
         </View>
 
+        {/* The vehicle and its VIN are stated here and nowhere else. */}
         <Text style={styles.vehicle}>{title}</Text>
         <Text style={styles.vin}>{prettyVin(report.vin)}</Text>
+        <Chips report={report} />
+        {/* The kicker above says whether these are live or sample records. */}
         <View style={styles.metaRow}>
           <Meta label="Generated" value={`${generated} UTC`} />
-          <Meta
-            label="Records flagged"
-            value={`${report.checks.filter((check) => check.status === "found").length} of ${report.checks.length}`}
-          />
-          <Meta label="Records" value={report.isSample ? "Sample" : "Live"} />
         </View>
+        <Text style={styles.contents}>In this report: {contents.join("  ·  ")}</Text>
 
         <View style={[styles.summary, { marginTop: 16 }]}>
           <Text>{report.headline}</Text>
         </View>
 
-        <Text style={[styles.sectionTitle, styles.section]}>At a glance</Text>
-        <Text style={styles.sectionNote}>
-          An unshaded box means no matching record was found — not that an event
-          never happened.
-        </Text>
-        <Checks checks={report.checks} />
+        <View style={styles.section} wrap={false}>
+          <Text style={styles.sectionTitle}>What we found</Text>
+          {flags.length > 0 ? (
+            <>
+              <Text style={styles.sectionNote}>
+                {flags.length === 1
+                  ? "One of the checks we run came back with records."
+                  : `${flags.length} of the checks we run came back with records.`}
+              </Text>
+              <Flags checks={flags} />
+            </>
+          ) : (
+            <Text style={styles.sectionNote}>
+              None of the checks we run came back with a record for this VIN.
+            </Text>
+          )}
+          {clear.length > 0 && (
+            <Text style={styles.clearNote}>
+              Searched, nothing on file: {clear.join("  ·  ")}
+            </Text>
+          )}
+          <Text style={styles.caveat}>
+            Nothing on file means no matching record was found — not that an
+            event never happened.
+          </Text>
+        </View>
 
-        {report.odometer.length > 0 && (
-          <View
-            style={styles.section}
-            wrap={report.odometer.length > KEEP_TOGETHER}
-          >
+        {odometer.length > 0 && (
+          <View style={styles.section} wrap={odometer.length > KEEP_TOGETHER}>
             <View minPresenceAhead={96}>
               <Text style={styles.sectionTitle}>Odometer readings</Text>
               <Text style={styles.sectionNote}>
-                Mileage captured at each title event, oldest first.
+                Mileage as reported at each title event, newest first.
+                {hasOdometerRollback(report.odometer)
+                  ? " A reading lower than an earlier one is marked as a possible rollback."
+                  : ""}
               </Text>
             </View>
             <View style={styles.table}>
@@ -300,26 +369,30 @@ export function ReportDocument({ report }: { report: VehicleReport }) {
                 <Text style={[styles.th, { width: "33%" }]}>READING</Text>
                 <Text style={[styles.th, { width: "33%" }]}>SOURCE</Text>
               </View>
-              {report.odometer.map((reading, index) => (
-                <View
-                  key={index}
-                  style={[styles.tableRow, styles.tableGroup]}
-                  wrap={false}
-                >
-                  <Text style={{ width: "34%", fontFamily: "Helvetica-Bold" }}>
-                    {formatEventDate(reading.date)}
-                  </Text>
-                  <Text style={{ width: "33%", color: MUTED }}>
-                    {reading.value.toLocaleString("en-US")} {reading.unit}
-                  </Text>
-                  <Text style={{ width: "33%", color: MUTED }}>{reading.source}</Text>
-                </View>
-              ))}
+              {odometer.map((reading, index) => {
+                const unchanged = odometer[index + 1]?.value === reading.value;
+                return (
+                  <View
+                    key={index}
+                    style={[styles.tableRow, styles.tableGroup]}
+                    wrap={false}
+                  >
+                    <Text style={{ width: "34%", fontFamily: "Helvetica-Bold" }}>
+                      {formatEventDate(reading.date)}
+                    </Text>
+                    <Text style={{ width: "33%", color: unchanged ? FAINT : INK }}>
+                      {reading.value.toLocaleString("en-US")} {reading.unit}
+                      {unchanged ? "  (unchanged)" : ""}
+                    </Text>
+                    <Text style={{ width: "33%", color: MUTED }}>{reading.source}</Text>
+                  </View>
+                );
+              })}
             </View>
           </View>
         )}
 
-        {report.sections.map((section) => (
+        {sections.map((section) => (
           <Section key={section.key} section={section} />
         ))}
 

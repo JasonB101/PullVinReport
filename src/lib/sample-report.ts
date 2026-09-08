@@ -7,6 +7,10 @@ import type { VehicleReport } from "@/lib/report";
  * are buying. It is tagged `source: "sample"` / `isSample: true` and every
  * renderer keys its SAMPLE watermark off those flags, so it can never be shown
  * in place of a purchased report.
+ *
+ * It is also shaped exactly like a normalized paid report — constants lifted out
+ * of the records, no VIN on the rows, empty categories left empty — so the
+ * sample cannot drift into promising a layout a real report does not have.
  */
 export const SAMPLE_VIN = "4T1BF1FK8CU512345";
 
@@ -32,11 +36,8 @@ export function buildSampleReport(): VehicleReport {
     },
     headline:
       "No salvage, junk or insurance-loss brand was reported for this sample VIN.",
+    // Year, make, model and trim head the report, so they are not restated here.
     specifications: [
-      { label: "Year", value: "2012" },
-      { label: "Make", value: "Toyota" },
-      { label: "Model", value: "Camry" },
-      { label: "Trim", value: "SE" },
       { label: "Style", value: "4 Door Sedan" },
       { label: "Engine", value: "2.5L L4 DOHC 16V" },
       { label: "Transmission", value: "6-Speed Automatic" },
@@ -51,8 +52,8 @@ export function buildSampleReport(): VehicleReport {
         key: "titles",
         label: "Title records",
         status: "found",
-        count: 4,
-        detail: "4 title records across 2 states",
+        count: 5,
+        detail: "5 title records across 2 states",
       },
       {
         key: "branded",
@@ -104,55 +105,68 @@ export function buildSampleReport(): VehicleReport {
         detail: "1 recall campaign listed",
       },
     ],
+    // The 2020 re-registration reported the same mileage as 2019, which is what
+    // an unchanged reading looks like on a real report.
     odometer: [
       { date: "2012-04-02", value: 12, unit: "mi", source: "KY" },
       { date: "2015-06-19", value: 41_204, unit: "mi", source: "KY" },
       { date: "2019-03-08", value: 78_930, unit: "mi", source: "TN" },
+      { date: "2020-04-02", value: 78_930, unit: "mi", source: "TN" },
       { date: "2024-09-27", value: 121_477, unit: "mi", source: "TN" },
     ],
     sections: [
       {
         key: "titles",
         title: "Title & registration history",
+        navLabel: "Titles",
         description:
           "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
         emptyLabel: "No title or registration events came back for this VIN.",
-        columns: ["Date", "State", "Odometer", "Current"],
+        columns: ["Date", "State", "Odometer", "Event", "Current"],
+        // The provider reports the use on every event, so it is stated once.
+        shared: [{ label: "Vehicle use", value: "Personal" }],
         records: [
           [
             { label: "Date", value: "Sep 27, 2024" },
             { label: "State", value: "TN" },
             { label: "Odometer", value: "121,477 mi" },
+            { label: "Event", value: "Title transfer" },
             { label: "Current", value: "Yes" },
-            { label: "Vehicle use", value: "Personal" },
+          ],
+          [
+            { label: "Date", value: "Apr 2, 2020" },
+            { label: "State", value: "TN" },
+            { label: "Odometer", value: "78,930 mi" },
+            { label: "Event", value: "Registration renewal" },
+            { label: "Current", value: "No" },
           ],
           [
             { label: "Date", value: "Mar 8, 2019" },
             { label: "State", value: "TN" },
             { label: "Odometer", value: "78,930 mi" },
+            { label: "Event", value: "Title transfer" },
             { label: "Current", value: "No" },
-            { label: "Vehicle use", value: "Personal" },
           ],
           [
             { label: "Date", value: "Jun 19, 2015" },
             { label: "State", value: "KY" },
             { label: "Odometer", value: "41,204 mi" },
+            { label: "Event", value: "Title transfer" },
             { label: "Current", value: "No" },
-            { label: "Vehicle use", value: "Personal" },
           ],
           [
             { label: "Date", value: "Apr 2, 2012" },
             { label: "State", value: "KY" },
             { label: "Odometer", value: "12 mi" },
+            { label: "Event", value: "First title issued" },
             { label: "Current", value: "No" },
-            { label: "Vehicle use", value: "Personal" },
-            { label: "Title type", value: "First title issued" },
           ],
         ],
       },
       {
         key: "jsi",
         title: "Junk, salvage & insurance records",
+        navLabel: "Junk & salvage",
         description:
           "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
         emptyLabel: "No junk, salvage or insurance-loss records came back.",
@@ -161,6 +175,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "accidents",
         title: "Accident & damage records",
+        navLabel: "Accidents",
         description: "Reported collision and damage events.",
         emptyLabel: "No accident or damage records came back.",
         columns: ["Date", "State", "City", "Severity", "Damage"],
@@ -179,6 +194,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "liens",
         title: "Liens & repossessions",
+        navLabel: "Liens",
         description: "Financial interests recorded against the vehicle.",
         emptyLabel: "No liens or repossessions came back.",
         columns: ["Date", "State", "Type", "Status"],
@@ -194,6 +210,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "sales",
         title: "Sales & listing history",
+        navLabel: "Sales",
         description:
           "Prior retail and auction listings, including asking prices where available.",
         emptyLabel: "No prior sales listings came back.",
@@ -220,6 +237,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "recalls",
         title: "Safety recalls",
+        navLabel: "Recalls",
         description: "Manufacturer recall campaigns that apply to this vehicle.",
         emptyLabel: "No recall campaigns came back.",
         records: [
@@ -239,6 +257,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "thefts",
         title: "Theft records",
+        navLabel: "Thefts",
         description: "Reported thefts and recoveries.",
         emptyLabel: "No theft records came back.",
         records: [],
@@ -246,6 +265,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "impounds",
         title: "Impound records",
+        navLabel: "Impounds",
         description: "Impound and towing events.",
         emptyLabel: "No impound records came back.",
         records: [],
@@ -253,6 +273,7 @@ export function buildSampleReport(): VehicleReport {
       {
         key: "exports",
         title: "Export records",
+        navLabel: "Exports",
         description: "Records of the vehicle leaving the country.",
         emptyLabel: "No export records came back.",
         records: [],

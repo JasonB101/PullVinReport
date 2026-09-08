@@ -37,6 +37,13 @@ export type ReportSection = {
    * labelled cards; anything left over is shown beneath its row.
    */
   columns?: string[];
+  /**
+   * Fields every record carried with the same value, lifted out of the records
+   * so the constant is stated once for the section instead of on every row.
+   */
+  shared?: Field[];
+  /** Short label for the jump nav. Falls back to the section title. */
+  navLabel?: string;
 };
 
 export type OdometerReading = {
@@ -180,4 +187,200 @@ export function dedupeConsecutiveRecords(records: Field[][]): Field[][] {
     kept.push(record);
   }
   return kept;
+}
+
+/** The spine of an event: it stays on the row even when every record agrees. */
+const ALWAYS_PER_RECORD = new Set(["Date"]);
+
+/**
+ * Moves fields that never vary out of the records and into the section.
+ *
+ * A feed repeats things like the odometer unit or the vehicle use on every
+ * event it returns. Read as a table that is a column of one value copied down
+ * the page, which is the main thing that makes a real history look padded.
+ * Stating it once for the section says exactly as much.
+ */
+export function liftSharedFields(records: Field[][]): {
+  records: Field[][];
+  shared: Field[];
+} {
+  if (records.length < 2) return { records, shared: [] };
+
+  const shared = records[0].filter(
+    (candidate) =>
+      !ALWAYS_PER_RECORD.has(candidate.label) &&
+      records.every((record) => {
+        const matches = record.filter((field) => field.label === candidate.label);
+        return matches.length === 1 && matches[0].value === candidate.value;
+      }),
+  );
+  if (shared.length === 0) return { records, shared: [] };
+
+  const labels = new Set(shared.map((field) => field.label));
+  const trimmed = records.map((record) =>
+    record.filter((field) => !labels.has(field.label)),
+  );
+  // A row stripped to nothing reads worse than the repetition it removed.
+  if (trimmed.some((record) => record.length === 0)) return { records, shared: [] };
+
+  return { records: trimmed, shared };
+}
+
+/**
+ * Drops a reading the feed reported twice for the same event.
+ *
+ * A mileage that repeats on a *different* date is a real second event and stays
+ * — a car can be re-registered without being driven, and hiding that would be
+ * rewriting the history. Only the same date, mileage and state twice over is
+ * removed, because that is one event echoed, not two.
+ *
+ * Expects readings in date order, oldest first.
+ */
+export function dedupeOdometerReadings(
+  readings: OdometerReading[],
+): OdometerReading[] {
+  const kept: OdometerReading[] = [];
+  for (const reading of readings) {
+    const previous = kept[kept.length - 1];
+    if (
+      previous &&
+      previous.date === reading.date &&
+      previous.value === reading.value &&
+      previous.source === reading.source
+    ) {
+      continue;
+    }
+    kept.push(reading);
+  }
+  return kept;
+}
+
+/** True when a reading is lower than the one before it. */
+export function hasOdometerRollback(readings: OdometerReading[]): boolean {
+  return readings.some(
+    (reading, index) => index > 0 && reading.value < readings[index - 1].value,
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* What the renderers put at the top of a report                               */
+/* -------------------------------------------------------------------------- */
+
+export type ChipTone = "clear" | "flag" | "neutral";
+
+export type ReportChip = {
+  key: string;
+  label: string;
+  tone: ChipTone;
+};
+
+/**
+ * The header's status chips.
+ *
+ * Every chip restates something already in the report's own records — the
+ * title brand, the mileage direction, the counts of the checks that fired.
+ * Nothing here is scored, graded or valued: we do not hold the data that would
+ * make a grade or a price honest.
+ */
+export function reportChips(report: VehicleReport): ReportChip[] {
+  const chips: ReportChip[] = [];
+  const check = (key: string) => report.checks.find((entry) => entry.key === key);
+
+  const titles = check("titles");
+  const branded = check("branded");
+
+  if (branded?.status === "found") {
+    chips.push({ key: "branded", label: "Title brand reported", tone: "flag" });
+  } else if (branded && titles && titles.count > 0) {
+    chips.push({ key: "branded", label: "No title brand reported", tone: "clear" });
+  }
+
+  if (report.odometer.length > 0) {
+    chips.push(
+      hasOdometerRollback(report.odometer)
+        ? { key: "odometer", label: "Odometer rollback indicated", tone: "flag" }
+        : { key: "odometer", label: "Odometer reads consistently", tone: "clear" },
+    );
+  }
+
+  for (const entry of report.checks) {
+    if (entry.status !== "found") continue;
+    if (entry.key === "titles" || entry.key === "branded") continue;
+    chips.push({
+      key: entry.key,
+      label: `${entry.label}: ${entry.count}`,
+      tone: "flag",
+    });
+  }
+
+  if (titles) {
+    chips.push({
+      key: "titles",
+      label: titles.count > 0 ? `Title records: ${titles.count}` : "No title records",
+      tone: "neutral",
+    });
+  }
+
+  return chips;
+}
+
+export type ReportNavItem = { href: string; label: string };
+
+/** Outline of the report, listing only the parts that came back with content. */
+export function reportNavItems(report: VehicleReport): ReportNavItem[] {
+  const items: ReportNavItem[] = [{ href: "#summary", label: "Summary" }];
+  if (report.odometer.length > 0) {
+    items.push({ href: "#odometer", label: "Odometer" });
+  }
+  for (const section of report.sections) {
+    if (section.records.length === 0) continue;
+    items.push({
+      href: `#${section.key}`,
+      label: section.navLabel ?? section.title,
+    });
+  }
+  if (report.specifications.length > 0) {
+    items.push({ href: "#specifications", label: "Specifications" });
+  }
+  return items;
+}
+
+export function sectionsWithRecords(report: VehicleReport): ReportSection[] {
+  return report.sections.filter((section) => section.records.length > 0);
+}
+
+/**
+ * The record types that were searched and came back with nothing.
+ *
+ * Printing a card per empty category is the wall of "no issue found" rows that
+ * makes a report feel padded, but dropping them silently would hide what was
+ * actually checked. One list of names says both.
+ */
+export function searchedAndEmpty(report: VehicleReport): string[] {
+  return report.sections
+    .filter((section) => section.records.length === 0)
+    .map((section) => section.navLabel ?? section.title);
+}
+
+/**
+ * The record currently in force, ready to be stated above its own table.
+ *
+ * Nothing new is derived: it is the record the provider flagged as current,
+ * minus the flag itself.
+ */
+export function currentEvent(
+  section: ReportSection,
+): { label: string; fields: Field[] } | null {
+  const record = section.records.find((fields) =>
+    fields.some((field) => field.label === "Current" && field.value === "Yes"),
+  );
+  if (!record) return null;
+
+  const fields = record.filter((field) => field.label !== "Current");
+  if (fields.length === 0) return null;
+
+  return {
+    label: section.key === "titles" ? "Current title" : "Current record",
+    fields,
+  };
 }

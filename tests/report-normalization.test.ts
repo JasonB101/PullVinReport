@@ -117,26 +117,84 @@ describe("provider report normalization", () => {
       "121,477 mi",
       "Yes",
     ]);
-    // Everything else still travels with the record, just not as a column.
-    assert.deepEqual(table.rows[0].extras, [
-      { label: "Vehicle use", value: "Personal" },
-    ]);
+    // The vehicle use is identical on every record, so it is not on the rows.
+    assert.deepEqual(table.rows[0].extras, []);
+  });
+
+  it("states a value the feed repeats on every record once for the section", () => {
+    assert.deepEqual(titles.shared, [{ label: "Vehicle use", value: "Personal" }]);
+    for (const record of titles.records) {
+      assert.equal(
+        record.some((field) => field.label === "Vehicle use"),
+        false,
+      );
+    }
+  });
+
+  it("keeps the odometer unit code off the records entirely", () => {
+    for (const record of titles.records) {
+      assert.equal(
+        record.some((field) => /unit/i.test(field.label)),
+        false,
+      );
+    }
+    assert.equal(
+      titles.shared?.some((field) => /unit/i.test(field.label)),
+      false,
+    );
+  });
+
+  it("leaves the year, make and model to the heading that already states them", () => {
+    assert.deepEqual(report.specifications, []);
+  });
+
+  it("keeps the VIN out of the specification grid", () => {
+    const withVin = normalizeVinAuditReport(
+      { ...PAYLOAD, attributes: { ...PAYLOAD.attributes, VIN: VIN, Engine: "2.5L L4" } },
+      VIN,
+    );
+    assert.deepEqual(withVin.specifications, [{ label: "Engine", value: "2.5L L4" }]);
   });
 
   it("still exposes the provider link on the model for support", () => {
     assert.equal(report.providerReportUrl, PAYLOAD.reportlink);
   });
 
-  it("charts odometer readings in sortable order with a real unit", () => {
+  it("lists odometer readings in sortable order with a real unit, echo dropped", () => {
     assert.deepEqual(
       report.odometer.map((reading) => [reading.date, reading.value, reading.unit]),
       [
         ["2015-06-19", 41_204, "mi"],
         ["2019-03-08", 78_930, "mi"],
         ["2024-09-27", 121_477, "mi"],
-        ["2024-09-27", 121_477, "mi"],
       ],
     );
+  });
+
+  it("gives every section a short name for the report outline", () => {
+    for (const section of report.sections) {
+      assert.ok(section.navLabel, `expected a nav label on "${section.key}"`);
+      assert.ok(
+        section.navLabel.length <= 16,
+        `"${section.navLabel}" is too long for the outline`,
+      );
+    }
+  });
+
+  it("reads a title type as the event that happened", () => {
+    const titled = normalizeVinAuditReport(
+      {
+        titles: [
+          { vin: VIN, date: "2024-09-27", state: "TN", titletype: "Title transfer" },
+        ],
+      },
+      VIN,
+    );
+    const [record] = find(titled.sections, "titles").records;
+    assert.deepEqual(record.find((field) => field.label === "Event"), {
+      label: "Event",
+      value: "Title transfer",
+    });
   });
 
   it("describes empty sections in our own voice", () => {

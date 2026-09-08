@@ -11,7 +11,13 @@ import type {
   VehicleReport,
   VehicleSummary,
 } from "@/lib/report";
-import { dedupeConsecutiveRecords, formatEventDate, isoDate } from "@/lib/report";
+import {
+  dedupeConsecutiveRecords,
+  dedupeOdometerReadings,
+  formatEventDate,
+  isoDate,
+  liftSharedFields,
+} from "@/lib/report";
 import { normalizeVin } from "@/lib/vin";
 
 export class ProviderNotConfiguredError extends Error {
@@ -71,6 +77,10 @@ const KEY_LABELS: Record<string, string> = {
   jsi: "Junk, salvage & insurance",
   meterunit: "Odometer unit",
   meter: "Odometer",
+  titletype: "Event",
+  transactiontype: "Event",
+  transaction: "Event",
+  event: "Event",
   titlenumber: "Title number",
   vehicleuse: "Vehicle use",
   reportlink: "Provider report",
@@ -151,32 +161,46 @@ function toFields(record: Record<string, unknown>): Field[] {
   )?.[1];
 
   const fields: Field[] = [];
-  let hasOdometer = false;
 
   for (const [key, value] of Object.entries(record)) {
     const lower = key.toLowerCase();
     if (HIDDEN_KEYS.has(lower) || ODOMETER_UNIT_KEYS.has(lower)) continue;
 
     if (ODOMETER_KEYS.has(lower)) {
-      const odometer = hasOdometer ? "" : formatOdometer(value, unit);
-      if (odometer) {
-        fields.push({ label: "Odometer", value: odometer });
-        hasOdometer = true;
-      }
+      addField(fields, "Odometer", formatOdometer(value, unit));
       continue;
     }
 
-    const text = BOOLEAN_KEYS.has(lower)
-      ? yesNo(value)
-      : isDateKey(lower)
-        ? formatEventDate(stringify(value))
-        : stringify(value);
-    if (text.length === 0) continue;
-
-    fields.push({ label: humanizeKey(key), value: text });
+    addField(
+      fields,
+      humanizeKey(key),
+      BOOLEAN_KEYS.has(lower)
+        ? yesNo(value)
+        : isDateKey(lower)
+          ? formatEventDate(stringify(value))
+          : stringify(value),
+    );
   }
 
   return fields;
+}
+
+/**
+ * Adds a field unless it is empty, keeping one field per label.
+ *
+ * Several provider keys can map to the same label — a record with both a title
+ * type and a transaction type is one "Event" to a reader — so a second value
+ * joins the first instead of creating a duplicate row the table would drop.
+ */
+function addField(fields: Field[], label: string, value: string): void {
+  if (value.length === 0) return;
+  const existing = fields.find((field) => field.label === label);
+  if (!existing) {
+    fields.push({ label, value });
+    return;
+  }
+  if (existing.value === value) return;
+  existing.value = `${existing.value} · ${value}`;
 }
 
 /** Puts a section's column fields first so a record reads in a fixed order. */
@@ -229,26 +253,38 @@ function pickAttribute(
   return undefined;
 }
 
-function buildSection(
-  key: string,
-  title: string,
-  description: string,
-  emptyLabel: string,
-  value: unknown,
-  columns?: string[],
-): ReportSection {
+/** Labels that only ever repeat what the report heading already says. */
+const HEADING_LABELS = new Set(["Year", "Make", "Model", "Trim", "Trim level", "Series"]);
+
+/** `2012 Toyota Camry SE` heads the report, so the spec grid can skip its parts. */
+function isRestatedByHeading(field: Field, vehicle: VehicleSummary): boolean {
+  if (!HEADING_LABELS.has(field.label)) return false;
+  return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].includes(
+    field.value,
+  );
+}
+
+type SectionSpec = {
+  key: string;
+  title: string;
+  /** What the jump nav calls it. */
+  navLabel: string;
+  description: string;
+  emptyLabel: string;
+  columns?: string[];
+};
+
+function buildSection(spec: SectionSpec, value: unknown): ReportSection {
+  const columns = spec.columns ?? [];
   const cleaned = asRecordArray(value)
-    .map((record) => ({ record, fields: orderFields(toFields(record), columns ?? []) }))
+    .map((record) => ({ record, fields: orderFields(toFields(record), columns) }))
     .filter((entry) => entry.fields.length > 0);
 
-  return {
-    key,
-    title,
-    description,
-    emptyLabel,
-    columns,
-    records: dedupeConsecutiveRecords(sortByDateDesc(cleaned)),
-  };
+  const { records, shared } = liftSharedFields(
+    dedupeConsecutiveRecords(sortByDateDesc(cleaned)),
+  );
+
+  return { ...spec, records, shared };
 }
 
 function check(
@@ -285,7 +321,9 @@ function parseOdometer(titles: Record<string, unknown>[]): OdometerReading[] {
       source: stringify(title.state) || "Title record",
     });
   }
-  return readings.sort((a, b) => a.date.localeCompare(b.date));
+  return dedupeOdometerReadings(
+    readings.sort((a, b) => a.date.localeCompare(b.date)),
+  );
 }
 
 /**
@@ -391,81 +429,116 @@ export function normalizeVinAuditReport(
 
   const sections: ReportSection[] = [
     buildSection(
-      "titles",
-      "Title & registration history",
-      "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
-      "No title or registration events came back for this VIN.",
+      {
+        key: "titles",
+        title: "Title & registration history",
+        navLabel: "Titles",
+        description:
+          "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
+        emptyLabel: "No title or registration events came back for this VIN.",
+        columns: ["Date", "State", "Odometer", "Event", "Brand", "Current"],
+      },
       titles,
-      ["Date", "State", "Odometer", "Current"],
     ),
     buildSection(
-      "jsi",
-      "Junk, salvage & insurance records",
-      "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
-      "No junk, salvage or insurance-loss records came back.",
+      {
+        key: "jsi",
+        title: "Junk, salvage & insurance records",
+        navLabel: "Junk & salvage",
+        description:
+          "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
+        emptyLabel: "No junk, salvage or insurance-loss records came back.",
+        columns: ["Date", "State", "City", "Reporting entity", "Obtained from"],
+      },
       jsi,
-      ["Date", "State", "City", "Reporting entity", "Obtained from"],
     ),
     buildSection(
-      "accidents",
-      "Accident & damage records",
-      "Reported collision and damage events.",
-      "No accident or damage records came back.",
+      {
+        key: "accidents",
+        title: "Accident & damage records",
+        navLabel: "Accidents",
+        description: "Reported collision and damage events.",
+        emptyLabel: "No accident or damage records came back.",
+        columns: ["Date", "State", "City", "Severity", "Damage", "Odometer"],
+      },
       accidents,
-      ["Date", "State", "City", "Severity", "Damage", "Odometer"],
     ),
     buildSection(
-      "thefts",
-      "Theft records",
-      "Reported thefts and recoveries.",
-      "No theft records came back.",
+      {
+        key: "thefts",
+        title: "Theft records",
+        navLabel: "Thefts",
+        description: "Reported thefts and recoveries.",
+        emptyLabel: "No theft records came back.",
+        columns: ["Date", "State", "City", "Recovered"],
+      },
       thefts,
-      ["Date", "State", "City", "Recovered"],
     ),
     buildSection(
-      "liens",
-      "Liens & repossessions",
-      "Financial interests recorded against the vehicle.",
-      "No liens or repossessions came back.",
+      {
+        key: "liens",
+        title: "Liens & repossessions",
+        navLabel: "Liens",
+        description: "Financial interests recorded against the vehicle.",
+        emptyLabel: "No liens or repossessions came back.",
+        columns: ["Date", "State", "Type", "Status", "Lienholder"],
+      },
       liens,
-      ["Date", "State", "Type", "Status", "Lienholder"],
     ),
     buildSection(
-      "impounds",
-      "Impound records",
-      "Impound and towing events.",
-      "No impound records came back.",
+      {
+        key: "impounds",
+        title: "Impound records",
+        navLabel: "Impounds",
+        description: "Impound and towing events.",
+        emptyLabel: "No impound records came back.",
+        columns: ["Date", "State", "City", "Reason"],
+      },
       impounds,
-      ["Date", "State", "City", "Reason"],
     ),
     buildSection(
-      "exports",
-      "Export records",
-      "Records of the vehicle leaving the country.",
-      "No export records came back.",
+      {
+        key: "exports",
+        title: "Export records",
+        navLabel: "Exports",
+        description: "Records of the vehicle leaving the country.",
+        emptyLabel: "No export records came back.",
+        columns: ["Date", "State", "Port", "Country"],
+      },
       exports,
-      ["Date", "State", "Port", "Country"],
     ),
     buildSection(
-      "sales",
-      "Sales & listing history",
-      "Prior retail and auction listings, including asking prices where available.",
-      "No prior sales listings came back.",
+      {
+        key: "sales",
+        title: "Sales & listing history",
+        navLabel: "Sales",
+        description:
+          "Prior retail and auction listings, including asking prices where available.",
+        emptyLabel: "No prior sales listings came back.",
+        columns: ["Date", "Price", "Odometer", "Seller type", "City", "State"],
+      },
       sales,
-      ["Date", "Price", "Odometer", "Seller type", "City", "State"],
     ),
     buildSection(
-      "recalls",
-      "Safety recalls",
-      "Manufacturer recall campaigns that apply to this vehicle.",
-      "No recall campaigns came back.",
+      {
+        key: "recalls",
+        title: "Safety recalls",
+        navLabel: "Recalls",
+        description: "Manufacturer recall campaigns that apply to this vehicle.",
+        emptyLabel: "No recall campaigns came back.",
+      },
       recalls,
     ),
   ];
 
   const specifications: Field[] = Object.entries(attributes)
     .map(([key, value]) => ({ label: humanizeKey(key), value: stringify(value) }))
-    .filter((field) => field.value.length > 0);
+    .filter(
+      (field) =>
+        field.value.length > 0 &&
+        field.label !== "VIN" &&
+        !isRestatedByHeading(field, vehicle),
+    );
 
   const providerReportUrl = stringify(payload.reportlink) || undefined;
 

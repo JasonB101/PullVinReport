@@ -12,6 +12,7 @@ import {
   customerFailureMessage,
   refundPromise,
 } from "@/lib/customer-copy";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
 import { prettyVin } from "@/lib/vin";
@@ -153,8 +154,9 @@ export default async function ReportPage({
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
                   Your report
                 </p>
+                {/* The vehicle and its VIN head the report itself, just below. */}
                 <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                  Vehicle history for {prettyVin(order.vin)}
+                  Your vehicle history report
                 </h1>
                 <p className="mt-1.5 text-sm text-slate-500">
                   {order.refundedAt ? "Refunded" : "Paid"}{" "}
@@ -171,7 +173,9 @@ export default async function ReportPage({
         </div>
 
         <div className="container-page py-10">
-          <ReportView report={order.report} />
+          {/* Laid out from the payload stored with the order, so a report bought
+              before a layout change still reads the way today's does. */}
+          <ReportView report={withCurrentLayout(order.report)} />
         </div>
       </main>
 

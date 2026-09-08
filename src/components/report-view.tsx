@@ -2,11 +2,22 @@ import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
   Field,
   ReportCheck,
+  ReportChip,
   ReportSection,
   SectionTable,
   VehicleReport,
 } from "@/lib/report";
-import { formatEventDate, sectionTable, vehicleTitle } from "@/lib/report";
+import {
+  currentEvent,
+  formatEventDate,
+  hasOdometerRollback,
+  reportChips,
+  reportNavItems,
+  searchedAndEmpty,
+  sectionTable,
+  sectionsWithRecords,
+  vehicleTitle,
+} from "@/lib/report";
 import { prettyVin } from "@/lib/vin";
 
 function formatDateTime(iso: string): string {
@@ -41,37 +52,32 @@ function SampleBanner() {
   );
 }
 
-function CheckTile({ check }: { check: ReportCheck }) {
-  const styles = {
-    clear: {
-      wrap: "border-emerald-200 bg-emerald-50/60",
-      dot: "bg-emerald-500",
-      label: "text-emerald-900",
-      detail: "text-emerald-800/80",
-    },
-    found: {
-      wrap: "border-amber-200 bg-amber-50/70",
-      dot: "bg-amber-500",
-      label: "text-amber-900",
-      detail: "text-amber-900/80",
-    },
-    unavailable: {
-      wrap: "border-slate-200 bg-slate-50",
-      dot: "bg-slate-400",
-      label: "text-slate-700",
-      detail: "text-slate-500",
-    },
-  }[check.status];
+/** Header chips. Each one restates a record we hold — never a score or a price. */
+function Chip({ chip }: { chip: ReportChip }) {
+  const tone = {
+    clear: "bg-emerald-400/15 text-emerald-200 ring-emerald-400/30",
+    flag: "bg-amber-400/20 text-amber-100 ring-amber-300/40",
+    neutral: "bg-white/10 text-slate-200 ring-white/15",
+  }[chip.tone];
 
   return (
-    <div className={`rounded-xl border p-4 ${styles.wrap}`}>
+    <span
+      className={`rounded-full px-3 py-1 text-xs font-medium ring-1 ring-inset ${tone}`}
+    >
+      {chip.label}
+    </span>
+  );
+}
+
+/** Only checks that actually fired get a tile; the rest are one line of text. */
+function FlagTile({ check }: { check: ReportCheck }) {
+  return (
+    <div className="rounded-xl border border-amber-200 bg-amber-50/70 p-4">
       <div className="flex items-center justify-between gap-3">
-        <span className={`text-sm font-semibold ${styles.label}`}>
-          {check.label}
-        </span>
-        <span className={`h-2.5 w-2.5 shrink-0 rounded-full ${styles.dot}`} />
+        <span className="text-sm font-semibold text-amber-900">{check.label}</span>
+        <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-amber-500" />
       </div>
-      <p className={`mt-1.5 text-xs leading-relaxed ${styles.detail}`}>
+      <p className="mt-1.5 text-xs leading-relaxed text-amber-900/80">
         {check.detail}
       </p>
     </div>
@@ -97,22 +103,39 @@ function RecordCard({ fields }: { fields: Field[] }) {
   );
 }
 
-/** Yes/No columns read faster as a badge than as another word in a cell. */
+/**
+ * A Yes is worth a badge — it is the answer the reader is scanning for. A No is
+ * the default on nearly every row, so it stays quiet text instead of adding a
+ * column of identical chips.
+ */
 function Cell({ value }: { value: string }) {
-  if (value === "Yes" || value === "No") {
+  if (value === "Yes") {
     return (
-      <span
-        className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${
-          value === "Yes"
-            ? "bg-emerald-100 text-emerald-800"
-            : "bg-slate-100 text-slate-500"
-        }`}
-      >
-        {value}
+      <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-semibold text-emerald-800">
+        Yes
       </span>
     );
   }
+  if (value === "No") return <span className="text-slate-400">No</span>;
   return <>{value || "—"}</>;
+}
+
+/** Fields the provider repeated on every record, stated once for the section. */
+function SharedFields({ fields, count }: { fields: Field[]; count: number }) {
+  return (
+    <p className="mt-3 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
+      <span className="rounded-full bg-white px-2 py-0.5 font-medium text-slate-500 ring-1 ring-slate-200">
+        Same on all {count} records
+      </span>
+      {fields.map((field, index) => (
+        <span key={`${field.label}-${index}`}>
+          {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
+          <span className="text-slate-400">{field.label}: </span>
+          <span className="text-slate-600">{field.value}</span>
+        </span>
+      ))}
+    </p>
+  );
 }
 
 function RecordTable({ table }: { table: SectionTable }) {
@@ -175,11 +198,12 @@ function RecordTable({ table }: { table: SectionTable }) {
 
 function SectionBlock({ section }: { section: ReportSection }) {
   const table = sectionTable(section);
+  const current = currentEvent(section);
 
   return (
     <section
       id={section.key}
-      className="scroll-mt-24 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6"
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
@@ -194,11 +218,18 @@ function SectionBlock({ section }: { section: ReportSection }) {
         {section.description}
       </p>
 
-      {section.records.length === 0 ? (
-        <p className="mt-4 rounded-xl border border-dashed border-slate-300 bg-white px-4 py-5 text-sm text-slate-500">
-          {section.emptyLabel}
+      {current && (
+        <p className="mt-3 text-sm text-slate-700">
+          <span className="font-semibold text-slate-900">{current.label}: </span>
+          {current.fields.map((field) => field.value).join(" · ")}
         </p>
-      ) : table ? (
+      )}
+
+      {section.shared && section.shared.length > 0 && (
+        <SharedFields fields={section.shared} count={section.records.length} />
+      )}
+
+      {table ? (
         <RecordTable table={table} />
       ) : (
         <div className="mt-4 space-y-3">
@@ -211,15 +242,23 @@ function SectionBlock({ section }: { section: ReportSection }) {
   );
 }
 
-function OdometerTimeline({ report }: { report: VehicleReport }) {
+/**
+ * Mileage as reported, one line per dated event.
+ *
+ * No bar chart: three registrations at the same mileage drew three identical
+ * bars, which made a real history look like a copy-paste. A repeat is marked as
+ * unchanged instead, and the reading itself is what the eye lands on.
+ */
+function Odometer({ report }: { report: VehicleReport }) {
   if (report.odometer.length === 0) return null;
-  const max = Math.max(...report.odometer.map((reading) => reading.value));
-  const rollback = report.odometer.some(
-    (reading, index) => index > 0 && reading.value < report.odometer[index - 1].value,
-  );
+  const rollback = hasOdometerRollback(report.odometer);
+  const newestFirst = [...report.odometer].reverse();
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <section
+      id="odometer"
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
           Odometer readings
@@ -234,26 +273,41 @@ function OdometerTimeline({ report }: { report: VehicleReport }) {
           {rollback ? "Possible rollback" : "Consistent progression"}
         </span>
       </div>
-      <ul className="mt-5 space-y-3">
-        {report.odometer.map((reading, index) => (
-          <li key={`${reading.date}-${index}`} className="grid grid-cols-[6.5rem_1fr] items-center gap-3 sm:grid-cols-[8rem_1fr_7rem]">
-            <span className="text-xs text-slate-500">
-              {formatEventDate(reading.date)}
-            </span>
-            <span className="h-2 rounded-full bg-slate-100">
-              <span
-                className="block h-2 rounded-full bg-gradient-to-r from-brand-400 to-brand-600"
-                style={{ width: `${Math.max(4, (reading.value / max) * 100)}%` }}
-              />
-            </span>
-            <span className="col-span-2 text-xs text-slate-700 sm:col-span-1 sm:text-right">
-              <span className="font-semibold">
-                {reading.value.toLocaleString("en-US")} {reading.unit}
+      <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">
+        Mileage as reported at each title event, newest first.
+      </p>
+
+      <ul className="mt-4 divide-y divide-slate-100">
+        {newestFirst.map((reading, index) => {
+          const older = newestFirst[index + 1];
+          const unchanged = older?.value === reading.value;
+          return (
+            <li
+              key={`${reading.date}-${index}`}
+              className="flex flex-wrap items-baseline gap-x-3 gap-y-1 py-2.5"
+            >
+              <span className="w-28 shrink-0 text-xs text-slate-500">
+                {formatEventDate(reading.date)}
               </span>
-              <span className="ml-1.5 text-slate-400">{reading.source}</span>
-            </span>
-          </li>
-        ))}
+              <span
+                className={`text-base font-semibold tabular-nums ${
+                  unchanged ? "text-slate-400" : "text-slate-900"
+                }`}
+              >
+                {reading.value.toLocaleString("en-US")}
+                <span className="ml-1 text-xs font-normal text-slate-400">
+                  {reading.unit}
+                </span>
+              </span>
+              {unchanged && (
+                <span className="text-xs text-slate-400">unchanged</span>
+              )}
+              <span className="ml-auto text-xs text-slate-500">
+                {reading.source}
+              </span>
+            </li>
+          );
+        })}
       </ul>
     </section>
   );
@@ -262,10 +316,16 @@ function OdometerTimeline({ report }: { report: VehicleReport }) {
 function SpecGrid({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <section
+      id="specifications"
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+    >
       <h3 className="text-base font-semibold tracking-tight text-slate-900">
         Vehicle specifications
       </h3>
+      <p className="mt-1.5 text-sm text-slate-500">
+        Decoded from the VIN and the manufacturer&apos;s build record.
+      </p>
       <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {specifications.map((spec, index) => (
           <div key={`${spec.label}-${index}`} className="border-t border-slate-100 pt-3">
@@ -280,10 +340,39 @@ function SpecGrid({ specifications }: { specifications: Field[] }) {
   );
 }
 
+/** Outline of the report. Only parts that came back with something are listed. */
+function JumpNav({ report }: { report: VehicleReport }) {
+  const items = reportNavItems(report);
+  if (items.length < 2) return null;
+
+  return (
+    <nav
+      aria-label="Report sections"
+      className="no-print sticky top-16 z-30 rounded-2xl border border-slate-200 bg-white/90 px-2 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur"
+    >
+      <ul className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+        {items.map((item) => (
+          <li key={item.href}>
+            <a
+              href={item.href}
+              className="inline-flex rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
+            >
+              {item.label}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  );
+}
+
 /* -------------------------------------------------------------------------- */
 
 export function ReportView({ report }: { report: VehicleReport }) {
-  const flagged = report.checks.filter((check) => check.status === "found").length;
+  const chips = reportChips(report);
+  const flags = report.checks.filter((check) => check.status === "found");
+  const clear = searchedAndEmpty(report);
+  const sections = sectionsWithRecords(report);
 
   return (
     <article
@@ -308,6 +397,7 @@ export function ReportView({ report }: { report: VehicleReport }) {
             )}
           </div>
 
+          {/* The vehicle and its VIN are stated here and nowhere else. */}
           <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
             {vehicleTitle(report.vehicle)}
           </h1>
@@ -315,32 +405,15 @@ export function ReportView({ report }: { report: VehicleReport }) {
             {prettyVin(report.vin)}
           </p>
 
-          <dl className="mt-6 grid grid-cols-2 gap-4 border-t border-white/10 pt-5 sm:grid-cols-4">
-            <div>
-              <dt className="text-[11px] uppercase tracking-wider text-slate-400">
-                Records flagged
-              </dt>
-              <dd className="mt-1 text-lg font-semibold text-white">
-                {flagged} of {report.checks.length}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-[11px] uppercase tracking-wider text-slate-400">
-                Records
-              </dt>
-              <dd className="mt-1 text-lg font-semibold text-white">
-                {report.isSample ? "Sample" : "Live"}
-              </dd>
-            </div>
-            <div className="col-span-2">
-              <dt className="text-[11px] uppercase tracking-wider text-slate-400">
-                Generated
-              </dt>
-              <dd className="mt-1 text-lg font-semibold text-white">
-                {formatDateTime(report.generatedAt)} UTC
-              </dd>
-            </div>
-          </dl>
+          <div className="mt-5 flex flex-wrap gap-2">
+            {chips.map((chip) => (
+              <Chip key={chip.key} chip={chip} />
+            ))}
+          </div>
+
+          <p className="mt-5 border-t border-white/10 pt-4 text-xs text-slate-400">
+            Generated {formatDateTime(report.generatedAt)} UTC
+          </p>
         </div>
 
         <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-7">
@@ -351,24 +424,53 @@ export function ReportView({ report }: { report: VehicleReport }) {
         </div>
       </header>
 
-      <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+      <JumpNav report={report} />
+
+      <section
+        id="summary"
+        className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+      >
         <h2 className="text-base font-semibold tracking-tight text-slate-900">
-          At a glance
+          What we found
         </h2>
-        <p className="mt-1 text-sm text-slate-500">
-          Each check reflects the records we found for this VIN. A green check
-          means no matching record was found — not that an event never happened.
+
+        {flags.length > 0 ? (
+          <>
+            <p className="mt-1.5 text-sm text-slate-500">
+              {flags.length === 1
+                ? "One of the checks we run came back with records."
+                : `${flags.length} of the checks we run came back with records.`}
+            </p>
+            <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+              {flags.map((check) => (
+                <FlagTile key={check.key} check={check} />
+              ))}
+            </div>
+          </>
+        ) : (
+          <p className="mt-3 rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
+            None of the checks we run came back with a record for this VIN.
+          </p>
+        )}
+
+        {clear.length > 0 && (
+          <p className="mt-4 text-sm leading-relaxed text-slate-500">
+            <span className="font-medium text-slate-600">
+              Searched, nothing on file:{" "}
+            </span>
+            {clear.join(" · ")}
+          </p>
+        )}
+
+        <p className="mt-3 text-xs leading-relaxed text-slate-400">
+          Nothing on file means no matching record was found — not that an event
+          never happened.
         </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {report.checks.map((check) => (
-            <CheckTile key={check.key} check={check} />
-          ))}
-        </div>
       </section>
 
-      <OdometerTimeline report={report} />
+      <Odometer report={report} />
 
-      {report.sections.map((section) => (
+      {sections.map((section) => (
         <SectionBlock key={section.key} section={section} />
       ))}
 

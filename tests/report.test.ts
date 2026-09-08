@@ -1,12 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import type { ReportSection } from "../src/lib/report.ts";
+import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
 import {
+  currentEvent,
   dedupeConsecutiveRecords,
+  dedupeOdometerReadings,
   formatEventDate,
+  hasOdometerRollback,
   isoDate,
+  liftSharedFields,
+  reportChips,
+  reportNavItems,
+  searchedAndEmpty,
   sectionTable,
+  sectionsWithRecords,
 } from "../src/lib/report.ts";
 
 function section(overrides: Partial<ReportSection>): ReportSection {
@@ -145,6 +153,252 @@ describe("de-duplication", () => {
         ],
       ]).length,
       2,
+    );
+  });
+});
+
+describe("fields that never vary", () => {
+  const record = (date: string, state: string) => [
+    { label: "Date", value: date },
+    { label: "State", value: state },
+    { label: "Vehicle use", value: "Personal" },
+  ];
+
+  it("states a constant once for the section instead of on every record", () => {
+    const { records, shared } = liftSharedFields([
+      record("Sep 27, 2024", "TN"),
+      record("Mar 8, 2019", "TN"),
+    ]);
+
+    assert.deepEqual(shared, [
+      { label: "State", value: "TN" },
+      { label: "Vehicle use", value: "Personal" },
+    ]);
+    assert.deepEqual(records, [
+      [{ label: "Date", value: "Sep 27, 2024" }],
+      [{ label: "Date", value: "Mar 8, 2019" }],
+    ]);
+  });
+
+  it("leaves a field that varies on the records", () => {
+    const { records, shared } = liftSharedFields([
+      record("Sep 27, 2024", "TN"),
+      record("Mar 8, 2019", "KY"),
+    ]);
+
+    assert.deepEqual(shared, [{ label: "Vehicle use", value: "Personal" }]);
+    assert.deepEqual(records[0], [
+      { label: "Date", value: "Sep 27, 2024" },
+      { label: "State", value: "TN" },
+    ]);
+  });
+
+  it("never empties a record out, even when the records are all alike", () => {
+    const alike = [{ label: "State", value: "TN" }];
+    const { records, shared } = liftSharedFields([alike, [...alike]]);
+    assert.deepEqual(shared, []);
+    assert.equal(records.length, 2);
+  });
+
+  it("leaves a lone record alone: nothing is repeated yet", () => {
+    const only = [record("Sep 27, 2024", "TN")];
+    assert.deepEqual(liftSharedFields(only), { records: only, shared: [] });
+  });
+
+  it("drops a section out of table layout when too little is left to tabulate", () => {
+    // Every column but Date turned out to be constant, so cards read better.
+    const { records, shared } = liftSharedFields([
+      record("Sep 27, 2024", "TN"),
+      record("Mar 8, 2019", "TN"),
+    ]);
+    assert.equal(shared.length, 2);
+    assert.equal(
+      sectionTable(section({ columns: ["Date", "State"], records })),
+      null,
+    );
+  });
+});
+
+describe("odometer readings", () => {
+  const reading = (date: string, value: number, source = "WI") => ({
+    date,
+    value,
+    unit: "mi",
+    source,
+  });
+
+  it("keeps every dated event, even when the mileage repeats", () => {
+    const readings = [
+      reading("2024-05-22", 34_502),
+      reading("2025-01-28", 34_502),
+      reading("2026-05-15", 34_502),
+      reading("2026-05-29", 66_103),
+    ];
+    assert.deepEqual(dedupeOdometerReadings(readings), readings);
+  });
+
+  it("drops the same reading echoed twice for one event", () => {
+    const kept = dedupeOdometerReadings([
+      reading("2024-09-27", 121_477),
+      reading("2024-09-27", 121_477),
+    ]);
+    assert.equal(kept.length, 1);
+  });
+
+  it("keeps two states reporting the same mileage on the same day", () => {
+    const kept = dedupeOdometerReadings([
+      reading("2024-09-27", 121_477, "TN"),
+      reading("2024-09-27", 121_477, "KY"),
+    ]);
+    assert.equal(kept.length, 2);
+  });
+
+  it("calls a reading lower than the one before it a rollback", () => {
+    assert.equal(
+      hasOdometerRollback([reading("2019-03-08", 78_930), reading("2024-09-27", 41_204)]),
+      true,
+    );
+    assert.equal(
+      hasOdometerRollback([reading("2019-03-08", 41_204), reading("2024-09-27", 78_930)]),
+      false,
+    );
+    assert.equal(
+      hasOdometerRollback([reading("2019-03-08", 41_204), reading("2024-09-27", 41_204)]),
+      false,
+    );
+  });
+});
+
+describe("the record in force", () => {
+  it("states the current record without repeating the flag itself", () => {
+    const current = currentEvent(
+      section({
+        records: [
+          [
+            { label: "Date", value: "Sep 27, 2024" },
+            { label: "State", value: "TN" },
+            { label: "Current", value: "Yes" },
+          ],
+          [
+            { label: "Date", value: "Mar 8, 2019" },
+            { label: "State", value: "TN" },
+            { label: "Current", value: "No" },
+          ],
+        ],
+      }),
+    );
+
+    assert.equal(current?.label, "Current title");
+    assert.deepEqual(current?.fields, [
+      { label: "Date", value: "Sep 27, 2024" },
+      { label: "State", value: "TN" },
+    ]);
+  });
+
+  it("says nothing when no record is flagged as current", () => {
+    assert.equal(
+      currentEvent(section({ records: [[{ label: "State", value: "TN" }]] })),
+      null,
+    );
+  });
+});
+
+function report(overrides: Partial<VehicleReport> = {}): VehicleReport {
+  return {
+    vin: "4T1BF1FK8CU512345",
+    source: "sample",
+    isSample: true,
+    generatedAt: "2026-01-14T15:04:00.000Z",
+    vehicle: { year: "2012", make: "Toyota", model: "Camry" },
+    headline: "",
+    specifications: [],
+    odometer: [{ date: "2024-09-27", value: 121_477, unit: "mi", source: "TN" }],
+    checks: [
+      { key: "titles", label: "Title records", status: "found", count: 4, detail: "" },
+      { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+      {
+        key: "accidents",
+        label: "Accident records",
+        status: "found",
+        count: 2,
+        detail: "",
+      },
+    ],
+    sections: [
+      section({
+        key: "titles",
+        navLabel: "Titles",
+        records: [[{ label: "State", value: "TN" }]],
+      }),
+      section({ key: "thefts", navLabel: "Thefts", records: [] }),
+    ],
+    ...overrides,
+  };
+}
+
+describe("the header of a report", () => {
+  it("states the title brand, the mileage direction and the flags that fired", () => {
+    assert.deepEqual(reportChips(report()), [
+      { key: "branded", label: "No title brand reported", tone: "clear" },
+      { key: "odometer", label: "Odometer reads consistently", tone: "clear" },
+      { key: "accidents", label: "Accident records: 2", tone: "flag" },
+      { key: "titles", label: "Title records: 4", tone: "neutral" },
+    ]);
+  });
+
+  it("flags a brand and a rollback when the records show them", () => {
+    const chips = reportChips(
+      report({
+        checks: [
+          { key: "titles", label: "Title records", status: "found", count: 2, detail: "" },
+          {
+            key: "branded",
+            label: "Branded title",
+            status: "found",
+            count: 1,
+            detail: "",
+          },
+        ],
+        odometer: [
+          { date: "2019-03-08", value: 78_930, unit: "mi", source: "TN" },
+          { date: "2024-09-27", value: 41_204, unit: "mi", source: "TN" },
+        ],
+      }),
+    );
+
+    assert.deepEqual(chips.slice(0, 2), [
+      { key: "branded", label: "Title brand reported", tone: "flag" },
+      { key: "odometer", label: "Odometer rollback indicated", tone: "flag" },
+    ]);
+  });
+
+  it("never invents a grade, a score or a value", () => {
+    for (const chip of reportChips(report())) {
+      assert.doesNotMatch(chip.label, /grade|score|\$|value|excellent|poor/i);
+    }
+  });
+
+  it("puts nothing in the outline that has nothing to show", () => {
+    assert.deepEqual(reportNavItems(report()), [
+      { href: "#summary", label: "Summary" },
+      { href: "#odometer", label: "Odometer" },
+      { href: "#titles", label: "Titles" },
+    ]);
+  });
+
+  it("lists an empty category by name instead of giving it a section", () => {
+    assert.deepEqual(searchedAndEmpty(report()), ["Thefts"]);
+    assert.deepEqual(
+      sectionsWithRecords(report()).map((entry) => entry.key),
+      ["titles"],
+    );
+  });
+
+  it("drops the odometer from the outline when no reading came back", () => {
+    const items = reportNavItems(report({ odometer: [] }));
+    assert.equal(
+      items.some((item) => item.href === "#odometer"),
+      false,
     );
   });
 });
