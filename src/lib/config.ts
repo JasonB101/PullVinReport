@@ -160,6 +160,13 @@ export const fal = {
   get timeoutMs(): number {
     return intEnv("FAL_TIMEOUT_MS", 45_000);
   },
+  /**
+   * Recraft does not return alpha. After the drawing we cut the background
+   * with this model so the card can sit the vehicle on the aurora.
+   */
+  get rembgModel(): string {
+    return env("FAL_REMBG_MODEL") ?? "fal-ai/imageutils/rembg";
+  },
 };
 
 export function isFalConfigured(): boolean {

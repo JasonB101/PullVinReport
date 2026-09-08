@@ -70,6 +70,7 @@ version:
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
 | `FAL_IMAGE_MODEL` | No (default `fal-ai/recraft/v3/text-to-image`) | fal.ai model id. Recraft V3's digital-illustration style is the default so the picture cannot read as a photo of this VIN. Recraft V4 on fal has no style lock. |
 | `FAL_IMAGE_STYLE` | No (default `digital_illustration`) | Recraft style preset. Do not set `realistic_image`. |
+| `FAL_REMBG_MODEL` | No (default `fal-ai/imageutils/rembg`) | Cuts the Recraft raster to a transparent PNG. Recraft itself does not return alpha. |
 | `FAL_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for an illustration. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
@@ -181,29 +182,43 @@ What keeps it honest:
 
 ## Illustrated vehicle hero
 
-With `FAL_KEY` set, a paid report draws a **cartoon** of the year, make and
-model (plus a richer listing trim and exterior colour when the records have
-them) and places it on the vehicle card with a permanent badge:
-**Illustration · not this VIN**. It is never a photograph of that VIN.
+With `FAL_KEY` set, a paid report draws a **product-cutout** of the year, make
+and model (plus a richer listing trim and exterior colour when the records
+have them) and places it **to the right of the vehicle details** with a
+permanent badge: **Illustration · not this VIN**. It is never a photograph of
+that VIN. On a narrow screen the cutout stacks under the details.
 
+- Colour comes from listing fields including **`Vehicle color` / `Vehicle
+  colour`**, not only `Exterior color`. Interior colour is ignored.
 - Generated **inside the product** on `POST /api/vehicle-hero` after the
   records are already on screen — the same lazy pattern as the brief.
   Fulfillment does not wait on it.
-- Cached once per `year|make|model|trim|color|body|engine` on the store
-  (`pullvinreport_vehicle_heroes` in Postgres, `.data/vehicle-heroes.json`
+- Recraft V3 does not return alpha. After the drawing, `fal-ai/imageutils/rembg`
+  cuts the background to a transparent PNG. If that pass fails, no hero is
+  stored (we will not keep an opaque studio plate).
+- Cached once per `cutout-v1|year|make|model|trim|color|body|engine` on the
+  store (`pullvinreport_vehicle_heroes` in Postgres, `.data/vehicle-heroes.json`
   on the file store). Another order for the same example reuses the drawing.
-- Default model is Recraft V3 (`fal-ai/recraft/v3/text-to-image`) with
-  `digital_illustration` so the style cannot drift photoreal. Recraft V4 on
-  fal has no style preset and leans photoreal, so it is not the default.
-  Override with `FAL_IMAGE_MODEL` (for example `fal-ai/flux/schnell`) if you
-  want a cheaper cartoon and are willing to lean on the prompt alone.
-- The sample report uses a static SVG at `/sample-vehicle-hero.svg` and never
-  calls fal.
+  Keys that do not start with `cutout-v1|` are dropped on the next report view
+  so a previous white studio shot cannot come back.
+- The sample report uses a static transparent SVG at `/sample-vehicle-hero.svg`
+  and never calls fal.
 - Soft-fail: no key, a timeout or a rejection leaves the report unchanged
   aside from no hero.
 
-On ZOO `:3004`, hard-refresh a paid report after Baloo pulls. With `FAL_KEY`
-set you should see the labelled cartoon; without it the card looks as it did.
+### ZOO `:3004` — clear the white cache, then hard-refresh
+
+After Baloo pulls this branch:
+
+1. Drop the old drawings so the next view cannot serve the white studio car.
+   - Postgres: `DELETE FROM pullvinreport_vehicle_heroes;`
+   - File store: delete `.data/vehicle-heroes.json`
+   The app also ignores (and prunes) any key that does not start with
+   `cutout-v1|`, so a missed delete still will not show the old white image.
+2. Hard-refresh the paid report (Cmd/Ctrl-Shift-R).
+3. With `FAL_KEY` set you should see a Magnetite Gray (or the listing's
+   `Vehicle color`) cutout to the right of the details, labelled
+   **Illustration · not this VIN**. Without the key, no hero.
 
 ## What customers see when something breaks
 

@@ -121,6 +121,7 @@ describe("the model that draws the vehicle hero", () => {
   it("defaults to Recraft V3 digital illustration, not a photoreal Flux pass", () => {
     assert.equal(fal.model, "fal-ai/recraft/v3/text-to-image");
     assert.equal(fal.style, "digital_illustration");
+    assert.equal(fal.rembgModel, "fal-ai/imageutils/rembg");
   });
 
   it("takes an override for operators who want a cheaper Flux pass", () => {

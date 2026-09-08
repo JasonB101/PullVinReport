@@ -99,4 +99,6 @@ export interface OrderStore {
   /** Illustrated hero, keyed by year/make/model/trim/color — not by VIN. */
   getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null>;
   saveVehicleHero(hero: VehicleHeroRecord): Promise<void>;
+  /** Drop cached drawings whose key does not start with `keepPrefix`. */
+  clearStaleVehicleHeroes(keepPrefix: string): Promise<number>;
 };

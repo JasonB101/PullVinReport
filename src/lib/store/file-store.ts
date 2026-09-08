@@ -195,11 +195,29 @@ export class FileOrderStore implements OrderStore {
     await this.run(async () => {
       const heroes = await this.readHeroes();
       heroes[hero.cacheKey] = hero;
-      await mkdir(this.dir, { recursive: true });
-      const tmp = `${this.heroesFile}.${randomBytes(4).toString("hex")}.tmp`;
-      await writeFile(tmp, JSON.stringify(heroes), "utf8");
-      await rename(tmp, this.heroesFile);
+      await this.writeHeroes(heroes);
     });
+  }
+
+  async clearStaleVehicleHeroes(keepPrefix: string): Promise<number> {
+    return this.run(async () => {
+      const heroes = await this.readHeroes();
+      const next: Record<string, VehicleHeroRecord> = {};
+      let removed = 0;
+      for (const [key, hero] of Object.entries(heroes)) {
+        if (key.startsWith(keepPrefix)) next[key] = hero;
+        else removed += 1;
+      }
+      if (removed > 0) await this.writeHeroes(next);
+      return removed;
+    });
+  }
+
+  private async writeHeroes(heroes: Record<string, VehicleHeroRecord>): Promise<void> {
+    await mkdir(this.dir, { recursive: true });
+    const tmp = `${this.heroesFile}.${randomBytes(4).toString("hex")}.tmp`;
+    await writeFile(tmp, JSON.stringify(heroes), "utf8");
+    await rename(tmp, this.heroesFile);
   }
 
   async ping(): Promise<{ ok: boolean; detail: string }> {

@@ -570,7 +570,7 @@ export function ReportView({
   const facts = heroFacts(report);
   const illustrationAlt = facts
     ? heroAlt(facts)
-    : "Cartoon illustration of this vehicle — not a photo of this VIN";
+    : "Illustrated cutout of this vehicle — not a photo of this VIN";
   const flags = report.checks.filter((check) => check.status === "found");
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
@@ -582,45 +582,50 @@ export function ReportView({
       {report.isSample && <SampleBanner />}
 
       <header className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
-        <VehicleHero
-          src={heroSrc}
-          token={heroToken}
-          sample={report.isSample}
-          alt={illustrationAlt}
-        />
         <div className="hero-aurora bg-ink-950 px-5 py-7 sm:px-7 sm:py-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-200 ring-1 ring-inset ring-white/15">
-              Vehicle history report
-            </span>
-            {report.isSample ? (
-              <span className="rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-950">
-                Sample data
-              </span>
-            ) : (
-              <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
-                Live records
-              </span>
-            )}
+          <div className="flex flex-col gap-6 md:flex-row md:items-center md:gap-8">
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="rounded-full bg-white/10 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-brand-200 ring-1 ring-inset ring-white/15">
+                  Vehicle history report
+                </span>
+                {report.isSample ? (
+                  <span className="rounded-full bg-amber-400 px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.16em] text-amber-950">
+                    Sample data
+                  </span>
+                ) : (
+                  <span className="rounded-full bg-emerald-400/15 px-2.5 py-1 text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-300 ring-1 ring-inset ring-emerald-400/30">
+                    Live records
+                  </span>
+                )}
+              </div>
+
+              {/* The vehicle and its VIN are stated here and nowhere else. */}
+              <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
+                {vehicleTitle(report.vehicle)}
+              </h1>
+              <p className="mt-2 font-mono text-sm tracking-wider text-brand-200">
+                {prettyVin(report.vin)}
+              </p>
+
+              <div className="mt-5 flex flex-wrap gap-2">
+                {chips.map((chip) => (
+                  <Chip key={chip.key} chip={chip} />
+                ))}
+              </div>
+
+              <p className="mt-5 border-t border-white/10 pt-4 text-xs text-slate-400">
+                Generated {formatDateTime(report.generatedAt)} UTC
+              </p>
+            </div>
+
+            <VehicleHero
+              src={heroSrc}
+              token={heroToken}
+              sample={report.isSample}
+              alt={illustrationAlt}
+            />
           </div>
-
-          {/* The vehicle and its VIN are stated here and nowhere else. */}
-          <h1 className="mt-4 text-2xl font-semibold tracking-tight text-white sm:text-3xl">
-            {vehicleTitle(report.vehicle)}
-          </h1>
-          <p className="mt-2 font-mono text-sm tracking-wider text-brand-200">
-            {prettyVin(report.vin)}
-          </p>
-
-          <div className="mt-5 flex flex-wrap gap-2">
-            {chips.map((chip) => (
-              <Chip key={chip.key} chip={chip} />
-            ))}
-          </div>
-
-          <p className="mt-5 border-t border-white/10 pt-4 text-xs text-slate-400">
-            Generated {formatDateTime(report.generatedAt)} UTC
-          </p>
         </div>
 
         <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-7">

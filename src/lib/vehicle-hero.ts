@@ -1,8 +1,8 @@
 /**
  * The illustrated vehicle hero on a paid report.
  *
- * A cartoon of the year/make/model — never a photograph of this VIN. The
- * picture is generated once per year/make/model/trim/color and cached, so
+ * A product-cutout of the year/make/model — never a photograph of this VIN.
+ * The picture is generated once per year/make/model/trim/color and cached, so
  * reopening a report (or another order for the same example) costs nothing.
  * Missing key, a timeout or a rejection all end the same way: no hero, and a
  * report that reads exactly as it did before the picture existed.
@@ -14,15 +14,12 @@ import type { VehicleHeroRecord } from "@/lib/store";
 
 export const HERO_LABEL = "Illustration · not this VIN";
 export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.svg";
+/**
+ * Bump this when the drawing contract changes (colour source, cutout, prompt)
+ * so a cached white studio shot cannot be served as the new hero.
+ */
+export const HERO_CACHE_VERSION = "cutout-v1";
 
-const COLOR_LABELS = [
-  "Exterior colour",
-  "Exterior color",
-  "Ext colour",
-  "Ext color",
-  "Color",
-  "Colour",
-];
 const TRIM_LABELS = ["Trim", "Trim level", "Series", "Package"];
 
 export type HeroFacts = {
@@ -45,6 +42,32 @@ function fieldValues(fields: Field[], labels: string[]): string[] {
   return fields
     .filter((field) => wanted.has(field.label.toLowerCase()) && field.value.trim())
     .map((field) => normalizePart(field.value));
+}
+
+function isInteriorColorLabel(label: string): boolean {
+  return /\binterior\b/.test(label.toLowerCase());
+}
+
+/** Exterior / vehicle paint — includes `Vehicle color`, not just `Exterior color`. */
+function isPaintColorLabel(label: string): boolean {
+  const lower = label.toLowerCase();
+  if (isInteriorColorLabel(lower)) return false;
+  return /\bcolou?r\b/.test(lower) || /\bpaint\b/.test(lower);
+}
+
+function isPreferredPaintLabel(label: string): boolean {
+  const lower = label.toLowerCase();
+  return /\bvehicle\b|\bexterior\b|\bext\b|\bpaint\b|\bbody\b/.test(lower);
+}
+
+function colorFieldValues(fields: Field[]): string[] {
+  const paint = fields.filter(
+    (field) => isPaintColorLabel(field.label) && field.value.trim(),
+  );
+  const preferred = paint.filter((field) => isPreferredPaintLabel(field.label));
+  return (preferred.length > 0 ? preferred : paint).map((field) =>
+    normalizePart(field.value),
+  );
 }
 
 function pickRicher(base: string, candidates: string[]): string {
@@ -101,11 +124,11 @@ export function heroFacts(report: VehicleReport): HeroFacts | null {
   const allFields = [...listingFields, ...recordFields, ...specFields];
 
   const trim = pickRicher(report.vehicle.trim ?? "", fieldValues(allFields, TRIM_LABELS));
-  const color = pickColor(fieldValues(allFields, COLOR_LABELS));
+  const color = pickColor(colorFieldValues(allFields));
   const bodyStyle = normalizePart(report.vehicle.bodyStyle ?? "");
   const engine = normalizePart(report.vehicle.engine ?? "");
 
-  const cacheKey = [year, make, model, trim, color, bodyStyle, engine]
+  const cacheKey = [HERO_CACHE_VERSION, year, make, model, trim, color, bodyStyle, engine]
     .map((part) => part.toLowerCase())
     .join("|");
 
@@ -116,15 +139,19 @@ export function heroPrompt(facts: HeroFacts): string {
   const name = [facts.year, facts.make, facts.model, facts.trim]
     .filter(Boolean)
     .join(" ");
-  const painted = facts.color ? ` painted ${facts.color}` : "";
   const body = facts.bodyStyle ? `, ${facts.bodyStyle}` : "";
   const engine = facts.engine ? `, ${facts.engine}` : "";
+  const colorLine = facts.color
+    ? `Exact exterior colour: ${facts.color}. Paint the whole body ${facts.color} — not white, not a default studio silver, not a different shade.`
+    : "Paint colour as a typical factory example for this year, make and model.";
 
   return [
-    `Flat cartoon illustration of a generic example ${name}${body}${engine}${painted}.`,
-    "Soft vector, cel-shaded, clean outlines, editorial magazine drawing of a car on a simple studio backdrop.",
-    "No people, no license plate, no VIN, no badge text, no photograph, no photorealism, no 3D automotive catalog render, no stock photo.",
-    "This is an invented illustrated example, not a picture of a real specific vehicle.",
+    `Isolated product-cutout illustration of a generic example ${name}${body}${engine}.`,
+    colorLine,
+    "Three-quarter front view, clean stock catalog cutout, illustrated vehicle only.",
+    "Transparent background, no studio backdrop, no floor, no ground shadow plate, no scenery, no horizon.",
+    "Soft illustrated product rendering — not a photograph of a real specific vehicle, no photoreal VIN clone, no 3D dealership catalog photo.",
+    "No people, no license plate, no VIN, no badge text.",
   ].join(" ");
 }
 
@@ -133,7 +160,7 @@ export function heroAlt(facts: HeroFacts): string {
     .filter(Boolean)
     .join(" ");
   const color = facts.color ? ` in ${facts.color}` : "";
-  return `Cartoon illustration of a ${name}${color} — not a photo of this VIN`;
+  return `Illustrated cutout of a ${name}${color} — not a photo of this VIN`;
 }
 
 function falInput(facts: HeroFacts): Record<string, unknown> {
@@ -149,7 +176,7 @@ function falInput(facts: HeroFacts): Record<string, unknown> {
     prompt,
     image_size: "landscape_4_3",
     num_images: 1,
-    output_format: "jpeg",
+    output_format: "png",
     sync_mode: true,
     num_inference_steps: 4,
   };
@@ -159,16 +186,24 @@ type FalImage = { url?: string; content_type?: string };
 
 function firstImage(payload: unknown): FalImage | null {
   if (typeof payload !== "object" || payload === null) return null;
-  const images = (payload as { images?: unknown }).images;
-  if (!Array.isArray(images) || images.length === 0) return null;
-  const image = images[0];
-  if (typeof image === "string") return { url: image };
-  if (typeof image !== "object" || image === null) return null;
-  const url = (image as FalImage).url;
-  return typeof url === "string" && url.length > 0 ? (image as FalImage) : null;
+  const record = payload as { images?: unknown; image?: unknown };
+  if (Array.isArray(record.images) && record.images.length > 0) {
+    const image = record.images[0];
+    if (typeof image === "string") return { url: image };
+    if (typeof image === "object" && image !== null) {
+      const url = (image as FalImage).url;
+      if (typeof url === "string" && url.length > 0) return image as FalImage;
+    }
+  }
+  if (typeof record.image === "string") return { url: record.image };
+  if (typeof record.image === "object" && record.image !== null) {
+    const url = (record.image as FalImage).url;
+    if (typeof url === "string" && url.length > 0) return record.image as FalImage;
+  }
+  return null;
 }
 
-const MAX_BYTES = 900_000;
+const MAX_BYTES = 1_400_000;
 
 async function asStoredSrc(
   url: string,
@@ -176,7 +211,7 @@ async function asStoredSrc(
   signal: AbortSignal,
 ): Promise<{ src: string; contentType: string }> {
   if (url.startsWith("data:")) {
-    return { src: url, contentType: contentType || "image/jpeg" };
+    return { src: url, contentType: contentType || "image/png" };
   }
 
   try {
@@ -186,11 +221,49 @@ async function asStoredSrc(
     if (buffer.length === 0 || buffer.length > MAX_BYTES) {
       return { src: url, contentType };
     }
-    const type = response.headers.get("content-type") || contentType || "image/jpeg";
+    const type = response.headers.get("content-type") || contentType || "image/png";
     return { src: `data:${type};base64,${buffer.toString("base64")}`, contentType: type };
   } catch {
     return { src: url, contentType };
   }
+}
+
+async function falPost(
+  model: string,
+  body: Record<string, unknown>,
+  signal: AbortSignal,
+): Promise<unknown | null> {
+  const response = await fetch(`${fal.baseUrl}/${model}`, {
+    method: "POST",
+    cache: "no-store",
+    signal,
+    headers: {
+      "content-type": "application/json",
+      authorization: `Key ${fal.apiKey}`,
+    },
+    body: JSON.stringify(body),
+  });
+  if (!response.ok) {
+    console.error(`[hero] fal ${model} returned HTTP ${response.status}`);
+    return null;
+  }
+  return response.json();
+}
+
+/**
+ * Recraft returns an opaque raster. Cut the background so the card can show
+ * the aurora through — transparent PNG is required, not a studio plate.
+ */
+async function cutoutImage(
+  imageUrl: string,
+  signal: AbortSignal,
+): Promise<FalImage | null> {
+  const payload = await falPost(
+    fal.rembgModel,
+    { image_url: imageUrl, sync_mode: true, crop_to_bbox: true },
+    signal,
+  );
+  return payload ? firstImage(payload) : null;
 }
 
 /**
@@ -212,31 +285,21 @@ export async function generateVehicleHero(
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
   try {
-    const response = await fetch(`${fal.baseUrl}/${fal.model}`, {
-      method: "POST",
-      cache: "no-store",
-      signal: controller.signal,
-      headers: {
-        "content-type": "application/json",
-        authorization: `Key ${fal.apiKey}`,
-      },
-      body: JSON.stringify(falInput(facts)),
-    });
-
-    if (!response.ok) {
-      console.error(`[hero] fal returned HTTP ${response.status}`);
-      return null;
-    }
-
-    const image = firstImage(await response.json());
-    if (!image?.url) {
+    const drawn = firstImage(await falPost(fal.model, falInput(facts), controller.signal));
+    if (!drawn?.url) {
       console.error("[hero] fal reply had no image");
       return null;
     }
 
+    const cut = await cutoutImage(drawn.url, controller.signal);
+    if (!cut?.url) {
+      console.error("[hero] background cut failed — not storing an opaque studio plate");
+      return null;
+    }
+
     const stored = await asStoredSrc(
-      image.url,
-      image.content_type || "image/jpeg",
+      cut.url,
+      cut.content_type || "image/png",
       controller.signal,
     );
 

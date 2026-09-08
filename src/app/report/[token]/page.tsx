@@ -15,7 +15,7 @@ import {
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
-import { heroFacts } from "@/lib/vehicle-hero";
+import { HERO_CACHE_VERSION, heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +137,11 @@ export default async function ReportPage({
 
   const report = withCurrentLayout(order.report);
   const heroKey = heroFacts(report)?.cacheKey;
+  try {
+    await store.clearStaleVehicleHeroes(`${HERO_CACHE_VERSION}|`);
+  } catch (error) {
+    console.error("[hero] could not drop stale cached drawings", error);
+  }
   const hero =
     isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
 

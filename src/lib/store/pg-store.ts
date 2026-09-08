@@ -305,6 +305,14 @@ export class PostgresOrderStore implements OrderStore {
     );
   }
 
+  async clearStaleVehicleHeroes(keepPrefix: string): Promise<number> {
+    const result = await this.query(
+      `DELETE FROM ${HEROES} WHERE cache_key NOT LIKE $1`,
+      [`${keepPrefix}%`],
+    );
+    return result.rowCount ?? 0;
+  }
+
   async ping(): Promise<{ ok: boolean; detail: string }> {
     try {
       await this.query("SELECT 1");

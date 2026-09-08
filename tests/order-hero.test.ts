@@ -23,11 +23,20 @@ before(async () => {
   process.env.FAL_KEY = "test-fal-key";
   delete process.env.DATABASE_URL;
   delete globalThis.__pullvinreportStore;
-  globalThis.fetch = (async () => {
+  globalThis.fetch = (async (url: string) => {
     calls += 1;
+    const href = String(url);
+    if (href.includes("rembg") || href.includes("background")) {
+      return new Response(
+        JSON.stringify({
+          image: { url: "data:image/png;base64,ZmFrZQ==", content_type: "image/png" },
+        }),
+        { status: 200 },
+      );
+    }
     return new Response(
       JSON.stringify({
-        images: [{ url: "data:image/jpeg;base64,ZmFrZQ==", content_type: "image/jpeg" }],
+        images: [{ url: "https://fal.media/drawn.webp", content_type: "image/webp" }],
       }),
       { status: 200 },
     );
@@ -70,19 +79,19 @@ describe("the hero on an order", () => {
     const first = await heroForOrder(order);
     assert.equal(first.status, "ready");
     assert.equal(first.status === "ready" && first.cached, false);
-    assert.equal(calls, before + 1);
+    assert.equal(calls, before + 2);
 
     const facts = heroFacts(buildSampleReport());
     assert.ok(facts);
     const store = new FileOrderStore(dataDir);
     const cached = await store.getVehicleHero(facts.cacheKey);
     assert.ok(cached);
-    assert.match(cached.src, /^data:image\/jpeg;base64,/);
+    assert.match(cached.src, /^data:image\/png;base64,/);
 
     const second = await heroForOrder(order);
     assert.equal(second.status, "ready");
     assert.equal(second.status === "ready" && second.cached, true);
-    assert.equal(calls, before + 1);
+    assert.equal(calls, before + 2);
   });
 
   it("does nothing without a key when the cache is empty", async () => {

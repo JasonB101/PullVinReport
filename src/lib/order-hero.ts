@@ -2,7 +2,7 @@ import { isFalConfigured } from "@/lib/config";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order, VehicleHeroRecord } from "@/lib/store";
-import { generateVehicleHero, heroFacts } from "@/lib/vehicle-hero";
+import { generateVehicleHero, HERO_CACHE_VERSION, heroFacts } from "@/lib/vehicle-hero";
 
 export type HeroOutcome =
   | { status: "ready"; hero: VehicleHeroRecord; cached: boolean }
@@ -28,6 +28,11 @@ export async function heroForOrder(order: Order): Promise<HeroOutcome> {
 
   const store = getStore();
   await store.init();
+  try {
+    await store.clearStaleVehicleHeroes(`${HERO_CACHE_VERSION}|`);
+  } catch (error) {
+    console.error("[hero] could not drop stale cached drawings", error);
+  }
 
   try {
     const cached = await store.getVehicleHero(facts.cacheKey);

@@ -142,7 +142,7 @@ export async function buildStatusReport(
       verification: "config-only",
       state: isFalConfigured() ? "ready" : "optional",
       detail: isFalConfigured()
-        ? `FAL_KEY present — cartoons are drawn by ${fal.model} and cached by year/make/model/trim/color, so a report costs one call. Nothing here proves the key works; the next paid report does.`
+        ? `FAL_KEY present — cutouts are drawn by ${fal.model}, backgrounds removed by ${fal.rembgModel}, and cached by year/make/model/trim/color, so a report costs two fal calls. Nothing here proves the key works; the next paid report does.`
         : "FAL_KEY not set — reports are delivered in full without an illustrated hero, and no other behaviour changes.",
     },
     {
