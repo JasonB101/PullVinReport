@@ -8,6 +8,11 @@
  * Only the 14 PDF standard fonts are used. Registering a webfont means
  * downloading it at render time, which is exactly the kind of cold-start
  * dependency that turns a serverless render into a timeout.
+ *
+ * Nothing here sets `lineHeight`. In this renderer the value is added to the
+ * line box rather than used as it, so `lineHeight: 1` on 9pt text leaves about
+ * 18pt of leading — near double-spacing, and it compounds down the page until
+ * a two-page report is four. The font's own metrics are already right.
  */
 import {
   Document,
@@ -94,10 +99,10 @@ const styles = StyleSheet.create({
    */
   section: { marginTop: 16 },
   sectionTitle: { fontFamily: "Helvetica-Bold", fontSize: 11, marginBottom: 2 },
-  sectionNote: { color: MUTED, marginBottom: 6, lineHeight: 1.4 },
-  sharedNote: { color: FAINT, fontSize: 7.5, marginBottom: 6, lineHeight: 1.3 },
-  currentNote: { marginBottom: 6, lineHeight: 1.3 },
-  clearNote: { color: MUTED, marginTop: 8, lineHeight: 1.4 },
+  sectionNote: { color: MUTED, marginBottom: 6 },
+  sharedNote: { color: FAINT, fontSize: 7.5, marginBottom: 6 },
+  currentNote: { marginBottom: 6 },
+  clearNote: { color: MUTED, marginTop: 8 },
   briefHeading: {
     fontFamily: "Helvetica-Bold",
     fontSize: 7,
@@ -106,7 +111,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     marginBottom: 3,
   },
-  bullet: { marginBottom: 3, lineHeight: 1.35, paddingLeft: 4 },
+  bullet: { marginBottom: 3, paddingLeft: 4 },
   briefAside: {
     marginTop: 8,
     borderWidth: 1,
@@ -122,7 +127,7 @@ const styles = StyleSheet.create({
     color: "#92400e",
     marginBottom: 4,
   },
-  caveat: { color: FAINT, fontSize: 7.5, marginTop: 4, lineHeight: 1.3 },
+  caveat: { color: FAINT, fontSize: 7.5, marginTop: 4 },
 
   checkGrid: { flexDirection: "row", flexWrap: "wrap", gap: 6 },
   check: {
@@ -133,7 +138,7 @@ const styles = StyleSheet.create({
     padding: 6,
   },
   checkLabel: { fontFamily: "Helvetica-Bold", fontSize: 8 },
-  checkDetail: { color: MUTED, fontSize: 7, marginTop: 2, lineHeight: 1.35 },
+  checkDetail: { color: MUTED, fontSize: 7, marginTop: 2 },
 
   tableHead: {
     flexDirection: "row",
@@ -147,14 +152,11 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
     paddingHorizontal: 6,
   },
-  // Typography belongs on the Text nodes: react-pdf mislays a View that
-  // carries a `lineHeight`, and silently drops it when the View is
-  // absolutely positioned.
   extras: {
     paddingHorizontal: 6,
     paddingBottom: 5,
   },
-  extrasText: { color: MUTED, fontSize: 7, lineHeight: 1.25 },
+  extrasText: { color: MUTED, fontSize: 7 },
   // Rules live on the rows, not on a box around them: a bordered container
   // that spans a page break gets stretched to the page edge.
   tableGroup: { borderBottomWidth: 1, borderBottomColor: LINE },
@@ -167,7 +169,7 @@ const styles = StyleSheet.create({
     padding: 8,
     marginBottom: 6,
   },
-  cardText: { color: MUTED, lineHeight: 1 },
+  cardText: { color: MUTED },
 
   specGrid: { flexDirection: "row", flexWrap: "wrap" },
   spec: { width: "33.3%", paddingRight: 10, marginBottom: 8 },
@@ -184,7 +186,6 @@ const styles = StyleSheet.create({
     fontSize: 6.5,
     color: FAINT,
   },
-  footerText: { lineHeight: 1.15 },
   pageNumber: { textAlign: "right", marginTop: 4 },
 });
 
@@ -243,19 +244,23 @@ function Flags({ checks }: { checks: ReportCheck[] }) {
 function Brief({ brief }: { brief: VehicleBrief }) {
   return (
     <View style={styles.section} wrap>
-      <View minPresenceAhead={96}>
+      <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>What to know</Text>
         <Text style={styles.sectionNote}>
           Written automatically from the records in this report.
         </Text>
       </View>
 
-      <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
-      {brief.fromReport.map((item, index) => (
-        <Text key={index} style={styles.bullet}>
-          • {item}
-        </Text>
-      ))}
+      {/* Each list is short enough to move whole. Splitting one strands a
+          bullet at the top of the next page, under a heading it has lost. */}
+      <View wrap={false}>
+        <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
+        {brief.fromReport.map((item, index) => (
+          <Text key={index} style={styles.bullet}>
+            • {item}
+          </Text>
+        ))}
+      </View>
 
       {brief.commonForModel.length > 0 && (
         <View style={styles.briefAside} wrap={false}>
@@ -271,14 +276,14 @@ function Brief({ brief }: { brief: VehicleBrief }) {
       )}
 
       {brief.questions.length > 0 && (
-        <>
+        <View wrap={false}>
           <Text style={styles.briefHeading}>QUESTIONS TO ASK THE SELLER</Text>
           {brief.questions.map((item, index) => (
             <Text key={index} style={styles.bullet}>
               • {item}
             </Text>
           ))}
-        </>
+        </View>
       )}
     </View>
   );
@@ -302,7 +307,7 @@ function Section({ section }: { section: ReportSection }) {
     // heading stranded above the footer. A long one still flows, because
     // holding a twenty-row table together would waste most of a page.
     <View style={styles.section} wrap={wraps}>
-      <View minPresenceAhead={96}>
+      <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>{section.title}</Text>
         <Text style={styles.sectionNote}>{section.description}</Text>
         {current && (
@@ -438,7 +443,7 @@ export function ReportDocument({
 
         {odometer.length > 0 && (
           <View style={styles.section} wrap={odometer.length > KEEP_TOGETHER}>
-            <View minPresenceAhead={96}>
+            <View minPresenceAhead={96} wrap={false}>
               <Text style={styles.sectionTitle}>Odometer readings</Text>
               <Text style={styles.sectionNote}>
                 Mileage as reported at each title event, newest first.
@@ -482,7 +487,7 @@ export function ReportDocument({
 
         {report.specifications.length > 0 && (
           <View style={styles.section} wrap={false}>
-            <View minPresenceAhead={96}>
+            <View minPresenceAhead={96} wrap={false}>
               <Text style={styles.sectionTitle}>Vehicle specifications</Text>
               <Text style={styles.sectionNote}>
                 Decoded from the VIN and the manufacturer&apos;s build record.
@@ -500,7 +505,7 @@ export function ReportDocument({
         )}
 
         <View style={styles.footer} fixed>
-          <Text style={styles.footerText}>
+          <Text>
             {report.isSample
               ? "Sample report. All data shown is fictional and provided for illustration only."
               : REPORT_DISCLAIMER}

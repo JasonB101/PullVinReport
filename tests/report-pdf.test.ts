@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { sendReportEmail } from "@/lib/email";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
@@ -44,6 +46,13 @@ function paidOrder(): Order {
   } as Order;
 }
 
+/** Reads the page tree's own count out of the rendered file. */
+function pageCount(pdf: Buffer): number {
+  const match = /\/Count (\d+)/.exec(pdf.toString("latin1"));
+  assert.ok(match, "the PDF should declare how many pages it has");
+  return Number(match[1]);
+}
+
 describe("report PDF", () => {
   it("names the file so a buyer can find it after forwarding", () => {
     assert.equal(reportPdfFilename("4t1bf1fk8cu512345"), `PullVinReport-${VIN}.pdf`);
@@ -59,6 +68,28 @@ describe("report PDF", () => {
   it("renders the sample too, so the layout cannot rot unnoticed", async () => {
     const pdf = await renderReportPdf(buildSampleReport());
     assert.equal(pdf.subarray(0, 5).toString("latin1"), "%PDF-");
+  });
+
+  it("sets its type solid, not double-spaced", async () => {
+    // In this renderer `lineHeight` is added to the line box rather than used
+    // as it, so `lineHeight: 1` on 9pt text leaves roughly 18pt of leading.
+    // It compounds down the page: the sample ran to four pages of half-empty
+    // ones before these were removed. The font's own metrics are already right.
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    const declarations = source
+      .split("\n")
+      .filter((line) => !/^\s*(\*|\/\/)/.test(line))
+      .filter((line) => /lineHeight:/.test(line));
+    assert.deepEqual(declarations, []);
+
+    const pdf = await renderReportPdf(buildSampleReport(), buildSampleBrief());
+    assert.ok(
+      pageCount(pdf) <= 3,
+      `the sample and its brief should fit in 3 pages, got ${pageCount(pdf)}`,
+    );
   });
 
   it("carries the written brief into the forwarded copy", async () => {
