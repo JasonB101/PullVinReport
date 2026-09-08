@@ -354,7 +354,10 @@ function foldLocation(fields: Field[]): void {
  * of it is dropped; it just stops competing with the price.
  */
 export function sectionListings(section: ReportSection): Listing[] {
-  return section.records.map((record) => {
+  const records = preferResolvedDisposition(section.records, {
+    requireAuctionChannel: true,
+  });
+  return records.map((record) => {
     const fields = record.map((field) => ({ ...field }));
     foldLocation(fields);
 
@@ -817,6 +820,155 @@ export function dedupeConsecutiveRecords(records: Field[][]): Field[][] {
     kept.push(record);
   }
   return kept;
+}
+
+const DISPOSITION_LABELS = ["Disposition", "Status", "Result"];
+const CHANNEL_LABELS = [
+  "Obtained from",
+  "Reporting entity",
+  "Source",
+  "Seller",
+  "Channel",
+];
+
+const PENDING_DISPOSITION =
+  /\b(tbd|pending|undetermined)\b|to[\s-]?be[\s-]?determined/i;
+const FINAL_DISPOSITION =
+  /\b(sold|salvaged|crushed|destroyed|scrapped|scrap|recycled|exported)\b/i;
+const AUCTION_CHANNEL =
+  /\bcopart\b|\biaa\b|insurance auto auctions|\bjunk\b|\bsalvage\b|\bauction\b/i;
+
+const MONTH_NAME: Record<string, string> = {
+  jan: "01",
+  feb: "02",
+  mar: "03",
+  apr: "04",
+  may: "05",
+  jun: "06",
+  jul: "07",
+  aug: "08",
+  sep: "09",
+  oct: "10",
+  nov: "11",
+  dec: "12",
+};
+
+function fieldOnRecord(record: Field[], labels: string[]): string {
+  for (const label of labels) {
+    const match = record.find((field) => field.label === label);
+    if (match?.value) return match.value;
+  }
+  return "";
+}
+
+/** Calendar day for same-event matching, including `May 11, 2026`. */
+export function recordCalendarDay(record: Field[]): string {
+  const raw = fieldOnRecord(record, DATE_LABELS);
+  if (!raw) return "";
+  const iso = isoDate(raw);
+  if (iso) return iso;
+  const named = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+(\d{1,2}),\s+(\d{4})$/i.exec(
+    raw,
+  );
+  if (!named) return raw.trim().toLowerCase();
+  const month = MONTH_NAME[named[1].slice(0, 3).toLowerCase()];
+  return `${named[3]}-${month}-${named[2].padStart(2, "0")}`;
+}
+
+function dispositionKind(record: Field[]): "pending" | "final" | "other" {
+  const stated = DISPOSITION_LABELS.map((label) =>
+    fieldOnRecord(record, [label]),
+  )
+    .filter(Boolean)
+    .join(" ");
+  if (PENDING_DISPOSITION.test(stated)) return "pending";
+  if (FINAL_DISPOSITION.test(stated)) return "final";
+  const price = fieldOnRecord(record, ["Price"]);
+  if (PENDING_DISPOSITION.test(price)) return "pending";
+  return "other";
+}
+
+function auctionHouseKey(value: string): string {
+  const lower = value.toLowerCase();
+  if (/\bcopart\b/.test(lower)) return "copart";
+  if (/\biaa\b|insurance auto auctions/.test(lower)) return "iaa";
+  return lower.replace(/[^a-z0-9]+/g, " ").trim();
+}
+
+function recordChannelKey(record: Field[]): string {
+  const raw = fieldOnRecord(record, CHANNEL_LABELS);
+  return raw ? auctionHouseKey(raw) : "";
+}
+
+function looksLikeAuctionChannel(record: Field[]): boolean {
+  const blob = record.map((field) => field.value).join(" ");
+  return AUCTION_CHANNEL.test(blob);
+}
+
+/**
+ * Drops a pending salvage/auction disposition when the same event later
+ * resolved on the same day.
+ *
+ * NMVTIS often emits an early `To be determined` row and a `Sold` for the
+ * same Copart/IAA run. Once Sold exists, TBD was answered — showing both
+ * reads as two events. A lone TBD stays; a TBD on another day stays.
+ * Outcomes are never invented: only an unresolved row is removed, and only
+ * when a stronger same-day sibling on the same channel is already there.
+ */
+export function preferResolvedDisposition(
+  records: Field[][],
+  options: { requireAuctionChannel?: boolean } = {},
+): Field[][] {
+  if (records.length < 2) return records;
+
+  const groups = new Map<string, number[]>();
+  for (const [index, record] of records.entries()) {
+    if (options.requireAuctionChannel && !looksLikeAuctionChannel(record)) {
+      continue;
+    }
+    const day = recordCalendarDay(record);
+    if (!day) continue;
+    const key = `${day}\u0000${recordChannelKey(record)}`;
+    const list = groups.get(key);
+    if (list) list.push(index);
+    else groups.set(key, [index]);
+  }
+
+  const drop = new Set<number>();
+  for (const indices of groups.values()) {
+    if (indices.length < 2) continue;
+    const kinds = indices.map((index) => dispositionKind(records[index]));
+    if (!kinds.includes("final") || !kinds.includes("pending")) continue;
+    for (const [offset, index] of indices.entries()) {
+      if (kinds[offset] === "pending") drop.add(index);
+    }
+  }
+
+  return drop.size === 0 ? records : records.filter((_, index) => !drop.has(index));
+}
+
+/** Applies the same-day TBD/Sold collapse on junk/salvage and auction listings. */
+export function withResolvedDispositions(report: VehicleReport): VehicleReport {
+  return {
+    ...report,
+    sections: report.sections.map((section) => {
+      if (section.key === "jsi") {
+        return {
+          ...section,
+          records: preferResolvedDisposition(section.records),
+        };
+      }
+      if (section.key === "sales" || section.layout === "listings") {
+        return {
+          ...section,
+          records: preferResolvedDisposition(section.records, {
+            requireAuctionChannel: true,
+          }),
+        };
+      }
+      return section;
+    }),
+  };
 }
 
 /** The spine of an event: it stays on the row even when every record agrees. */

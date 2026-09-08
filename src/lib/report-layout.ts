@@ -1,4 +1,5 @@
 import type { VehicleReport } from "@/lib/report";
+import { withResolvedDispositions } from "@/lib/report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
 function isPayload(value: unknown): value is Record<string, unknown> {
@@ -22,9 +23,9 @@ export function withCurrentLayout(report: VehicleReport): VehicleReport {
 
   try {
     const rebuilt = normalizeVinAuditReport(report.raw, report.vin);
-    return { ...rebuilt, generatedAt: report.generatedAt };
+    return withResolvedDispositions({ ...rebuilt, generatedAt: report.generatedAt });
   } catch (error) {
     console.error("[report] could not rebuild a stored report's layout", error);
-    return report;
+    return withResolvedDispositions(report);
   }
 }

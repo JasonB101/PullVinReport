@@ -18,6 +18,7 @@ import {
   formatEventDate,
   isoDate,
   liftSharedFields,
+  preferResolvedDisposition,
 } from "@/lib/report";
 import { normalizeVin } from "@/lib/vin";
 
@@ -338,11 +339,18 @@ function buildSection(spec: SectionSpec, value: unknown): ReportSection {
     .map((record) => ({ record, fields: orderFields(toFields(record), columns) }))
     .filter((entry) => entry.fields.length > 0);
 
-  const { records, shared } = liftSharedFields(
-    dedupeConsecutiveRecords(sortByDateDesc(cleaned)),
-  );
+  let records = dedupeConsecutiveRecords(sortByDateDesc(cleaned));
+  // Same-day TBD + Sold on one Copart/IAA run is one event. Junk/salvage
+  // always collapses; sales only when the row is an auction/salvage channel.
+  if (spec.key === "jsi") {
+    records = preferResolvedDisposition(records);
+  } else if (spec.key === "sales") {
+    records = preferResolvedDisposition(records, { requireAuctionChannel: true });
+  }
 
-  return { ...spec, records, shared };
+  const { records: lifted, shared } = liftSharedFields(records);
+
+  return { ...spec, records: lifted, shared };
 }
 
 function check(
@@ -590,6 +598,13 @@ export function normalizeVinAuditReport(
       recalls,
     ),
   ];
+
+  const jsiShown =
+    sections.find((section) => section.key === "jsi")?.records.length ?? 0;
+  const branded = checks.find((entry) => entry.key === "branded");
+  if (branded) {
+    branded.count = brandedTitles.length + jsiShown;
+  }
 
   const specifications: Field[] = Object.entries(attributes)
     .map(([key, value]) => ({ label: humanizeKey(key), value: stringify(value) }))

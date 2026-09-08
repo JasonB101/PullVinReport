@@ -51,6 +51,7 @@ import {
   sectionTable,
   sectionsWithRecords,
   vehicleTitle,
+  withResolvedDispositions,
 } from "@/lib/report";
 import { reportHealth } from "@/lib/report-health";
 import { normalizeVin, prettyVin } from "@/lib/vin";
@@ -561,7 +562,7 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
 }
 
 export function ReportDocument({
-  report,
+  report: incoming,
   brief = null,
   modelExtras = null,
 }: {
@@ -569,6 +570,7 @@ export function ReportDocument({
   brief?: VehicleBrief | null;
   modelExtras?: ModelExtras | null;
 }) {
+  const report = withResolvedDispositions(incoming);
   const title = vehicleTitle(report.vehicle);
   const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);

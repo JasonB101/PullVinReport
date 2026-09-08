@@ -171,6 +171,66 @@ describe("provider report normalization", () => {
     );
   });
 
+  it("drops a same-day Copart TBD once Sold is on the junk/salvage record", () => {
+    const withJsi = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TO BE DETERMINED",
+            city: "Denver",
+            state: "CO",
+          },
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+            city: "Denver",
+            state: "CO",
+          },
+        ],
+      },
+      VIN,
+    );
+    const jsi = find(withJsi.sections, "jsi");
+    assert.equal(jsi.records.length, 1);
+    assert.equal(
+      jsi.records[0].find((field) => field.label === "Disposition")?.value,
+      "Sold",
+    );
+    assert.equal(
+      jsi.records.some((record) =>
+        record.some((field) => /to be determined|^tbd$/i.test(field.value)),
+      ),
+      false,
+    );
+  });
+
+  it("keeps a junk/salvage TBD when no Sold resolves it", () => {
+    const withJsi = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TBD",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.equal(find(withJsi.sections, "jsi").records.length, 1);
+    assert.equal(
+      find(withJsi.sections, "jsi").records[0].find(
+        (field) => field.label === "Disposition",
+      )?.value,
+      "TBD",
+    );
+  });
+
   it("reads a wide sales feed as cards, not as a table with a tail", () => {
     const withSales = normalizeVinAuditReport(
       {

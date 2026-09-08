@@ -11,6 +11,7 @@ import {
   formatEventDate,
   hasOdometerRollback,
   isoDate,
+  withResolvedDispositions,
 } from "@/lib/report";
 
 export const HEALTH_DISCLAIMER =
@@ -320,7 +321,8 @@ function odometerUnit(readings: OdometerReading[]): string {
  * bonus — it does not invent a repair, it only credits later title/odometer
  * facts after a salvage-channel date.
  */
-export function reportHealth(report: VehicleReport): ReportHealth {
+export function reportHealth(incoming: VehicleReport): ReportHealth {
+  const report = withResolvedDispositions(incoming);
   const factors: HealthFactor[] = [];
   const titles = checkOf(report, "titles");
   const titleCount = titles?.count ?? sectionOf(report, "titles")?.records.length ?? 0;

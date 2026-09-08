@@ -25,6 +25,7 @@ import {
   listingSeller,
   sectionListingGroups,
   vehicleTitle,
+  withResolvedDispositions,
 } from "@/lib/report";
 
 export type VehicleBrief = {
@@ -191,7 +192,8 @@ function briefSales(report: VehicleReport): BriefFacts["sales"] {
   };
 }
 
-export function briefFacts(report: VehicleReport): BriefFacts {
+export function briefFacts(incoming: VehicleReport): BriefFacts {
+  const report = withResolvedDispositions(incoming);
   return {
     vehicle: vehicleTitle(report.vehicle),
     yearMakeModel: exactYearMakeModel(report.vehicle) || "unknown",

@@ -110,7 +110,7 @@ describe("what the brief is allowed to see", () => {
               status: "SOLD",
             },
             {
-              date: "2026-05-11",
+              date: "2026-05-29",
               listing_type: "Auction",
               source: "Copart",
               saleprice: "TBD",
@@ -138,6 +138,54 @@ describe("what the brief is allowed to see", () => {
     assert.match(told, /Sold/i);
     assert.match(told, /To be determined/i);
     assert.doesNotMatch(JSON.stringify(facts.sales), /same run|failed to sell|campaign/i);
+  });
+
+  it("does not seed a same-day Copart TBD once Sold resolved that run", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2021", Make: "Subaru", Model: "Legacy" },
+          jsi: [
+            {
+              date: "2026-05-11",
+              obtainedfrom: "Copart",
+              disposition: "TO BE DETERMINED",
+            },
+            {
+              date: "2026-05-11",
+              obtainedfrom: "Copart",
+              disposition: "SOLD",
+            },
+          ],
+          sales: [
+            {
+              date: "2026-05-11",
+              listing_type: "Auction",
+              source: "Copart",
+              status: "SOLD",
+            },
+            {
+              date: "2026-05-11",
+              listing_type: "Auction",
+              source: "Copart",
+              status: "TO BE DETERMINED",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+
+    const salvage = facts.records.find((entry) => /junk|salvage/i.test(entry.section));
+    assert.ok(salvage);
+    assert.equal(salvage.rows.length, 1);
+    assert.match(salvage.rows[0] ?? "", /Sold/i);
+    assert.doesNotMatch(salvage.rows.join(" "), /to be determined|\btbd\b/i);
+
+    assert.ok(facts.sales);
+    const listings = facts.sales.groups.flatMap((group) => group.listings).join(" ");
+    assert.match(listings, /Sold/i);
+    assert.doesNotMatch(listings, /to be determined|\btbd\b/i);
   });
 
   it("never sends the stored provider payload", () => {

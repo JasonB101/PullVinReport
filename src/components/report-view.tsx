@@ -26,6 +26,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  withResolvedDispositions,
   sectionCountLabel,
   sectionLead,
   sectionListingGroups,
@@ -686,7 +687,7 @@ function JumpNav({ report }: { report: VehicleReport }) {
 /* -------------------------------------------------------------------------- */
 
 export function ReportView({
-  report,
+  report: incoming,
   brief = null,
   briefToken,
   heroSrc = null,
@@ -708,6 +709,7 @@ export function ReportView({
   /** Access token, given only when missing extras may be requested. */
   extrasToken?: string;
 }) {
+  const report = withResolvedDispositions(incoming);
   const chips = reportChips(report);
   const specs = headerSpecSummary(report.specifications);
   const facts = heroFacts(report);

@@ -14,6 +14,8 @@ import {
   hasOdometerRollback,
   isoDate,
   liftSharedFields,
+  preferResolvedDisposition,
+  recordCalendarDay,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -192,6 +194,108 @@ describe("de-duplication", () => {
         ],
       ]).length,
       2,
+    );
+  });
+});
+
+describe("same-day pending vs resolved salvage dispositions", () => {
+  const copart = (
+    date: string,
+    disposition: string,
+    house = "Copart",
+  ): { label: string; value: string }[] => [
+    { label: "Date", value: date },
+    { label: "Obtained from", value: house },
+    { label: "Disposition", value: disposition },
+  ];
+
+  it("reads May 11, 2026 and 2026-05-11 as the same calendar day", () => {
+    assert.equal(
+      recordCalendarDay([{ label: "Date", value: "May 11, 2026" }]),
+      "2026-05-11",
+    );
+    assert.equal(
+      recordCalendarDay([{ label: "Date", value: "2026-05-11" }]),
+      "2026-05-11",
+    );
+  });
+
+  it("keeps Sold and drops TBD when they are the same Copart day", () => {
+    const kept = preferResolvedDisposition([
+      copart("May 11, 2026", "To be determined"),
+      copart("May 11, 2026", "Sold"),
+    ]);
+    assert.equal(kept.length, 1);
+    assert.deepEqual(
+      kept[0].find((field) => field.label === "Disposition"),
+      { label: "Disposition", value: "Sold" },
+    );
+  });
+
+  it("keeps a TBD when it is the only disposition that day", () => {
+    const only = [copart("May 11, 2026", "TBD")];
+    assert.deepEqual(preferResolvedDisposition(only), only);
+  });
+
+  it("keeps TBD and Sold when they fall on different days", () => {
+    const kept = preferResolvedDisposition([
+      copart("May 11, 2026", "Sold"),
+      copart("May 29, 2026", "TBD"),
+    ]);
+    assert.equal(kept.length, 2);
+    assert.deepEqual(
+      kept.map((record) => record.find((field) => field.label === "Disposition")?.value),
+      ["Sold", "TBD"],
+    );
+  });
+
+  it("does not fold a Copart TBD into an IAA Sold on the same day", () => {
+    const kept = preferResolvedDisposition([
+      copart("May 11, 2026", "TBD", "Copart"),
+      copart("May 11, 2026", "Sold", "IAA"),
+    ]);
+    assert.equal(kept.length, 2);
+  });
+
+  it("does not invent a sale by dropping a lone dealer TBD listing", () => {
+    const dealer = [
+      [
+        { label: "Date", value: "Aug 14, 2024" },
+        { label: "Source", value: "Cars.com" },
+        { label: "Status", value: "To be determined" },
+      ],
+    ];
+    assert.deepEqual(
+      preferResolvedDisposition(dealer, { requireAuctionChannel: true }),
+      dealer,
+    );
+  });
+
+  it("folds same-day Copart listing twins so sales grouping shows one Sold", () => {
+    const sales = section({
+      key: "sales",
+      layout: "listings",
+      records: [
+        [
+          { label: "Date", value: "May 11, 2026" },
+          { label: "Listing type", value: "Auction" },
+          { label: "Source", value: "Copart" },
+          { label: "Status", value: "To be determined" },
+        ],
+        [
+          { label: "Date", value: "May 11, 2026" },
+          { label: "Listing type", value: "Auction" },
+          { label: "Source", value: "Copart" },
+          { label: "Status", value: "Sold" },
+        ],
+      ],
+    });
+    const groups = sectionListingGroups(sales);
+    assert.equal(groups.length, 1);
+    assert.equal(groups[0].listings.length, 1);
+    assert.equal(
+      groups[0].listings[0].detail.find((field) => field.label === "Status")?.value,
+      "Sold",
     );
   });
 });
