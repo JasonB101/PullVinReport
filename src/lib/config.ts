@@ -97,13 +97,21 @@ export function missingVinAuditKeys(): string[] {
  *
  * Optional everywhere: with no key the brief is simply not offered, and nothing
  * about buying or reading a report changes.
+ *
+ * Sonnet by default. The brief is written once per order and then cached, so
+ * the cost of the better writer is paid once and read many times — and the two
+ * things that make the brief worth having, keeping the model-level notes apart
+ * from the car's own records and phrasing a finding a buyer can act on, are
+ * exactly what a smaller model gets wrong. `ANTHROPIC_MODEL` overrides it; the
+ * ID is a pinned snapshot rather than a moving pointer, so a new release cannot
+ * change how existing reports read without someone choosing it.
  */
 export const anthropic = {
   get apiKey(): string | undefined {
     return env("ANTHROPIC_API_KEY");
   },
   get model(): string {
-    return env("ANTHROPIC_MODEL") ?? "claude-haiku-4-5-20251001";
+    return env("ANTHROPIC_MODEL") ?? "claude-sonnet-5";
   },
   get baseUrl(): string {
     return env("ANTHROPIC_API_BASE") ?? "https://api.anthropic.com";

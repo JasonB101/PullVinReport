@@ -4,12 +4,19 @@ import { afterEach, describe, it } from "node:test";
 import {
   BRAND,
   DEFAULT_REPORT_PRICE_CENTS,
+  anthropic,
   emailConfig,
   formatPrice,
+  isAnthropicConfigured,
   pricing,
 } from "../src/lib/config.ts";
 
-const ENV_KEYS = ["EMAIL_FROM", "SUPPORT_EMAIL", "REPORT_PRICE_CENTS"];
+const ENV_KEYS = [
+  "EMAIL_FROM",
+  "SUPPORT_EMAIL",
+  "REPORT_PRICE_CENTS",
+  "ANTHROPIC_MODEL",
+];
 
 afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key];
@@ -70,5 +77,31 @@ describe("pricing", () => {
   it("ignores a nonsense price rather than selling at zero", () => {
     process.env.REPORT_PRICE_CENTS = "not-a-number";
     assert.equal(pricing.amountCents, DEFAULT_REPORT_PRICE_CENTS);
+  });
+});
+
+describe("the model that writes the brief", () => {
+  it("defaults to Sonnet — the brief is written once and read many times", () => {
+    assert.equal(anthropic.model, "claude-sonnet-5");
+  });
+
+  it("is a pinned id, so a new release cannot reword existing reports", () => {
+    assert.doesNotMatch(anthropic.model, /latest/);
+  });
+
+  it("takes an override", () => {
+    process.env.ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
+    assert.equal(anthropic.model, "claude-haiku-4-5-20251001");
+  });
+
+  it("is off, not broken, when no key is set", () => {
+    const before = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      assert.equal(isAnthropicConfigured(), false);
+      assert.equal(anthropic.apiKey, undefined);
+    } finally {
+      if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
+    }
   });
 });
