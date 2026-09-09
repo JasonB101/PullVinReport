@@ -95,6 +95,11 @@ describe("admin console", () => {
     assert.match(card, /hasAnyCreditApiConfigured/);
     assert.match(card, /BILLING_UNAVAILABLE/);
     assert.match(card, /item\.error \?\? "Unavailable"/);
+    assert.match(card, /Remaining credits:/);
+    assert.match(card, /Console Billing ↗/);
+    assert.match(card, /anthropicBillingUrl/);
+    assert.match(card, /noreferrer noopener/);
+    assert.match(card, /text-brand-600/);
     assert.doesNotMatch(card, /\$0\.00/);
     assert.doesNotMatch(page, /\$0\.00 available/);
 
@@ -105,6 +110,10 @@ describe("admin console", () => {
     assert.match(credits, /organizations\/cost_report/);
     assert.match(credits, /anthropic-version/);
     assert.match(credits, /ANTHROPIC_ADMIN_API_KEY|adminApiKey/);
+    assert.match(credits, /ANTHROPIC_CONSOLE_BILLING_URL|anthropicBillingUrl/);
+    assert.match(credits, /console\.anthropic\.com\/settings\/billing/);
+    assert.doesNotMatch(credits, /organizations\/balance/);
+    assert.doesNotMatch(credits, /document\.cookie|sessionStorage|localStorage/);
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
     const stripe = await readSrc("lib/stripe.ts");
     assert.match(stripe, /export async function retrieveStripeBalance/);
@@ -121,7 +130,7 @@ describe("admin console", () => {
     const statusPage = await readSrc("app/status/page.tsx");
     const statusApi = await readSrc("app/api/status/route.ts");
     assert.doesNotMatch(status, /fetchVendorCredits|vendor-credits/);
-    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits/);
+    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits|Console Billing/);
     assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits/);
   });
 

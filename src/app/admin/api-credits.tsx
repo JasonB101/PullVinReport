@@ -51,6 +51,19 @@ export function ApiCredits({ report }: { report: VendorCreditsReport }) {
               <p className="mt-1 text-[11px] text-slate-400">
                 as of {formatGeneratedAt(item.asOf)}
               </p>
+              {item.key === "anthropic" && report.anthropicBillingUrl ? (
+                <p className="mt-1.5 text-[11px] leading-relaxed text-slate-500">
+                  Remaining credits:{" "}
+                  <a
+                    href={report.anthropicBillingUrl}
+                    target="_blank"
+                    rel="noreferrer noopener"
+                    className="font-medium text-brand-600 hover:underline"
+                  >
+                    Console Billing ↗
+                  </a>
+                </p>
+              ) : null}
             </div>
           ))}
         </div>
