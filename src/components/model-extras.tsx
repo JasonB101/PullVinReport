@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 
-import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
 import { MODEL_ZONE_NOTE, NOT_THIS_VIN_CHIP } from "@/lib/report-zones";
@@ -79,7 +78,6 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   }
 
   const ymm = extras.ymmLabel;
-  const hasDetails = Boolean(extras.recalls && extras.recalls.campaigns.length > 0);
 
   return (
     <section
@@ -108,13 +106,40 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
               {formatCount(extras.recalls.total)}{" "}
               {extras.recalls.total === 1 ? "campaign" : "campaigns"} on record
               for this model year
-              {extras.recalls.campaigns.length > 0 && (
-                <span className="text-slate-500">
-                  {" "}
-                  · {extras.recalls.campaigns.map((row) => row.title).join("; ")}
-                </span>
-              )}
+              <span className="text-slate-500"> — not this VIN</span>
             </dd>
+            {extras.recalls.campaigns.length > 0 && (
+              <ol className="mt-3 space-y-3">
+                {extras.recalls.campaigns.map((campaign, index) => (
+                  <li
+                    key={campaign.campaign}
+                    className="rounded-xl border border-amber-200/80 bg-white/70 px-3 py-3 sm:px-4"
+                  >
+                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                      Campaign {index + 1} of {extras.recalls?.campaigns.length}
+                    </p>
+                    <p className="mt-1 text-sm font-medium leading-snug text-slate-900">
+                      {campaign.title}
+                    </p>
+                    <p className="mt-0.5 font-mono text-[11px] text-slate-400">
+                      NHTSA {campaign.campaign}
+                    </p>
+                    {campaign.consequence && (
+                      <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                        <span className="font-medium text-slate-700">Risk. </span>
+                        {campaign.consequence}
+                      </p>
+                    )}
+                    {campaign.remedy && (
+                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                        <span className="font-medium text-slate-700">Remedy. </span>
+                        {campaign.remedy}
+                      </p>
+                    )}
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         )}
 
@@ -158,41 +183,6 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
           </div>
         )}
       </dl>
-
-      {hasDetails && extras.recalls && (
-        <ScrollOpenDetails
-          className="mt-3 scroll-mt-32"
-          summaryClassName="cursor-pointer list-none text-sm [&::-webkit-details-marker]:hidden"
-          summary={
-            <span className="when-closed font-medium text-brand-600">
-              Campaign details
-            </span>
-          }
-        >
-          <ul className="mt-3 space-y-3 border-t border-slate-100 pt-3">
-            {extras.recalls.campaigns.map((campaign) => (
-              <li key={campaign.campaign} className="text-sm leading-relaxed">
-                <p className="font-medium text-slate-900">{campaign.title}</p>
-                <p className="mt-0.5 font-mono text-[11px] text-slate-400">
-                  NHTSA {campaign.campaign}
-                </p>
-                {campaign.consequence && (
-                  <p className="mt-1 text-slate-600">
-                    <span className="font-medium text-slate-700">Risk. </span>
-                    {campaign.consequence}
-                  </p>
-                )}
-                {campaign.remedy && (
-                  <p className="mt-1 text-slate-600">
-                    <span className="font-medium text-slate-700">Remedy. </span>
-                    {campaign.remedy}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        </ScrollOpenDetails>
-      )}
     </section>
   );
 }

@@ -569,6 +569,11 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
         {MODEL_ZONE_NOTE} The {extras.ymmLabel} only.
       </Text>
       <Text style={styles.bullet}>{modelExtrasSummaryLine(extras)}</Text>
+      {extras.recalls?.campaigns.map((campaign, index) => (
+        <Text key={campaign.campaign} style={styles.bullet}>
+          Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
+        </Text>
+      ))}
     </View>
   );
 }

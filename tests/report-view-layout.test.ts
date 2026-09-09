@@ -31,6 +31,12 @@ describe("report view layout", () => {
     assert.match(card, /NOT_THIS_VIN_CHIP/);
     assert.match(card, /border-dashed border-amber-300/);
     assert.match(card, /Also for this model/);
+    assert.doesNotMatch(
+      card,
+      /campaigns\.map\(\(row\) => row\.title\)\.join\(/,
+      "recall campaigns must not be jammed onto one semicolon-separated line",
+    );
+    assert.match(card, /Campaign \{index \+ 1\}/);
   });
 
   it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {
