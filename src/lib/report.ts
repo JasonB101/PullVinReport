@@ -1293,12 +1293,23 @@ const HEADER_SPEC_LABELS = [
  * grid at the bottom of the report was a second place to look for the engine
  * that the heading had already named the car by.
  */
+/**
+ * A build record's `Style` often spells the engine out in full — `Limited Sedan
+ * AWD CVT 2.4L H4` — so joining it to `Engine` printed `2.4L H4 · 2.4L H4` on
+ * the card. A spec already contained in one we kept says nothing twice.
+ */
+function alreadyStated(picked: Field[], value: string): boolean {
+  const needle = value.trim().toLowerCase();
+  if (!needle) return true;
+  return picked.some((field) => field.value.trim().toLowerCase().includes(needle));
+}
+
 export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {
   const picked: Field[] = [];
   for (const label of HEADER_SPEC_LABELS) {
     if (picked.length === limit) break;
     const spec = specifications.find((entry) => entry.label === label);
-    if (spec) picked.push(spec);
+    if (spec && !alreadyStated(picked, spec.value)) picked.push(spec);
   }
   return picked.length > 0 ? picked : specifications.slice(0, limit);
 }

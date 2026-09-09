@@ -769,6 +769,20 @@ describe("the specs on the vehicle card", () => {
       ],
     );
   });
+
+  it("does not print the engine twice when the style already spells it out", () => {
+    assert.deepEqual(
+      headerSpecSummary([
+        { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+        { label: "Engine", value: "2.4L H4" },
+        { label: "Fuel type", value: "Gasoline" },
+      ]),
+      [
+        { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+        { label: "Fuel type", value: "Gasoline" },
+      ],
+    );
+  });
 });
 
 function report(overrides: Partial<VehicleReport> = {}): VehicleReport {
