@@ -13,7 +13,7 @@
  * the same Camry do not re-hit the government on every page view.
  */
 import { exactYearMakeModel } from "@/lib/ai-brief";
-import type { Field, VehicleReport, VehicleSummary } from "@/lib/report";
+import { formatEventDate, isoDate, type Field, type VehicleReport, type VehicleSummary } from "@/lib/report";
 
 const RECALLS_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle";
 const COMPLAINTS_URL = "https://api.nhtsa.gov/complaints/complaintsByVehicle";
@@ -26,7 +26,12 @@ const NEGATIVE_TTL_MS = 15 * 60 * 1000;
 const CACHE_LIMIT = 400;
 const MAX_CAMPAIGNS = 4;
 const MAX_THEMES = 4;
+const MAX_COMPLAINT_SAMPLES = 5;
+const MAX_SUMMARY_CHARS = 480;
 const MAX_EPA_VEHICLES = 12;
+
+/** Bump when the stored extras shape changes so a theme-only cache cannot stick. */
+const EXTRAS_CACHE_VERSION = "v2";
 
 export type ModelRecall = {
   campaign: string;
@@ -38,6 +43,16 @@ export type ModelRecall = {
 export type ModelComplaintTheme = {
   component: string;
   count: number;
+};
+
+export type ModelComplaintSample = {
+  /** ISO date when we could parse one, already formatted for display. */
+  date?: string;
+  components: string;
+  summary: string;
+  odiNumber?: string;
+  crash?: boolean;
+  fire?: boolean;
 };
 
 export type ModelMpg = {
@@ -55,6 +70,7 @@ export type ModelRecalls = {
 export type ModelComplaints = {
   total: number;
   themes: ModelComplaintTheme[];
+  samples: ModelComplaintSample[];
 };
 
 export type ModelExtras = {
@@ -178,6 +194,41 @@ function numberish(value: unknown): number | undefined {
   return undefined;
 }
 
+function flag(value: unknown): boolean {
+  if (value === true || value === 1 || value === "1" || value === "true") return true;
+  return false;
+}
+
+function complaintDate(row: Record<string, unknown>): string {
+  const raw =
+    text(row.dateComplaintFiled) ||
+    text(row.dateOfIncident) ||
+    text(row.date);
+  const iso = isoDate(raw);
+  return iso ? formatEventDate(iso) : "";
+}
+
+function complaintOdi(row: Record<string, unknown>): string {
+  const value = row.odiNumber ?? row.ODINumber;
+  if (typeof value === "number" && Number.isFinite(value)) return String(value);
+  return text(value);
+}
+
+function complaintSignal(row: Record<string, unknown>): number {
+  let score = 0;
+  if (flag(row.crash)) score += 100;
+  if (flag(row.fire)) score += 100;
+  score += (numberish(row.numberOfInjuries) ?? 0) * 20;
+  score += (numberish(row.numberOfDeaths) ?? 0) * 200;
+  const raw =
+    text(row.dateComplaintFiled) ||
+    text(row.dateOfIncident) ||
+    text(row.date);
+  const iso = isoDate(raw);
+  if (iso) score += Number(iso.replaceAll("-", "")) / 100_000_000;
+  return score;
+}
+
 /* -------------------------------------------------------------------------- */
 /* Parsers — exported so the government shapes can be tested offline          */
 /* -------------------------------------------------------------------------- */
@@ -247,7 +298,35 @@ export function parseComplaintsPayload(payload: unknown): ModelComplaints | null
       count,
     }));
 
-  return { total: total || rows.length, themes };
+  const ranked = rows
+    .filter((row): row is Record<string, unknown> => Boolean(row && typeof row === "object"))
+    .map((row) => ({ row, summary: clip(text(row.summary) || text(row.Summary), MAX_SUMMARY_CHARS) }))
+    .filter((entry) => entry.summary.length > 0)
+    .sort((a, b) => complaintSignal(b.row) - complaintSignal(a.row));
+
+  const samples: ModelComplaintSample[] = [];
+  const seen = new Set<string>();
+  for (const { row, summary } of ranked) {
+    const odi = complaintOdi(row);
+    const key = odi || summary.slice(0, 80);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    const parts = complaintComponents(row).map(displayComponent);
+    const date = complaintDate(row);
+    const crash = flag(row.crash);
+    const fire = flag(row.fire);
+    samples.push({
+      summary,
+      components: parts.join(", ") || "Not specified",
+      ...(date ? { date } : {}),
+      ...(odi ? { odiNumber: odi } : {}),
+      ...(crash ? { crash: true } : {}),
+      ...(fire ? { fire: true } : {}),
+    });
+    if (samples.length >= MAX_COMPLAINT_SAMPLES) break;
+  }
+
+  return { total: total || rows.length, themes, samples };
 }
 
 export function parseEpaOptions(payload: unknown): EpaOption[] {
@@ -544,7 +623,7 @@ export async function cachedExtrasForReport(
   const ymm = ymmFromVehicle(report.vehicle);
   if (!ymm) return null;
   const hint = engineDisplacementHint(report.vehicle, report.specifications);
-  const base = `v1|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
+  const base = `${EXTRAS_CACHE_VERSION}|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
 
   const [recalls, complaints, vehicles] = await Promise.all([
     peekSlice<ModelRecalls>(`${base}|recalls`, store),
@@ -578,7 +657,7 @@ export async function extrasForReport(
   if (!ymm) return null;
 
   const hint = engineDisplacementHint(report.vehicle, report.specifications);
-  const base = `v1|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
+  const base = `${EXTRAS_CACHE_VERSION}|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
 
   const [recalls, complaints, vehicles] = await Promise.all([
     cachedSlice<ModelRecalls>(`${base}|recalls`, store, () => loadRecalls(ymm)),

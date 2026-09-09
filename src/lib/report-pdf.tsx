@@ -574,6 +574,11 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
           Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
         </Text>
       ))}
+      {extras.complaints?.samples.slice(0, 3).map((sample, index) => (
+        <Text key={sample.odiNumber ?? `${index}`} style={styles.bullet}>
+          Complaint{sample.date ? ` ${sample.date}` : ""}: {sample.summary}
+        </Text>
+      ))}
     </View>
   );
 }

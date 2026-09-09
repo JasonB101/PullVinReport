@@ -45,11 +45,46 @@ const RECALLS = {
 const COMPLAINTS = {
   count: 10,
   results: [
-    { components: "POWER TRAIN,ENGINE", vin: "4T1BF1FK9CU", summary: "Shudder" },
-    { components: "POWER TRAIN", vin: "4T1BF1FK1CU", summary: "Shift" },
-    { components: "AIR BAGS", vin: "JTDBE32K123", summary: "Light" },
-    { components: "UNKNOWN OR OTHER", vin: "IGNOREME", summary: "Noise" },
-    { components: "VEHICLE SPEED CONTROL", vin: "ABC", summary: "Surge" },
+    {
+      odiNumber: 1001,
+      components: "POWER TRAIN,ENGINE",
+      vin: "4T1BF1FK9CU",
+      summary:
+        "Severe transmission shudder during normal driving around 30 mph after a fluid service did not help.",
+      dateComplaintFiled: "03/04/2020",
+      crash: false,
+      fire: false,
+    },
+    {
+      odiNumber: 1002,
+      components: "POWER TRAIN",
+      vin: "4T1BF1FK1CU",
+      summary: "Harsh 2-3 shift and delayed engagement from a stop.",
+      dateComplaintFiled: "01/15/2019",
+    },
+    {
+      odiNumber: 1003,
+      components: "AIR BAGS",
+      vin: "JTDBE32K123",
+      summary: "Passenger airbag light stays on after a low-speed bump.",
+      dateComplaintFiled: "08/20/2021",
+    },
+    {
+      odiNumber: 1004,
+      components: "UNKNOWN OR OTHER",
+      vin: "IGNOREME",
+      summary: "Unspecified noise from under the dash.",
+      dateComplaintFiled: "06/01/2018",
+    },
+    {
+      odiNumber: 1005,
+      components: "VEHICLE SPEED CONTROL",
+      vin: "ABC",
+      summary:
+        "Car surged forward while braking for a stop sign. Driver avoided a collision.",
+      dateComplaintFiled: "11/12/2021",
+      crash: true,
+    },
   ],
 };
 
@@ -100,6 +135,22 @@ describe("model extras parsers", () => {
       false,
       "complaint VINs must not leak into the summary",
     );
+  });
+
+  it("keeps a short sample of real complaint write-ups, crash first", () => {
+    const complaints = parseComplaintsPayload(COMPLAINTS);
+    assert.ok(complaints);
+    assert.ok(complaints.samples.length >= 3);
+    assert.ok(complaints.samples.length <= 5);
+    assert.equal(complaints.samples[0]?.crash, true);
+    assert.match(complaints.samples[0]?.summary ?? "", /surged forward/);
+    assert.equal(complaints.samples[0]?.odiNumber, "1005");
+    assert.match(complaints.samples[0]?.components ?? "", /Vehicle Speed Control/);
+    assert.equal(complaints.samples[0]?.date, "Nov 12, 2021");
+    for (const sample of complaints.samples) {
+      assert.ok(sample.summary.length > 20);
+      assert.doesNotMatch(sample.summary, /4T1BF1FK|JTDBE32K|IGNOREME/);
+    }
   });
 
   it("skips the UNKNOWN OR OTHER complaint bucket", () => {

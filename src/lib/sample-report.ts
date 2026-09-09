@@ -94,6 +94,30 @@ export function buildSampleModelExtras(): ModelExtras {
         { component: "Vehicle Speed Control", count: 73 },
         { component: "Structure", count: 68 },
       ],
+      samples: [
+        {
+          date: "Aug 18, 2026",
+          components: "Power Train, Engine",
+          summary:
+            "Severe transmission shudder during normal driving, especially around 25–35 mph. The check-engine light came on and a shop found a transmission pressure-control code. Fluid service did not stop the shudder.",
+          odiNumber: "11757762",
+        },
+        {
+          date: "Mar 4, 2024",
+          components: "Air Bags",
+          summary:
+            "The airbag warning light stayed on after a low-speed parking-lot bump. The dealer said the occupant-classification sensor needed replacement and that the passenger airbag might not deploy until it was fixed.",
+          odiNumber: "11510200",
+        },
+        {
+          date: "Nov 12, 2021",
+          components: "Vehicle Speed Control",
+          summary:
+            "While approaching a stop, the car surged forward as if the throttle stuck for a second. The driver braked hard and did not hit anything. It happened twice in one week.",
+          odiNumber: "11422011",
+          crash: true,
+        },
+      ],
     },
     mpg: {
       city: 24,
