@@ -144,14 +144,15 @@ describe("falAuthorizationHeader", () => {
     assert.equal(falAuthorizationHeader("fal_admin"), "Key fal_admin");
     assert.equal(falAuthorizationHeader("Key fal_admin"), "Key fal_admin");
     assert.equal(falAuthorizationHeader("key  fal_admin  "), "Key fal_admin");
+    assert.equal(falAuthorizationHeader("Key Key fal_admin"), "Key fal_admin");
   });
 });
 
 describe("utcMonthToDateBounds", () => {
   it("is the UTC month start through start-of-tomorrow so today is included", () => {
     assert.deepEqual(utcMonthToDateBounds(new Date("2026-09-09T20:16:00.000Z")), {
-      startingAt: "2026-09-01T00:00:00.000Z",
-      endingAt: "2026-09-10T00:00:00.000Z",
+      startingAt: "2026-09-01T00:00:00Z",
+      endingAt: "2026-09-10T00:00:00Z",
     });
   });
 });
@@ -443,8 +444,8 @@ describe("fetchVendorCredits", () => {
         assert.equal(headers.get("x-api-key"), "sk-ant-admin-test");
         assert.equal(headers.get("anthropic-version"), "2023-06-01");
         assert.equal(headers.get("authorization"), null);
-        assert.equal(url.searchParams.get("starting_at"), "2026-09-01T00:00:00.000Z");
-        assert.equal(url.searchParams.get("ending_at"), "2026-09-10T00:00:00.000Z");
+        assert.equal(url.searchParams.get("starting_at"), "2026-09-01T00:00:00Z");
+        assert.equal(url.searchParams.get("ending_at"), "2026-09-10T00:00:00Z");
         return jsonResponse(200, {
           data: [
             { results: [{ amount: "250", currency: "USD" }] },

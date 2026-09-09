@@ -29,7 +29,7 @@ export function ApiCredits({ report }: { report: VendorCreditsReport }) {
       ) : report.items.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">{BILLING_UNAVAILABLE}</p>
       ) : (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {report.items.map((item) => (
             <div
               key={item.key}

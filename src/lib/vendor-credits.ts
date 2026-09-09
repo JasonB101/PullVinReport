@@ -172,7 +172,7 @@ export function parseFiniteNumber(value: unknown): number | null {
  * prefix it exactly once.
  */
 export function falAuthorizationHeader(rawKey: string): string {
-  const secret = rawKey.trim().replace(/^key\s+/i, "").trim();
+  const secret = rawKey.trim().replace(/^(key\s+)+/i, "").trim();
   return `Key ${secret}`;
 }
 
@@ -302,7 +302,7 @@ async function getJson(
 }
 
 function falFailureReason(status: number): string {
-  const hasAdminKey = Boolean(process.env.FAL_ADMIN_KEY?.trim());
+  const hasAdminKey = Boolean(fal.adminKey);
   if ((status === 401 || status === 403) && !hasAdminKey) {
     return FAL_NEEDS_ADMIN_KEY;
   }
@@ -442,13 +442,17 @@ async function resendCredits(
  * daily Cost Report bucket is included (ending_at excludes buckets that
  * have not ended yet).
  */
+function rfc3339Utc(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
 export function utcMonthToDateBounds(now: Date): { startingAt: string; endingAt: string } {
-  const startingAt = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  ).toISOString();
-  const endingAt = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1),
-  ).toISOString();
+  const startingAt = rfc3339Utc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+  );
+  const endingAt = rfc3339Utc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)),
+  );
   return { startingAt, endingAt };
 }
 
