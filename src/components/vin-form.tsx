@@ -42,7 +42,7 @@ export function VinForm({
   return (
     <form onSubmit={onSubmit} className="w-full" noValidate>
       <label
-        htmlFor="vin"
+        htmlFor="vin-input"
         className={`block text-xs font-semibold uppercase tracking-widest ${
           onDark ? "text-brand-200" : "text-slate-500"
         }`}
@@ -58,7 +58,7 @@ export function VinForm({
         }`}
       >
         <input
-          id="vin"
+          id="vin-input"
           name="vin"
           value={vin}
           onChange={(event) => {

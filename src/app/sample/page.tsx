@@ -6,7 +6,12 @@ import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { VinForm } from "@/components/vin-form";
 import { formatPrice } from "@/lib/config";
-import { buildSampleReport, SAMPLE_VEHICLE_LABEL } from "@/lib/sample-report";
+import {
+  buildSampleBrief,
+  buildSampleModelExtras,
+  buildSampleReport,
+  SAMPLE_VEHICLE_LABEL,
+} from "@/lib/sample-report";
 
 export const metadata: Metadata = {
   title: "Sample vehicle history report",
@@ -32,9 +37,9 @@ export default function SamplePage() {
               <span className="text-slate-900">Sample report</span>
             </nav>
 
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
               Sample report — {SAMPLE_VEHICLE_LABEL}
-            </h1>
+            </p>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               This is the exact layout of a purchased report, filled with
               fictional data. Nothing here describes a real vehicle. When you
@@ -49,7 +54,13 @@ export default function SamplePage() {
         </div>
 
         <div className="container-page py-10 sm:py-14">
-          <ReportView report={report} />
+          {/* The sample's brief and model extras are fixtures, so browsing
+              `/sample` never spends a token or hits NHTSA/EPA. */}
+          <ReportView
+            report={report}
+            brief={buildSampleBrief()}
+            modelExtras={buildSampleModelExtras()}
+          />
         </div>
       </main>
 

@@ -3,6 +3,7 @@ import Link from "next/link";
 import { SampleTeaser } from "@/components/sample-teaser";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
+import { StartReportLink, VinHashTarget } from "@/components/start-report-link";
 import { VinForm } from "@/components/vin-form";
 import { BRAND, formatPrice } from "@/lib/config";
 
@@ -11,12 +12,12 @@ export const dynamic = "force-dynamic";
 const INCLUDED = [
   {
     title: "Title & brand history",
-    body: "Every title record on file, plus salvage, junk, flood, lemon and rebuilt brands reported to NMVTIS.",
+    body: "Every title record on file, plus salvage, junk, flood, lemon and rebuilt brands.",
     icon: "M4 6h16M4 12h16M4 18h10",
   },
   {
     title: "Odometer readings",
-    body: "Mileage captured at each title event, charted so a rollback or an implausible jump is obvious.",
+    body: "Mileage captured at each title event, so a rollback or an implausible jump is obvious.",
     icon: "M12 20a8 8 0 1 0-8-8m8 8 4-9",
   },
   {
@@ -72,7 +73,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Where does the data come from?",
-    a: "Every purchased report is pulled live at the moment you buy it, from national title and brand data reported to NMVTIS together with insurance, salvage, auction and listing records. We do not resell another retailer's report and we do not repackage the sample.",
+    a: "We do not resell another retailer's report and we do not repackage the sample.",
   },
   {
     q: "How fast do I get it?",
@@ -88,11 +89,15 @@ const FAQ = [
   },
   {
     q: "What if there are no records for my VIN?",
-    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing. If we cannot deliver a report for your VIN, email support and we will refund you.",
+    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing.",
+  },
+  {
+    q: "What is the written brief?",
+    a: "A short plain-English card at the top of a paid report: what these records add up to, common issues for this exact year, make and model (labelled as not confirmed on this VIN), and questions to ask the seller. It is written from the records you paid for. It is not a grade, a score or a market value.",
   },
   {
     q: "Are you affiliated with any other vehicle history brand?",
-    a: `No. ${BRAND.name} is independent. We are not affiliated with, endorsed by, or sponsored by any other vehicle history reporting company, manufacturer, or government agency.`,
+    a: `No. ${BRAND.name} is independent. We are not Carfax, AutoCheck or any other retail brand. We are not affiliated with, endorsed by, or sponsored by any other vehicle history reporting company, manufacturer, or government agency.`,
   },
 ];
 
@@ -119,20 +124,21 @@ export default function HomePage() {
   return (
     <div className="flex min-h-dvh flex-col">
       <SiteHeader variant="on-dark" />
+      <VinHashTarget />
 
       <main className="flex-1">
         {/* Hero -------------------------------------------------------- */}
-        <section id="vin" className="relative overflow-hidden bg-ink-950">
+        <section id="vin" className="relative scroll-mt-20 overflow-hidden bg-ink-950">
           <div className="hero-aurora absolute inset-0" aria-hidden="true" />
           <div className="grid-lines absolute inset-0 opacity-40" aria-hidden="true" />
           <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-b from-transparent to-white" aria-hidden="true" />
 
           {/* Extra bottom padding keeps the trust row clear of the white fade. */}
-          <div className="container-page relative pb-32 pt-14 sm:pb-40 sm:pt-24">
+          <div className="container-page relative pb-24 pt-10 sm:pb-40 sm:pt-24">
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-brand-100 ring-1 ring-inset ring-white/15">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                NMVTIS title & brand data · pulled live per VIN
+                Title, salvage and brand records · one VIN, one report
               </span>
 
               <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-6xl">
@@ -149,13 +155,17 @@ export default function HomePage() {
               </p>
 
               <div className="mx-auto mt-9 max-w-2xl">
-                <VinForm variant="on-dark" autoFocus />
+                <VinForm
+                  variant="on-dark"
+                  autoFocus
+                  submitLabel={`Get my report · ${price}`}
+                />
               </div>
 
               <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-slate-400">
                 {[
                   "See a labelled sample before you pay",
-                  "Secure Stripe checkout",
+                  "Written brief on every paid report",
                   "One-time payment, no subscription",
                 ].map((item) => (
                   <span key={item} className="inline-flex items-center gap-1.5">
@@ -190,11 +200,27 @@ export default function HomePage() {
             </h2>
             <p className="mt-4 text-base leading-relaxed text-slate-600">
               There is one product and one price. Whatever comes back for your
-              VIN, you see all of it.
+              VIN, you see all of it — plus a written brief that says what it
+              means, not just what the records say.
             </p>
           </div>
 
-          <div className="mt-12 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mt-10 rounded-2xl border border-brand-200 bg-brand-50/70 p-5 sm:p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-brand-700">
+              What the others leave as a table
+            </p>
+            <h3 className="mt-2 text-lg font-semibold tracking-tight text-slate-900">
+              A written brief on every paid report
+            </h3>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-600">
+              Three lists, kept apart: what this VIN&apos;s records add up to,
+              common issues for this exact year, make and model — labelled as
+              not confirmed on this car — and questions to ask the seller. No
+              grade, no score, no invented market value.
+            </p>
+          </div>
+
+          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {INCLUDED.map((item) => (
               <div
                 key={item.title}
@@ -239,12 +265,9 @@ export default function HomePage() {
                   >
                     View the full sample report
                   </Link>
-                  <Link
-                    href="#vin"
-                    className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100"
-                  >
+                  <StartReportLink className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
                     Check my VIN
-                  </Link>
+                  </StartReportLink>
                 </div>
               </div>
 
@@ -307,16 +330,9 @@ export default function HomePage() {
                   Full report, delivered on screen and by email. No account
                   required, no recurring charge, no upsell tiers.
                 </p>
-                <Link
-                  href="#vin"
-                  className="mt-7 block w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-glow transition hover:bg-brand-500"
-                >
-                  Enter a VIN
-                </Link>
-                <p className="mt-4 text-xs text-slate-400">
-                  If we can&apos;t return a report for your VIN, email us and we
-                  will refund you.
-                </p>
+                <StartReportLink className="mt-7 block w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-glow transition hover:bg-brand-500">
+                  Get a report · {price}
+                </StartReportLink>
               </div>
             </div>
           </div>

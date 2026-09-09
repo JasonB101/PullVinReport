@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 
 import { Pool } from "pg";
 
+import type { VehicleBrief } from "@/lib/ai-brief";
 import { databaseUrl } from "@/lib/config";
 import type { VehicleReport } from "@/lib/report";
 import type {
@@ -10,9 +11,13 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  ModelExtrasRecord,
+  VehicleHeroRecord,
 } from "@/lib/store/types";
 
 const TABLE = "pullvinreport_orders";
+const HEROES = "pullvinreport_vehicle_heroes";
+const EXTRAS = "pullvinreport_model_extras";
 
 type Row = {
   id: string;
@@ -28,6 +33,8 @@ type Row = {
   stripe_payment_intent_id: string | null;
   report: unknown;
   provider_error: string | null;
+  ai_brief: unknown;
+  ai_brief_generated_at: Date | string | null;
   fulfilled_at: Date | string | null;
   email_sent_at: Date | string | null;
   refunded_at: Date | string | null;
@@ -54,6 +61,8 @@ function toOrder(row: Row): Order {
     stripePaymentIntentId: row.stripe_payment_intent_id,
     report: (row.report as VehicleReport | null) ?? null,
     providerError: row.provider_error,
+    aiBrief: (row.ai_brief as VehicleBrief | null) ?? null,
+    aiBriefGeneratedAt: iso(row.ai_brief_generated_at),
     fulfilledAt: iso(row.fulfilled_at),
     emailSentAt: iso(row.email_sent_at),
     refundedAt: iso(row.refunded_at),
@@ -68,6 +77,8 @@ const PATCH_COLUMNS: Record<keyof OrderPatch, string> = {
   stripePaymentIntentId: "stripe_payment_intent_id",
   report: "report",
   providerError: "provider_error",
+  aiBrief: "ai_brief",
+  aiBriefGeneratedAt: "ai_brief_generated_at",
   fulfilledAt: "fulfilled_at",
   emailSentAt: "email_sent_at",
   refundedAt: "refunded_at",
@@ -121,18 +132,38 @@ export class PostgresOrderStore implements OrderStore {
             fulfilled_at TIMESTAMPTZ,
             email_sent_at TIMESTAMPTZ,
             refunded_at TIMESTAMPTZ,
-            stripe_refund_id TEXT
+            stripe_refund_id TEXT,
+            ai_brief JSONB,
+            ai_brief_generated_at TIMESTAMPTZ
           );
         `);
-        // Tables created before refunds existed need the new columns.
+        // Tables created before refunds and the buyer brief need the columns.
         await this.getPool().query(`
           ALTER TABLE ${TABLE}
             ADD COLUMN IF NOT EXISTS refunded_at TIMESTAMPTZ,
-            ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT;
+            ADD COLUMN IF NOT EXISTS stripe_refund_id TEXT,
+            ADD COLUMN IF NOT EXISTS ai_brief JSONB,
+            ADD COLUMN IF NOT EXISTS ai_brief_generated_at TIMESTAMPTZ;
         `);
         await this.getPool().query(
           `CREATE INDEX IF NOT EXISTS ${TABLE}_created_at_idx ON ${TABLE} (created_at DESC);`,
         );
+        await this.getPool().query(`
+          CREATE TABLE IF NOT EXISTS ${HEROES} (
+            cache_key TEXT PRIMARY KEY,
+            src TEXT NOT NULL,
+            content_type TEXT NOT NULL,
+            model TEXT NOT NULL,
+            created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+        `);
+        await this.getPool().query(`
+          CREATE TABLE IF NOT EXISTS ${EXTRAS} (
+            cache_key TEXT PRIMARY KEY,
+            payload JSONB NOT NULL,
+            fetched_at TIMESTAMPTZ NOT NULL DEFAULT now()
+          );
+        `);
       })().catch((error) => {
         this.ready = null;
         throw error;
@@ -207,7 +238,8 @@ export class PostgresOrderStore implements OrderStore {
     ][]) {
       if (!(key in patch)) continue;
       const value = patch[key];
-      values.push(key === "report" ? (value ? JSON.stringify(value) : null) : value);
+      const jsonColumn = key === "report" || key === "aiBrief";
+      values.push(jsonColumn ? (value ? JSON.stringify(value) : null) : value);
       assignments.push(`${column} = $${values.length}`);
     }
 
@@ -252,6 +284,67 @@ export class PostgresOrderStore implements OrderStore {
       revenueCents: Number(row.revenue ?? 0),
       refundedCents: Number(row.refunded ?? 0),
     };
+  }
+
+  async getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null> {
+    const result = await this.query<{
+      cache_key: string;
+      src: string;
+      content_type: string;
+      model: string;
+      created_at: Date | string;
+    }>(`SELECT * FROM ${HEROES} WHERE cache_key = $1`, [cacheKey]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      cacheKey: row.cache_key,
+      src: row.src,
+      contentType: row.content_type,
+      model: row.model,
+      createdAt: iso(row.created_at) as string,
+    };
+  }
+
+  async saveVehicleHero(hero: VehicleHeroRecord): Promise<void> {
+    await this.query(
+      `INSERT INTO ${HEROES} (cache_key, src, content_type, model, created_at)
+       VALUES ($1, $2, $3, $4, $5)
+       ON CONFLICT (cache_key) DO NOTHING`,
+      [hero.cacheKey, hero.src, hero.contentType, hero.model, hero.createdAt],
+    );
+  }
+
+  async clearStaleVehicleHeroes(keepPrefix: string): Promise<number> {
+    const result = await this.query(
+      `DELETE FROM ${HEROES} WHERE cache_key NOT LIKE $1`,
+      [`${keepPrefix}%`],
+    );
+    return result.rowCount ?? 0;
+  }
+
+  async getModelExtras(cacheKey: string): Promise<ModelExtrasRecord | null> {
+    const result = await this.query<{
+      cache_key: string;
+      payload: unknown;
+      fetched_at: Date | string;
+    }>(`SELECT * FROM ${EXTRAS} WHERE cache_key = $1`, [cacheKey]);
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      cacheKey: row.cache_key,
+      payload: row.payload,
+      fetchedAt: iso(row.fetched_at) as string,
+    };
+  }
+
+  async saveModelExtras(record: ModelExtrasRecord): Promise<void> {
+    await this.query(
+      `INSERT INTO ${EXTRAS} (cache_key, payload, fetched_at)
+       VALUES ($1, $2, $3)
+       ON CONFLICT (cache_key) DO UPDATE
+         SET payload = EXCLUDED.payload, fetched_at = EXCLUDED.fetched_at`,
+      [record.cacheKey, JSON.stringify(record.payload), record.fetchedAt],
+    );
   }
 
   async ping(): Promise<{ ok: boolean; detail: string }> {

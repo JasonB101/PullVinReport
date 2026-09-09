@@ -6,14 +6,17 @@ import { PrintButton } from "@/components/print-button";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
-import { emailConfig, formatPrice } from "@/lib/config";
+import { emailConfig, formatPrice, isFalConfigured } from "@/lib/config";
 import {
   classifyFailure,
   customerFailureMessage,
   refundPromise,
 } from "@/lib/customer-copy";
+import { cachedExtrasForReport } from "@/lib/model-extras";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
+import { HERO_CACHE_VERSION, heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
@@ -34,7 +37,7 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
-      <SiteHeader />
+      <SiteHeader cta="another" />
       <main className="container-page flex-1 py-16">
         <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -133,9 +136,25 @@ export default async function ReportPage({
     );
   }
 
+  const report = withCurrentLayout(order.report);
+  const heroKey = heroFacts(report)?.cacheKey;
+  try {
+    await store.clearStaleVehicleHeroes(`${HERO_CACHE_VERSION}|`);
+  } catch (error) {
+    console.error("[hero] could not drop stale cached drawings", error);
+  }
+  const hero =
+    isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
+  let modelExtras = null;
+  try {
+    modelExtras = await cachedExtrasForReport(report, store);
+  } catch (error) {
+    console.error("[extras] could not read cached model extras", error);
+  }
+
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
-      <SiteHeader />
+      <SiteHeader cta="another" />
 
       <main className="flex-1">
         <div className="no-print border-b border-slate-200 bg-white">
@@ -153,16 +172,9 @@ export default async function ReportPage({
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
                   Your report
                 </p>
-                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                  Vehicle history for {prettyVin(order.vin)}
-                </h1>
                 <p className="mt-1.5 text-sm text-slate-500">
-                  {order.refundedAt ? "Refunded" : "Paid"}{" "}
-                  {formatPrice(order.amountCents, order.currency)} · Delivered{" "}
-                  {order.fulfilledAt
-                    ? `${order.fulfilledAt.replace("T", " ").slice(0, 16)} UTC`
-                    : "just now"}{" "}
-                  · Keep this page&apos;s link private.
+                  {order.refundedAt ? "Refunded · " : ""}
+                  Keep this page&apos;s link private.
                 </p>
               </div>
               <PrintButton />
@@ -171,7 +183,17 @@ export default async function ReportPage({
         </div>
 
         <div className="container-page py-10">
-          <ReportView report={order.report} />
+          {/* Laid out from the payload stored with the order, so a report bought
+              before a layout change still reads the way today's does. */}
+          <ReportView
+            report={report}
+            brief={order.aiBrief}
+            briefToken={token}
+            heroSrc={hero?.src}
+            heroToken={isFalConfigured() ? token : undefined}
+            modelExtras={modelExtras}
+            extrasToken={token}
+          />
         </div>
       </main>
 

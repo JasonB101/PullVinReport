@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { sectionTable } from "@/lib/report";
+import { sectionListings, sectionTable } from "@/lib/report";
 import type { ReportSection } from "@/lib/report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -83,9 +83,9 @@ describe("provider report normalization", () => {
 
   it("folds the odometer and its unit code into one readable value", () => {
     const odometer = titles.records[0].find(
-      (field) => field.label === "Odometer",
+      (field) => field.label === "Mileage",
     );
-    assert.deepEqual(odometer, { label: "Odometer", value: "121,477 mi" });
+    assert.deepEqual(odometer, { label: "Mileage", value: "121,477 mi" });
   });
 
   it("reads flags as Yes and No rather than true and false", () => {
@@ -110,33 +110,327 @@ describe("provider report normalization", () => {
   it("lays titles out as a table of the fields that matter", () => {
     const table = sectionTable(titles);
     assert.ok(table);
-    assert.deepEqual(table.columns, ["Date", "State", "Odometer", "Current"]);
+    assert.deepEqual(table.columns, ["Date", "State", "Mileage", "Current"]);
     assert.deepEqual(table.rows[0].cells, [
       "Sep 27, 2024",
       "TN",
       "121,477 mi",
       "Yes",
     ]);
-    // Everything else still travels with the record, just not as a column.
-    assert.deepEqual(table.rows[0].extras, [
-      { label: "Vehicle use", value: "Personal" },
-    ]);
+    // The vehicle use is identical on every record, so it is not on the rows.
+    assert.deepEqual(table.rows[0].extras, []);
+  });
+
+  it("states a value the feed repeats on every record once for the section", () => {
+    assert.deepEqual(titles.shared, [{ label: "Vehicle use", value: "Personal" }]);
+    for (const record of titles.records) {
+      assert.equal(
+        record.some((field) => field.label === "Vehicle use"),
+        false,
+      );
+    }
+  });
+
+  it("keeps the odometer unit code off the records entirely", () => {
+    for (const record of titles.records) {
+      assert.equal(
+        record.some((field) => /unit/i.test(field.label)),
+        false,
+      );
+    }
+    assert.equal(
+      titles.shared?.some((field) => /unit/i.test(field.label)),
+      false,
+    );
+  });
+
+  it("leaves the year, make and model to the heading that already states them", () => {
+    assert.deepEqual(report.specifications, []);
+  });
+
+  it("keeps the VIN out of the specification grid", () => {
+    const withVin = normalizeVinAuditReport(
+      { ...PAYLOAD, attributes: { ...PAYLOAD.attributes, VIN: VIN, Engine: "2.5L L4" } },
+      VIN,
+    );
+    assert.deepEqual(withVin.specifications, [{ label: "Engine", value: "2.5L L4" }]);
   });
 
   it("still exposes the provider link on the model for support", () => {
     assert.equal(report.providerReportUrl, PAYLOAD.reportlink);
   });
 
-  it("charts odometer readings in sortable order with a real unit", () => {
+  it("lists odometer readings in sortable order with a real unit, echo dropped", () => {
     assert.deepEqual(
       report.odometer.map((reading) => [reading.date, reading.value, reading.unit]),
       [
         ["2015-06-19", 41_204, "mi"],
         ["2019-03-08", 78_930, "mi"],
         ["2024-09-27", 121_477, "mi"],
-        ["2024-09-27", 121_477, "mi"],
       ],
     );
+  });
+
+  it("drops a same-day Copart TBD once Sold is on the junk/salvage record", () => {
+    const withJsi = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TO BE DETERMINED",
+            city: "Denver",
+            state: "CO",
+          },
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+            city: "Denver",
+            state: "CO",
+          },
+        ],
+      },
+      VIN,
+    );
+    const jsi = find(withJsi.sections, "jsi");
+    assert.equal(jsi.records.length, 1);
+    assert.equal(
+      jsi.records[0].find((field) => field.label === "Disposition")?.value,
+      "Sold",
+    );
+    assert.equal(
+      jsi.records.some((record) =>
+        record.some((field) => /to be determined|^tbd$/i.test(field.value)),
+      ),
+      false,
+    );
+  });
+
+  it("keeps a junk/salvage TBD when no Sold resolves it", () => {
+    const withJsi = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TBD",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.equal(find(withJsi.sections, "jsi").records.length, 1);
+    assert.equal(
+      find(withJsi.sections, "jsi").records[0].find(
+        (field) => field.label === "Disposition",
+      )?.value,
+      "TBD",
+    );
+  });
+
+  it("reads a wide sales feed as cards, not as a table with a tail", () => {
+    const withSales = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          {
+            vin: VIN,
+            date: "2024-08-14",
+            listing_type: "Dealer classified",
+            listingprice: "11450",
+            meter: "120880",
+            meterunit: "M",
+            sellertype: "Franchise dealer",
+            sellername: "Music City Toyota",
+            city: "Nashville",
+            state: "TN",
+            stock_number: "T24-88213",
+            exterior_color: "Super White",
+            interior_color: "Ash cloth",
+            days_listed: "34",
+            description: "One-owner trade-in, service records available.",
+          },
+        ],
+      },
+      VIN,
+    );
+
+    const sales = find(withSales.sections, "sales");
+    assert.equal(sales.layout, "listings");
+    // A table here is what made the section unreadable: six columns and then a
+    // paragraph of leftovers under every row.
+    assert.equal(sectionTable(sales), null);
+
+    const [card] = sectionListings(sales);
+    assert.equal(card.headline, "Dealer classified");
+    assert.equal(card.date, "Aug 14, 2024");
+    // The feed sends `11450`. It leads the card now, so it cannot read as one.
+    assert.equal(card.price, "$11,450");
+    assert.deepEqual(card.summary, [
+      { label: "Mileage", value: "120,880 mi" },
+      { label: "Location", value: "Nashville, TN" },
+      { label: "Seller", value: "Music City Toyota" },
+    ]);
+    assert.deepEqual(
+      card.detail.map((field) => field.label),
+      [
+        "Seller type",
+        "Stock number",
+        "Exterior color",
+        "Interior color",
+        "Days listed",
+        "Description",
+      ],
+    );
+    // The VIN and the unit code are stripped before any of this runs.
+    assert.equal(
+      [...card.summary, ...card.detail].some(
+        (field) => field.label === "VIN" || /unit/i.test(field.label),
+      ),
+      false,
+    );
+  });
+
+  it("maps seller_name and listing_price onto the card face", () => {
+    const report = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          {
+            date: "2024-08-14",
+            listing_price: "11450",
+            seller_name: "Blaise Alexander Subaru",
+            city: "Muncy",
+            state: "PA",
+          },
+        ],
+      },
+      VIN,
+    );
+    const [card] = sectionListings(find(report.sections, "sales"));
+    assert.equal(card.price, "$11,450");
+    assert.deepEqual(
+      card.summary.find((field) => field.label === "Seller"),
+      { label: "Seller", value: "Blaise Alexander Subaru" },
+    );
+  });
+
+  it("leaves a price the feed already formatted exactly as it arrived", () => {
+    const report = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        sales: [
+          { date: "2024-08-14", saleprice: "$11,450" },
+          { date: "2019-02-22", saleprice: "9995 USD" },
+          { date: "2018-01-02", saleprice: "0" },
+        ],
+      },
+      VIN,
+    );
+    const cards = sectionListings(find(report.sections, "sales"));
+    assert.deepEqual(
+      cards.map((card) => card.price),
+      ["$11,450", "9995 USD", ""],
+    );
+  });
+
+  it("gives every section a short name for the report outline", () => {
+    for (const section of report.sections) {
+      assert.ok(section.navLabel, `expected a nav label on "${section.key}"`);
+      assert.ok(
+        section.navLabel.length <= 16,
+        `"${section.navLabel}" is too long for the outline`,
+      );
+    }
+  });
+
+  it("reads a title type as the event that happened", () => {
+    const titled = normalizeVinAuditReport(
+      {
+        titles: [
+          { vin: VIN, date: "2024-09-27", state: "TN", titletype: "Title transfer" },
+        ],
+      },
+      VIN,
+    );
+    const [record] = find(titled.sections, "titles").records;
+    assert.deepEqual(record.find((field) => field.label === "Event"), {
+      label: "Event",
+      value: "Title transfer",
+    });
+  });
+
+  it("emits junk/salvage as its own check and does not fold that count into branded", () => {
+    const withBoth = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        titles: [
+          ...PAYLOAD.titles,
+          {
+            vin: VIN,
+            date: "2026-05-11",
+            state: "CO",
+            meter: "84200",
+            meterunit: "M",
+            brand: "Salvage",
+            title: "Salvage",
+          },
+        ],
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+            city: "Denver",
+            state: "CO",
+          },
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TO BE DETERMINED",
+            city: "Denver",
+            state: "CO",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = withBoth.checks.find((entry) => entry.key === "branded");
+    const jsi = withBoth.checks.find((entry) => entry.key === "jsi");
+    assert.ok(branded);
+    assert.ok(jsi);
+    assert.equal(branded.status, "found");
+    assert.equal(branded.count, 1);
+    assert.equal(jsi.status, "found");
+    assert.equal(jsi.count, 1);
+    assert.match(withBoth.headline, /Branded-title/);
+  });
+
+  it("headlines salvage-channel activity when titles are unbranded", () => {
+    const salvageOnly = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = salvageOnly.checks.find((entry) => entry.key === "branded");
+    const jsi = salvageOnly.checks.find((entry) => entry.key === "jsi");
+    assert.equal(branded?.status, "clear");
+    assert.equal(branded?.count, 0);
+    assert.equal(jsi?.status, "found");
+    assert.equal(jsi?.count, 1);
+    assert.match(salvageOnly.headline, /Junk, salvage or insurance-loss/);
+    assert.doesNotMatch(salvageOnly.headline, /Branded-title/);
   });
 
   it("describes empty sections in our own voice", () => {

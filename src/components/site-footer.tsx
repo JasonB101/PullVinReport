@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { Logo } from "@/components/logo";
+import { StartReportLink } from "@/components/start-report-link";
 import { BRAND, emailConfig } from "@/lib/config";
 
 const COLUMNS = [
@@ -10,7 +11,6 @@ const COLUMNS = [
       { href: "/#vin", label: "Buy a VIN report" },
       { href: "/sample", label: "See a sample report" },
       { href: "/lookup", label: "Find my report" },
-      { href: "/status", label: "Service status" },
     ],
   },
   {
@@ -58,12 +58,18 @@ export function SiteFooter() {
               <ul className="mt-4 space-y-3">
                 {column.links.map((link) => (
                   <li key={link.href}>
-                    <Link
-                      href={link.href}
-                      className="text-sm transition hover:text-white"
-                    >
-                      {link.label}
-                    </Link>
+                    {link.href === "/#vin" ? (
+                      <StartReportLink className="text-sm transition hover:text-white">
+                        {link.label}
+                      </StartReportLink>
+                    ) : (
+                      <Link
+                        href={link.href}
+                        className="text-sm transition hover:text-white"
+                      >
+                        {link.label}
+                      </Link>
+                    )}
                   </li>
                 ))}
               </ul>

@@ -1,3 +1,4 @@
+import type { VehicleBrief } from "@/lib/ai-brief";
 import type { VehicleReport } from "@/lib/report";
 
 export type OrderStatus =
@@ -27,6 +28,9 @@ export type Order = {
   stripePaymentIntentId: string | null;
   report: VehicleReport | null;
   providerError: string | null;
+  /** Cached buyer brief, written once so reopening the report costs nothing. */
+  aiBrief: VehicleBrief | null;
+  aiBriefGeneratedAt: string | null;
   fulfilledAt: string | null;
   emailSentAt: string | null;
   /** Set once the charge has been sent back to the customer. */
@@ -50,12 +54,23 @@ export type OrderPatch = Partial<
     | "stripePaymentIntentId"
     | "report"
     | "providerError"
+    | "aiBrief"
+    | "aiBriefGeneratedAt"
     | "fulfilledAt"
     | "emailSentAt"
     | "refundedAt"
     | "stripeRefundId"
   >
 >;
+
+/** Illustrated vehicle hero, cached by year/make/model/trim/color. */
+export type VehicleHeroRecord = {
+  cacheKey: string;
+  src: string;
+  contentType: string;
+  model: string;
+  createdAt: string;
+};
 
 export type OrderStats = {
   total: number;
@@ -81,4 +96,22 @@ export interface OrderStore {
   list(limit?: number): Promise<Order[]>;
   stats(): Promise<OrderStats>;
   ping(): Promise<{ ok: boolean; detail: string }>;
-}
+  /** Illustrated hero, keyed by year/make/model/trim/color — not by VIN. */
+  getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null>;
+  saveVehicleHero(hero: VehicleHeroRecord): Promise<void>;
+  /** Drop cached drawings whose key does not start with `keepPrefix`. */
+  clearStaleVehicleHeroes(keepPrefix: string): Promise<number>;
+  /**
+   * Public model extras (NHTSA / EPA), keyed by year/make/model — not by
+   * order or VIN. Payload is the already-summarised slice.
+   */
+  getModelExtras(cacheKey: string): Promise<ModelExtrasRecord | null>;
+  saveModelExtras(record: ModelExtrasRecord): Promise<void>;
+};
+
+/** Cached NHTSA/EPA slice for one year/make/model. */
+export type ModelExtrasRecord = {
+  cacheKey: string;
+  payload: unknown;
+  fetchedAt: string;
+};

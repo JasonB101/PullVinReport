@@ -92,6 +92,87 @@ export function missingVinAuditKeys(): string[] {
   return missing;
 }
 
+/**
+ * The model that writes the buyer's brief.
+ *
+ * Optional everywhere: with no key the brief is simply not offered, and nothing
+ * about buying or reading a report changes.
+ *
+ * Sonnet by default. The brief is written once per order and then cached, so
+ * the cost of the better writer is paid once and read many times — and the two
+ * things that make the brief worth having, keeping the model-level notes apart
+ * from the car's own records and phrasing a finding a buyer can act on, are
+ * exactly what a smaller model gets wrong. `ANTHROPIC_MODEL` overrides it; the
+ * ID is a pinned snapshot rather than a moving pointer, so a new release cannot
+ * change how existing reports read without someone choosing it.
+ */
+export const anthropic = {
+  get apiKey(): string | undefined {
+    return env("ANTHROPIC_API_KEY");
+  },
+  get model(): string {
+    return env("ANTHROPIC_MODEL") ?? "claude-sonnet-5";
+  },
+  get baseUrl(): string {
+    return env("ANTHROPIC_API_BASE") ?? "https://api.anthropic.com";
+  },
+  /**
+   * How long a page view waits. Nothing the buyer paid for is behind it — the
+   * records are already on screen — so this can afford to be patient, and a
+   * brief that explains its findings is a longer answer than one that lists
+   * them.
+   */
+  get timeoutMs(): number {
+    return intEnv("ANTHROPIC_TIMEOUT_MS", 45_000);
+  },
+};
+
+export function isAnthropicConfigured(): boolean {
+  return Boolean(anthropic.apiKey);
+}
+
+/**
+ * Illustrated vehicle hero on the paid report.
+ *
+ * Optional: with no key the report is unchanged and no image is requested.
+ * Recraft V3 (`fal-ai/recraft/v3/text-to-image`) is the default because it
+ * has a `digital_illustration` style lock — Recraft V4 on fal has no style
+ * preset and leans photoreal. `FAL_IMAGE_MODEL` overrides it. Photoreal
+ * Recraft styles are ignored so an env typo cannot turn the hero into a
+ * photograph of “this VIN”.
+ */
+export const fal = {
+  get apiKey(): string | undefined {
+    return env("FAL_KEY");
+  },
+  get model(): string {
+    return env("FAL_IMAGE_MODEL") ?? "fal-ai/recraft/v3/text-to-image";
+  },
+  get style(): string {
+    const requested = env("FAL_IMAGE_STYLE") ?? "digital_illustration";
+    return requested.toLowerCase().includes("realistic")
+      ? "digital_illustration"
+      : requested;
+  },
+  get baseUrl(): string {
+    return env("FAL_API_BASE") ?? "https://fal.run";
+  },
+  get timeoutMs(): number {
+    return intEnv("FAL_TIMEOUT_MS", 45_000);
+  },
+  /**
+   * Recraft does not return alpha. After the drawing we cut the background
+   * with this model so the card can sit the vehicle on the aurora.
+   */
+  get rembgModel(): string {
+    return env("FAL_REMBG_MODEL") ?? "fal-ai/imageutils/rembg";
+  },
+};
+
+export function isFalConfigured(): boolean {
+  return Boolean(fal.apiKey);
+}
+
 export const stripeConfig = {
   get secretKey(): string | undefined {
     return env("STRIPE_SECRET_KEY");

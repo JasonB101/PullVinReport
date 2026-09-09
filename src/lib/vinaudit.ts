@@ -11,7 +11,15 @@ import type {
   VehicleReport,
   VehicleSummary,
 } from "@/lib/report";
-import { dedupeConsecutiveRecords, formatEventDate, isoDate } from "@/lib/report";
+import {
+  LISTING_SECTION_NOTE,
+  dedupeConsecutiveRecords,
+  dedupeOdometerReadings,
+  formatEventDate,
+  isoDate,
+  liftSharedFields,
+  preferResolvedDisposition,
+} from "@/lib/report";
 import { normalizeVin } from "@/lib/vin";
 
 export class ProviderNotConfiguredError extends Error {
@@ -70,8 +78,14 @@ const KEY_LABELS: Record<string, string> = {
   vin: "VIN",
   jsi: "Junk, salvage & insurance",
   meterunit: "Odometer unit",
-  meter: "Odometer",
+  meter: "Mileage",
+  titletype: "Event",
+  transactiontype: "Event",
+  transaction: "Event",
+  event: "Event",
   titlenumber: "Title number",
+  standardclaim: "Standard claim",
+  nmvtisid: "Record ID",
   vehicleuse: "Vehicle use",
   reportlink: "Provider report",
   nhtsa: "NHTSA",
@@ -80,6 +94,9 @@ const KEY_LABELS: Record<string, string> = {
   obtainedfrom: "Obtained from",
   intendedforexport: "Intended for export",
   sellertype: "Seller type",
+  sellername: "Seller",
+  seller: "Seller",
+  dealername: "Seller",
   listingprice: "Price",
   saleprice: "Price",
   lienholder: "Lienholder",
@@ -89,6 +106,8 @@ const KEY_LABELS: Record<string, string> = {
 export function humanizeKey(key: string): string {
   const lower = key.toLowerCase();
   if (KEY_LABELS[lower]) return KEY_LABELS[lower];
+  const compact = lower.replace(/[^a-z0-9]/g, "");
+  if (KEY_LABELS[compact]) return KEY_LABELS[compact];
   const spaced = key
     .replace(/[_-]+/g, " ")
     .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
@@ -131,6 +150,48 @@ function yesNo(value: unknown): string {
   return stringify(value);
 }
 
+const PRICE_KEYS = new Set([
+  "price",
+  "listingprice",
+  "saleprice",
+  "soldprice",
+  "askingprice",
+]);
+
+/**
+ * Renders a price the feed sent as a bare number.
+ *
+ * These records are US titles and US listings, so the currency is not in
+ * doubt. Anything that already carries a symbol, a currency code or any other
+ * punctuation the feed chose is left exactly as it arrived — reformatting a
+ * value someone else already formatted is how `$$11,450` happens.
+ */
+function formatMoney(value: unknown): string {
+  const text = stringify(value);
+  if (!/^\d+(\.\d{1,2})?$/.test(text)) return text;
+  const amount = Number.parseFloat(text);
+  if (!Number.isFinite(amount) || amount <= 0) return "";
+  return `$${amount.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+}
+
+/** A run long enough that the capitals are the feed shouting, not an acronym. */
+const SHOUTED = /[A-Z]{4}/;
+
+/**
+ * Takes a record value out of all caps.
+ *
+ * NMVTIS answers in upper case — `SOLD`, `TO BE DETERMINED`, `INSURANCE
+ * COMPANY` — and a column of that reads as a database export rather than as a
+ * report someone paid for. Anything with a lower-case letter in it was already
+ * cased by whoever sent it and is left alone, as is anything too short to be
+ * more than an abbreviation or a state code.
+ */
+function unshout(value: string): string {
+  if (/[a-z]/.test(value) || !SHOUTED.test(value)) return value;
+  const lower = value.toLowerCase();
+  return lower.replace(/[a-z]/, (first) => first.toUpperCase());
+}
+
 /** Turns a raw mileage plus its unit code into one readable value. */
 function formatOdometer(value: unknown, unit: unknown): string {
   const numeric = Number.parseInt(stringify(value).replace(/[^0-9]/g, ""), 10);
@@ -151,32 +212,53 @@ function toFields(record: Record<string, unknown>): Field[] {
   )?.[1];
 
   const fields: Field[] = [];
-  let hasOdometer = false;
 
   for (const [key, value] of Object.entries(record)) {
     const lower = key.toLowerCase();
     if (HIDDEN_KEYS.has(lower) || ODOMETER_UNIT_KEYS.has(lower)) continue;
 
     if (ODOMETER_KEYS.has(lower)) {
-      const odometer = hasOdometer ? "" : formatOdometer(value, unit);
-      if (odometer) {
-        fields.push({ label: "Odometer", value: odometer });
-        hasOdometer = true;
-      }
+      // One column for the reading, whichever of meter/odometer/mileage the
+      // feed used, with its unit already folded in.
+      addField(fields, "Mileage", formatOdometer(value, unit));
       continue;
     }
 
-    const text = BOOLEAN_KEYS.has(lower)
-      ? yesNo(value)
-      : isDateKey(lower)
-        ? formatEventDate(stringify(value))
-        : stringify(value);
-    if (text.length === 0) continue;
+    if (PRICE_KEYS.has(lower) || PRICE_KEYS.has(lower.replace(/[^a-z0-9]/g, ""))) {
+      addField(fields, "Price", formatMoney(value));
+      continue;
+    }
 
-    fields.push({ label: humanizeKey(key), value: text });
+    addField(
+      fields,
+      humanizeKey(key),
+      BOOLEAN_KEYS.has(lower)
+        ? yesNo(value)
+        : isDateKey(lower)
+          ? formatEventDate(stringify(value))
+          : unshout(stringify(value)),
+    );
   }
 
   return fields;
+}
+
+/**
+ * Adds a field unless it is empty, keeping one field per label.
+ *
+ * Several provider keys can map to the same label — a record with both a title
+ * type and a transaction type is one "Event" to a reader — so a second value
+ * joins the first instead of creating a duplicate row the table would drop.
+ */
+function addField(fields: Field[], label: string, value: string): void {
+  if (value.length === 0) return;
+  const existing = fields.find((field) => field.label === label);
+  if (!existing) {
+    fields.push({ label, value });
+    return;
+  }
+  if (existing.value === value) return;
+  existing.value = `${existing.value} · ${value}`;
 }
 
 /** Puts a section's column fields first so a record reads in a fixed order. */
@@ -229,26 +311,46 @@ function pickAttribute(
   return undefined;
 }
 
-function buildSection(
-  key: string,
-  title: string,
-  description: string,
-  emptyLabel: string,
-  value: unknown,
-  columns?: string[],
-): ReportSection {
+/** Labels that only ever repeat what the report heading already says. */
+const HEADING_LABELS = new Set(["Year", "Make", "Model", "Trim", "Trim level", "Series"]);
+
+/** `2012 Toyota Camry SE` heads the report, so the spec grid can skip its parts. */
+function isRestatedByHeading(field: Field, vehicle: VehicleSummary): boolean {
+  if (!HEADING_LABELS.has(field.label)) return false;
+  return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].includes(
+    field.value,
+  );
+}
+
+type SectionSpec = {
+  key: string;
+  title: string;
+  /** What the jump nav calls it. */
+  navLabel: string;
+  description: string;
+  emptyLabel: string;
+  columns?: string[];
+  layout?: ReportSection["layout"];
+};
+
+function buildSection(spec: SectionSpec, value: unknown): ReportSection {
+  const columns = spec.columns ?? [];
   const cleaned = asRecordArray(value)
-    .map((record) => ({ record, fields: orderFields(toFields(record), columns ?? []) }))
+    .map((record) => ({ record, fields: orderFields(toFields(record), columns) }))
     .filter((entry) => entry.fields.length > 0);
 
-  return {
-    key,
-    title,
-    description,
-    emptyLabel,
-    columns,
-    records: dedupeConsecutiveRecords(sortByDateDesc(cleaned)),
-  };
+  let records = dedupeConsecutiveRecords(sortByDateDesc(cleaned));
+  // Same-day TBD + Sold on one Copart/IAA run is one event. Junk/salvage
+  // always collapses; sales only when the row is an auction/salvage channel.
+  if (spec.key === "jsi") {
+    records = preferResolvedDisposition(records);
+  } else if (spec.key === "sales") {
+    records = preferResolvedDisposition(records, { requireAuctionChannel: true });
+  }
+
+  const { records: lifted, shared } = liftSharedFields(records);
+
+  return { ...spec, records: lifted, shared };
 }
 
 function check(
@@ -265,6 +367,21 @@ function check(
     count,
     detail: count > 0 ? foundDetail : clearDetail,
   };
+}
+
+function checkFound(checks: ReportCheck[], key: string): boolean {
+  return checks.some((entry) => entry.key === key && entry.status === "found");
+}
+
+/** Title brands and NMVTIS salvage are separate facts; the headline says which. */
+function brandedOrSalvageHeadline(checks: ReportCheck[]): string {
+  const branded = checkFound(checks, "branded");
+  const salvage = checkFound(checks, "jsi");
+  if (branded) return "Branded-title activity was reported for this VIN.";
+  if (salvage) {
+    return "Junk, salvage or insurance-loss activity was reported for this VIN.";
+  }
+  return "No salvage, junk or insurance-loss brand was reported for this VIN.";
 }
 
 /**
@@ -285,7 +402,9 @@ function parseOdometer(titles: Record<string, unknown>[]): OdometerReading[] {
       source: stringify(title.state) || "Title record",
     });
   }
-  return readings.sort((a, b) => a.date.localeCompare(b.date));
+  return dedupeOdometerReadings(
+    readings.sort((a, b) => a.date.localeCompare(b.date)),
+  );
 }
 
 /**
@@ -341,9 +460,16 @@ export function normalizeVinAuditReport(
     check(
       "branded",
       "Branded title",
-      brandedTitles.length + jsi.length,
-      "Salvage, junk or insurance-loss activity reported",
+      brandedTitles.length,
+      "A salvage, junk or other brand is on the title records",
       "No salvage, junk or insurance brand found",
+    ),
+    check(
+      "jsi",
+      "Junk & salvage",
+      jsi.length,
+      `${jsi.length} junk/salvage record${jsi.length === 1 ? "" : "s"} on file`,
+      "No junk, salvage or insurance-loss records",
     ),
     check(
       "accidents",
@@ -391,81 +517,130 @@ export function normalizeVinAuditReport(
 
   const sections: ReportSection[] = [
     buildSection(
-      "titles",
-      "Title & registration history",
-      "Each title and registration event we found for this VIN, newest first, as reported by the issuing state.",
-      "No title or registration events came back for this VIN.",
+      {
+        key: "titles",
+        title: "Title, registration & mileage",
+        navLabel: "Titles & mileage",
+        description:
+          "Each title and registration event we found for this VIN, newest first, with the mileage reported at that event.",
+        emptyLabel: "No title or registration events came back for this VIN.",
+        columns: ["Date", "State", "Mileage", "Event", "Brand", "Current"],
+      },
       titles,
-      ["Date", "State", "Odometer", "Current"],
     ),
     buildSection(
-      "jsi",
-      "Junk, salvage & insurance records",
-      "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
-      "No junk, salvage or insurance-loss records came back.",
+      {
+        key: "jsi",
+        title: "Junk, salvage & insurance records",
+        navLabel: "Junk & salvage",
+        description:
+          "Junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
+        emptyLabel: "No junk, salvage or insurance-loss records came back.",
+        columns: ["Date", "State", "City", "Reporting entity", "Obtained from"],
+      },
       jsi,
-      ["Date", "State", "City", "Reporting entity", "Obtained from"],
     ),
     buildSection(
-      "accidents",
-      "Accident & damage records",
-      "Reported collision and damage events.",
-      "No accident or damage records came back.",
+      {
+        key: "accidents",
+        title: "Accident & damage records",
+        navLabel: "Accidents",
+        description: "Reported collision and damage events.",
+        emptyLabel: "No accident or damage records came back.",
+        columns: ["Date", "State", "City", "Severity", "Damage", "Mileage"],
+      },
       accidents,
-      ["Date", "State", "City", "Severity", "Damage", "Odometer"],
     ),
     buildSection(
-      "thefts",
-      "Theft records",
-      "Reported thefts and recoveries.",
-      "No theft records came back.",
+      {
+        key: "thefts",
+        title: "Theft records",
+        navLabel: "Thefts",
+        description: "Reported thefts and recoveries.",
+        emptyLabel: "No theft records came back.",
+        columns: ["Date", "State", "City", "Recovered"],
+      },
       thefts,
-      ["Date", "State", "City", "Recovered"],
     ),
     buildSection(
-      "liens",
-      "Liens & repossessions",
-      "Financial interests recorded against the vehicle.",
-      "No liens or repossessions came back.",
+      {
+        key: "liens",
+        title: "Liens & repossessions",
+        navLabel: "Liens",
+        description: "Financial interests recorded against the vehicle.",
+        emptyLabel: "No liens or repossessions came back.",
+        columns: ["Date", "State", "Type", "Status", "Lienholder"],
+      },
       liens,
-      ["Date", "State", "Type", "Status", "Lienholder"],
     ),
     buildSection(
-      "impounds",
-      "Impound records",
-      "Impound and towing events.",
-      "No impound records came back.",
+      {
+        key: "impounds",
+        title: "Impound records",
+        navLabel: "Impounds",
+        description: "Impound and towing events.",
+        emptyLabel: "No impound records came back.",
+        columns: ["Date", "State", "City", "Reason"],
+      },
       impounds,
-      ["Date", "State", "City", "Reason"],
     ),
     buildSection(
-      "exports",
-      "Export records",
-      "Records of the vehicle leaving the country.",
-      "No export records came back.",
+      {
+        key: "exports",
+        title: "Export records",
+        navLabel: "Exports",
+        description: "Records of the vehicle leaving the country.",
+        emptyLabel: "No export records came back.",
+        columns: ["Date", "State", "Port", "Country"],
+      },
       exports,
-      ["Date", "State", "Port", "Country"],
     ),
     buildSection(
-      "sales",
-      "Sales & listing history",
-      "Prior retail and auction listings, including asking prices where available.",
-      "No prior sales listings came back.",
+      {
+        key: "sales",
+        title: "Sales & listing history",
+        navLabel: "Sales",
+        description: LISTING_SECTION_NOTE,
+        emptyLabel: "No listing snapshots came back.",
+        // A listing carries far more than a table can hold: dealer, stock
+        // number, colours, options, the ad copy itself. Chapters fold the
+        // scrape noise; the long tail stays one click away.
+        layout: "listings",
+      },
       sales,
-      ["Date", "Price", "Odometer", "Seller type", "City", "State"],
     ),
     buildSection(
-      "recalls",
-      "Safety recalls",
-      "Manufacturer recall campaigns that apply to this vehicle.",
-      "No recall campaigns came back.",
+      {
+        key: "recalls",
+        title: "Safety recalls",
+        navLabel: "Recalls",
+        description: "Manufacturer recall campaigns that apply to this vehicle.",
+        emptyLabel: "No recall campaigns came back.",
+      },
       recalls,
     ),
   ];
 
+  const jsiShown =
+    sections.find((section) => section.key === "jsi")?.records.length ?? 0;
+  const jsiCheck = checks.find((entry) => entry.key === "jsi");
+  if (jsiCheck && jsiCheck.count !== jsiShown) {
+    jsiCheck.count = jsiShown;
+    jsiCheck.status = jsiShown > 0 ? "found" : "clear";
+    jsiCheck.detail =
+      jsiShown > 0
+        ? `${jsiShown} junk/salvage record${jsiShown === 1 ? "" : "s"} on file`
+        : "No junk, salvage or insurance-loss records";
+  }
+
   const specifications: Field[] = Object.entries(attributes)
     .map(([key, value]) => ({ label: humanizeKey(key), value: stringify(value) }))
-    .filter((field) => field.value.length > 0);
+    .filter(
+      (field) =>
+        field.value.length > 0 &&
+        field.label !== "VIN" &&
+        !isRestatedByHeading(field, vehicle),
+    );
 
   const providerReportUrl = stringify(payload.reportlink) || undefined;
 
@@ -475,10 +650,7 @@ export function normalizeVinAuditReport(
     isSample: false,
     generatedAt: new Date().toISOString(),
     vehicle,
-    headline:
-      checks.some((c) => c.key === "branded" && c.status === "found")
-        ? "Branded-title activity was reported for this VIN."
-        : "No salvage, junk or insurance-loss brand was reported for this VIN.",
+    headline: brandedOrSalvageHeadline(checks),
     specifications,
     checks,
     sections,

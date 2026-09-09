@@ -4,12 +4,24 @@ import { afterEach, describe, it } from "node:test";
 import {
   BRAND,
   DEFAULT_REPORT_PRICE_CENTS,
+  anthropic,
   emailConfig,
+  fal,
   formatPrice,
+  isAnthropicConfigured,
+  isFalConfigured,
   pricing,
 } from "../src/lib/config.ts";
 
-const ENV_KEYS = ["EMAIL_FROM", "SUPPORT_EMAIL", "REPORT_PRICE_CENTS"];
+const ENV_KEYS = [
+  "EMAIL_FROM",
+  "SUPPORT_EMAIL",
+  "REPORT_PRICE_CENTS",
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_TIMEOUT_MS",
+  "FAL_IMAGE_MODEL",
+  "FAL_IMAGE_STYLE",
+];
 
 afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key];
@@ -70,5 +82,68 @@ describe("pricing", () => {
   it("ignores a nonsense price rather than selling at zero", () => {
     process.env.REPORT_PRICE_CENTS = "not-a-number";
     assert.equal(pricing.amountCents, DEFAULT_REPORT_PRICE_CENTS);
+  });
+});
+
+describe("the model that writes the brief", () => {
+  it("defaults to Sonnet — the brief is written once and read many times", () => {
+    assert.equal(anthropic.model, "claude-sonnet-5");
+  });
+
+  it("is a pinned id, so a new release cannot reword existing reports", () => {
+    assert.doesNotMatch(anthropic.model, /latest/);
+  });
+
+  it("takes an override", () => {
+    process.env.ANTHROPIC_MODEL = "claude-haiku-4-5-20251001";
+    assert.equal(anthropic.model, "claude-haiku-4-5-20251001");
+  });
+
+  it("waits long enough for a brief that explains itself", () => {
+    // 20s and 1000 tokens cut the JSON off around 428 characters on ZOO.
+    delete process.env.ANTHROPIC_TIMEOUT_MS;
+    assert.equal(anthropic.timeoutMs, 45_000);
+  });
+
+  it("is off, not broken, when no key is set", () => {
+    const before = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    try {
+      assert.equal(isAnthropicConfigured(), false);
+      assert.equal(anthropic.apiKey, undefined);
+    } finally {
+      if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
+    }
+  });
+});
+
+describe("the model that draws the vehicle hero", () => {
+  it("defaults to Recraft V3 digital illustration, not a photoreal Flux pass", () => {
+    assert.equal(fal.model, "fal-ai/recraft/v3/text-to-image");
+    assert.equal(fal.style, "digital_illustration");
+    assert.equal(fal.rembgModel, "fal-ai/imageutils/rembg");
+  });
+
+  it("takes an override for operators who want a cheaper Flux pass", () => {
+    process.env.FAL_IMAGE_MODEL = "fal-ai/flux/schnell";
+    process.env.FAL_IMAGE_STYLE = "any";
+    assert.equal(fal.model, "fal-ai/flux/schnell");
+    assert.equal(fal.style, "any");
+  });
+
+  it("refuses a photoreal Recraft style so an env typo cannot look like this VIN", () => {
+    process.env.FAL_IMAGE_STYLE = "realistic_image";
+    assert.equal(fal.style, "digital_illustration");
+  });
+
+  it("is off, not broken, when no key is set", () => {
+    const before = process.env.FAL_KEY;
+    delete process.env.FAL_KEY;
+    try {
+      assert.equal(isFalConfigured(), false);
+      assert.equal(fal.apiKey, undefined);
+    } finally {
+      if (before !== undefined) process.env.FAL_KEY = before;
+    }
   });
 });

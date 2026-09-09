@@ -33,7 +33,7 @@ function Shell({
 }) {
   return (
     <div className="flex min-h-dvh flex-col bg-slate-50">
-      <SiteHeader />
+      <SiteHeader cta="none" />
       <main className="container-page flex-1 py-16">
         <div className="mx-auto max-w-xl rounded-2xl border border-slate-200 bg-white p-7 shadow-card">
           <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
