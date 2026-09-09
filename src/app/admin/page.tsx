@@ -6,7 +6,9 @@ import { logoutAction } from "@/app/admin/actions";
 import { OrderActions } from "@/app/admin/order-actions";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { firstSalesGoal } from "@/lib/admin-ops";
 import { formatPrice, isVinAuditConfigured } from "@/lib/config";
+import { formatGeneratedAt } from "@/lib/report";
 import { getStore } from "@/lib/store";
 import type { OrderStatus } from "@/lib/store";
 
@@ -25,10 +27,6 @@ const STATUS_STYLES: Record<OrderStatus, string> = {
   expired: "bg-slate-100 text-slate-500 ring-slate-200",
 };
 
-function timestamp(iso: string): string {
-  return new Date(iso).toISOString().replace("T", " ").slice(0, 16);
-}
-
 export default async function AdminPage() {
   if (!(await isAdminAuthenticated())) redirect("/admin/login");
 
@@ -36,6 +34,7 @@ export default async function AdminPage() {
   await store.init();
   const [orders, stats] = await Promise.all([store.list(200), store.stats()]);
 
+  const goal = firstSalesGoal(stats.revenueCents);
   const cards = [
     { label: "Orders", value: String(stats.total) },
     { label: "Awaiting delivery", value: String(stats.pending) },
@@ -81,7 +80,7 @@ export default async function AdminPage() {
               Orders
             </h1>
             <p className="mt-1 text-sm text-slate-500">
-              Storage: {store.description}
+              Storage: {store.description} · times in Denver
             </p>
           </div>
           {!isVinAuditConfigured() && (
@@ -90,6 +89,35 @@ export default async function AdminPage() {
               will fail.
             </p>
           )}
+        </div>
+
+        <div className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+              First $1,000
+            </p>
+            <p className="text-sm font-medium text-slate-800">{goal.label}</p>
+          </div>
+          <div
+            className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100"
+            role="progressbar"
+            aria-label="Collected toward first $1,000"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={goal.percent}
+          >
+            <div
+              className={`h-full rounded-full ${
+                goal.reached ? "bg-emerald-500" : "bg-brand-600"
+              }`}
+              style={{ width: `${goal.percent}%` }}
+            />
+          </div>
+          <p className="mt-2 text-xs text-slate-500">
+            {goal.reached
+              ? "Milestone hit. Collected is kept money — refunds are counted separately."
+              : `${formatPrice(goal.remainingCents)} to go. Collected is kept money — refunds are counted separately.`}
+          </p>
         </div>
 
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
@@ -117,8 +145,8 @@ export default async function AdminPage() {
           </div>
         ) : (
           <div className="mt-8 overflow-hidden rounded-2xl border border-slate-200 bg-white">
-            <div className="hidden grid-cols-[9rem_11rem_1fr_7rem_6rem_13rem] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 lg:grid">
-              <span>Created (UTC)</span>
+            <div className="hidden grid-cols-[12rem_11rem_1fr_7rem_6rem_13rem] gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-[11px] font-semibold uppercase tracking-wider text-slate-500 lg:grid">
+              <span>Created (Denver)</span>
               <span>VIN</span>
               <span>Customer</span>
               <span>Status</span>
@@ -130,10 +158,10 @@ export default async function AdminPage() {
               {orders.map((order) => (
                 <li
                   key={order.id}
-                  className="grid gap-3 px-5 py-4 lg:grid-cols-[9rem_11rem_1fr_7rem_6rem_13rem] lg:items-start lg:gap-4"
+                  className="grid gap-3 px-5 py-4 lg:grid-cols-[12rem_11rem_1fr_7rem_6rem_13rem] lg:items-start lg:gap-4"
                 >
-                  <span className="font-mono text-xs text-slate-500">
-                    {timestamp(order.createdAt)}
+                  <span className="text-xs text-slate-500">
+                    {formatGeneratedAt(order.createdAt)}
                   </span>
 
                   <span className="font-mono text-xs text-slate-900">
@@ -179,7 +207,7 @@ export default async function AdminPage() {
                     )}
                     {order.refundedAt && (
                       <span className="mt-1 block text-[11px] text-slate-400">
-                        refunded {timestamp(order.refundedAt).slice(0, 10)}
+                        refunded {formatGeneratedAt(order.refundedAt)}
                       </span>
                     )}
                   </span>

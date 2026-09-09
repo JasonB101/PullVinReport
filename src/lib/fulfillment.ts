@@ -4,6 +4,7 @@ import {
   missingVinAuditKeys,
 } from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
+import { extrasForReport } from "@/lib/model-extras";
 import { briefForOrder } from "@/lib/order-brief";
 import { refundOrder } from "@/lib/refund";
 import { getStore } from "@/lib/store";
@@ -111,9 +112,15 @@ export async function fulfillOrder(orderId: string): Promise<FulfillmentResult> 
     fulfilledAt: new Date().toISOString(),
   });
 
-  const briefed = await withBrief(fulfilled);
+  const [briefed, modelExtras] = await Promise.all([
+    withBrief(fulfilled),
+    extrasForReport(report, store).catch((error) => {
+      console.error(`[fulfillment] Model extras failed for ${order.id}`, error);
+      return null;
+    }),
+  ]);
 
-  const email = await sendReportEmail(briefed);
+  const email = await sendReportEmail(briefed, modelExtras);
   const finalOrder = email.sent
     ? await store.update(briefed.id, { emailSentAt: new Date().toISOString() })
     : briefed;

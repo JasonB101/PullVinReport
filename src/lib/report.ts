@@ -1,3 +1,11 @@
+import {
+  colorFieldValues,
+  isPaintColorLabel,
+  PAINT_COLOR_LABEL,
+  pickColor,
+} from "@/lib/vehicle-color";
+import { MODEL_ZONE_NAV } from "@/lib/report-zones";
+
 /**
  * The normalized report model that every renderer in the app consumes.
  *
@@ -272,6 +280,64 @@ export function sectionTable(section: ReportSection): SectionTable | null {
   });
 
   return { columns, rows };
+}
+
+/** Columns a stacked (phone) row already states as headline, date, or meta. */
+const STACKED_STATED = new Set(["Event", "Date", "State", "Mileage", "Brand", "Current"]);
+
+const STACKED_HEADLINE = ["Event", "Brand", "Type", "Severity", "Disposition"];
+
+/**
+ * One table row, reshaped for a phone card.
+ *
+ * The wide title table cuts Event / Current / brand off-screen at ~390px
+ * with no scrollbar hint. Below `sm` the renderer stacks instead: the event
+ * as the headline, the date beneath it, State · Mileage as one muted line,
+ * and brand / current always on the card.
+ */
+export type StackedRecordRow = {
+  headline: string;
+  date: string;
+  meta: string;
+  brand: string;
+  current: string;
+  rest: Field[];
+  extras: Field[];
+  mileageUnchanged: boolean;
+};
+
+export function stackedRecordRow(table: SectionTable, row: TableRow): StackedRecordRow {
+  const valueOf = (label: string): string => {
+    const index = table.columns.indexOf(label);
+    return index >= 0 ? row.cells[index] : "";
+  };
+
+  const event = valueOf("Event");
+  const brand = valueOf("Brand");
+  const date = valueOf("Date");
+  const headline =
+    event ||
+    STACKED_HEADLINE.map(valueOf).find((value) => value.length > 0) ||
+    date ||
+    "Record";
+  const mileage = valueOf("Mileage");
+  const mileageText =
+    row.mileageUnchanged && mileage.length > 0 ? `${mileage} unchanged` : mileage;
+  const meta = [valueOf("State"), mileageText].filter(Boolean).join(" · ");
+  const rest = table.columns
+    .map((label, index) => ({ label, value: row.cells[index] }))
+    .filter((field) => field.value.length > 0 && !STACKED_STATED.has(field.label));
+
+  return {
+    headline,
+    date: headline === date ? "" : date,
+    meta,
+    brand: brand && brand !== headline ? brand : "",
+    current: valueOf("Current"),
+    rest,
+    extras: row.extras,
+    mileageUnchanged: Boolean(row.mileageUnchanged),
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1131,7 +1197,10 @@ export function reportChips(report: VehicleReport): ReportChip[] {
 export type ReportNavItem = { href: string; label: string };
 
 /** Outline of the report, listing only the parts that came back with content. */
-export function reportNavItems(report: VehicleReport): ReportNavItem[] {
+export function reportNavItems(
+  report: VehicleReport,
+  options: { modelExtras?: boolean } = {},
+): ReportNavItem[] {
   const items: ReportNavItem[] = [{ href: "#brief", label: "What to know" }];
   for (const section of report.sections) {
     if (section.records.length === 0) continue;
@@ -1139,6 +1208,9 @@ export function reportNavItems(report: VehicleReport): ReportNavItem[] {
       href: `#${section.key}`,
       label: section.navLabel ?? section.title,
     });
+  }
+  if (options.modelExtras) {
+    items.push({ href: "#model-extras", label: MODEL_ZONE_NAV });
   }
   return items;
 }
@@ -1166,13 +1238,48 @@ export function searchedAndEmpty(report: VehicleReport): string[] {
  * Title records almost always exist; they are not a finding. The issue
  * checks — brand, accident, salvage, lien, recall — are what belongs in
  * the brief's summary strip.
+ *
+ * Findings are also derived from sections that came back with records, so a
+ * junk/salvage (or any future) category cannot sit on the report and skip
+ * the summary just because no matching check was stored with the order.
  */
 const ROUTINE_CHECK_KEYS = new Set(["titles"]);
 
 export function foundIssueChecks(report: VehicleReport): ReportCheck[] {
-  return report.checks.filter(
-    (check) => check.status === "found" && !ROUTINE_CHECK_KEYS.has(check.key),
-  );
+  const findings: ReportCheck[] = [];
+  const seen = new Set<string>();
+
+  const branded = report.checks.find((entry) => entry.key === "branded");
+  if (branded?.status === "found") {
+    findings.push(branded);
+    seen.add("branded");
+  }
+
+  for (const section of sectionsWithRecords(report)) {
+    if (ROUTINE_CHECK_KEYS.has(section.key) || seen.has(section.key)) continue;
+    const existing = report.checks.find((entry) => entry.key === section.key);
+    findings.push(
+      existing?.status === "found"
+        ? existing
+        : {
+            key: section.key,
+            label: section.navLabel ?? section.title,
+            status: "found",
+            count: section.records.length,
+            detail: "",
+          },
+    );
+    seen.add(section.key);
+  }
+
+  for (const entry of report.checks) {
+    if (entry.status !== "found" || ROUTINE_CHECK_KEYS.has(entry.key)) continue;
+    if (seen.has(entry.key)) continue;
+    findings.push(entry);
+    seen.add(entry.key);
+  }
+
+  return findings;
 }
 
 /**
@@ -1278,6 +1385,7 @@ export function sectionLead(
 
 /** Specs worth stating on the vehicle card before anyone opens the rest. */
 const HEADER_SPEC_LABELS = [
+  "Color",
   "Style",
   "Engine",
   "Drive type",
@@ -1302,6 +1410,40 @@ function alreadyStated(picked: Field[], value: string): boolean {
   const needle = value.trim().toLowerCase();
   if (!needle) return true;
   return picked.some((field) => field.value.trim().toLowerCase().includes(needle));
+}
+
+/**
+ * Exterior paint on this report, or empty when none was recorded.
+ *
+ * Build-record specs win when they name a paint colour. Otherwise the listing
+ * rows are asked, with the same paint-vs-interior rules the hero uses. Nothing
+ * is invented: no colour in the records means no colour here.
+ */
+export function reportPaintColor(report: VehicleReport): string {
+  const fromSpecs = pickColor(colorFieldValues(report.specifications));
+  if (fromSpecs) return fromSpecs;
+
+  const listingFields = report.sections
+    .filter((section) => section.layout === "listings" || section.key === "sales")
+    .flatMap((section) => sectionListings(section))
+    .flatMap((listing) => [...listing.summary, ...listing.detail]);
+  return pickColor(colorFieldValues(listingFields));
+}
+
+export function reportPaintColorField(report: VehicleReport): Field | null {
+  const value = reportPaintColor(report);
+  return value ? { label: PAINT_COLOR_LABEL, value } : null;
+}
+
+/**
+ * Specs shown on the vehicle card, with paint colour lifted to a single Color
+ * row when the records have one. Listing-only paint still appears here so it
+ * is not trapped behind a closed sales chapter.
+ */
+export function headerSpecifications(report: VehicleReport): Field[] {
+  const color = reportPaintColorField(report);
+  const rest = report.specifications.filter((field) => !isPaintColorLabel(field.label));
+  return color ? [color, ...rest] : rest;
 }
 
 export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {

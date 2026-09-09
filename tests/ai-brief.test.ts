@@ -324,6 +324,10 @@ describe("reading a brief out of a reply", () => {
 
   it("keeps a nothing-on-file accident bullet when there is no salvage channel", () => {
     const facts = briefFacts(paidReport());
+    assert.ok(
+      facts.checks.some((check) => check.check === "Junk & salvage"),
+      "a clear junk/salvage check is present so its label cannot count as a finding",
+    );
     assert.equal(factsIndicateSalvageChannel(facts), false);
     const brief = parseBrief(
       JSON.stringify({

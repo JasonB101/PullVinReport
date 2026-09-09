@@ -37,9 +37,9 @@ export default function SamplePage() {
               <span className="text-slate-900">Sample report</span>
             </nav>
 
-            <h1 className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+            <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
               Sample report — {SAMPLE_VEHICLE_LABEL}
-            </h1>
+            </p>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               This is the exact layout of a purchased report, filled with
               fictional data. Nothing here describes a real vehicle. When you

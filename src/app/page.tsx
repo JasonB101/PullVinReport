@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 const INCLUDED = [
   {
     title: "Title & brand history",
-    body: "Every title record on file, plus salvage, junk, flood, lemon and rebuilt brands reported to NMVTIS.",
+    body: "Every title record on file, plus salvage, junk, flood, lemon and rebuilt brands.",
     icon: "M4 6h16M4 12h16M4 18h10",
   },
   {
@@ -73,7 +73,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Where does the data come from?",
-    a: "Every purchased report is pulled live at the moment you buy it, from national title and brand data reported to NMVTIS together with insurance, salvage, auction and listing records. We do not resell another retailer's report and we do not repackage the sample.",
+    a: "We do not resell another retailer's report and we do not repackage the sample.",
   },
   {
     q: "How fast do I get it?",
@@ -89,7 +89,7 @@ const FAQ = [
   },
   {
     q: "What if there are no records for my VIN?",
-    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing. If we cannot deliver a report for your VIN, email support and we will refund you.",
+    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing.",
   },
   {
     q: "What is the written brief?",
@@ -138,7 +138,7 @@ export default function HomePage() {
             <div className="mx-auto max-w-3xl text-center">
               <span className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-1.5 text-xs font-medium text-brand-100 ring-1 ring-inset ring-white/15">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-                NMVTIS title & brand data · pulled live per VIN
+                Title, salvage and brand records · one VIN, one report
               </span>
 
               <h1 className="mt-6 text-4xl font-semibold leading-[1.08] tracking-tight text-white sm:text-6xl">
@@ -333,10 +333,6 @@ export default function HomePage() {
                 <StartReportLink className="mt-7 block w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-glow transition hover:bg-brand-500">
                   Get a report · {price}
                 </StartReportLink>
-                <p className="mt-4 text-xs text-slate-400">
-                  If we can&apos;t return a report for your VIN, email us and we
-                  will refund you.
-                </p>
               </div>
             </div>
           </div>

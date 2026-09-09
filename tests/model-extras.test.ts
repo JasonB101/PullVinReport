@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   composeModelExtras,
@@ -10,14 +11,19 @@ import {
   engineDisplacementHint,
   extrasForReport,
   hasModelExtras,
+  isRetryableHttpStatus,
   matchingEpaOptions,
+  MODEL_EXTRAS_FETCH_ATTEMPTS,
   modelExtrasSummaryLine,
   parseComplaintsPayload,
   parseEpaOptions,
   parseEpaVehicle,
   parseRecallsPayload,
   pickMpg,
+  requestPaidModelExtras,
   resetModelExtrasCacheForTests,
+  resetModelExtrasRetryForTests,
+  setModelExtrasRetryDelaysForTests,
   ymmCacheKey,
   ymmFromVehicle,
 } from "@/lib/model-extras";
@@ -45,11 +51,46 @@ const RECALLS = {
 const COMPLAINTS = {
   count: 10,
   results: [
-    { components: "POWER TRAIN,ENGINE", vin: "4T1BF1FK9CU", summary: "Shudder" },
-    { components: "POWER TRAIN", vin: "4T1BF1FK1CU", summary: "Shift" },
-    { components: "AIR BAGS", vin: "JTDBE32K123", summary: "Light" },
-    { components: "UNKNOWN OR OTHER", vin: "IGNOREME", summary: "Noise" },
-    { components: "VEHICLE SPEED CONTROL", vin: "ABC", summary: "Surge" },
+    {
+      odiNumber: 1001,
+      components: "POWER TRAIN,ENGINE",
+      vin: "4T1BF1FK9CU",
+      summary:
+        "Severe transmission shudder during normal driving around 30 mph after a fluid service did not help.",
+      dateComplaintFiled: "03/04/2020",
+      crash: false,
+      fire: false,
+    },
+    {
+      odiNumber: 1002,
+      components: "POWER TRAIN",
+      vin: "4T1BF1FK1CU",
+      summary: "Harsh 2-3 shift and delayed engagement from a stop.",
+      dateComplaintFiled: "01/15/2019",
+    },
+    {
+      odiNumber: 1003,
+      components: "AIR BAGS",
+      vin: "JTDBE32K123",
+      summary: "Passenger airbag light stays on after a low-speed bump.",
+      dateComplaintFiled: "08/20/2021",
+    },
+    {
+      odiNumber: 1004,
+      components: "UNKNOWN OR OTHER",
+      vin: "IGNOREME",
+      summary: "Unspecified noise from under the dash.",
+      dateComplaintFiled: "06/01/2018",
+    },
+    {
+      odiNumber: 1005,
+      components: "VEHICLE SPEED CONTROL",
+      vin: "ABC",
+      summary:
+        "Car surged forward while braking for a stop sign. Driver avoided a collision.",
+      dateComplaintFiled: "11/12/2021",
+      crash: true,
+    },
   ],
 };
 
@@ -100,6 +141,40 @@ describe("model extras parsers", () => {
       false,
       "complaint VINs must not leak into the summary",
     );
+  });
+
+  it("keeps a short sample of real complaint write-ups, crash first", () => {
+    const complaints = parseComplaintsPayload(COMPLAINTS);
+    assert.ok(complaints);
+    assert.ok(complaints.samples.length >= 3);
+    assert.ok(complaints.samples.length <= 5);
+    assert.equal(complaints.samples[0]?.crash, true);
+    assert.match(complaints.samples[0]?.summary ?? "", /surged forward/);
+    assert.equal(complaints.samples[0]?.odiNumber, "1005");
+    assert.match(complaints.samples[0]?.components ?? "", /Vehicle Speed Control/);
+    assert.equal(complaints.samples[0]?.date, "Nov 12, 2021");
+    for (const sample of complaints.samples) {
+      assert.ok(sample.summary.length > 20);
+      assert.doesNotMatch(sample.summary, /4T1BF1FK|JTDBE32K|IGNOREME/);
+    }
+  });
+
+  it("clips huge NHTSA summaries so the card stays readable", () => {
+    const complaints = parseComplaintsPayload({
+      count: 1,
+      results: [
+        {
+          odiNumber: 9,
+          components: "ENGINE",
+          summary: "x".repeat(800),
+          dateComplaintFiled: "01/02/2024",
+        },
+      ],
+    });
+    assert.ok(complaints);
+    assert.equal(complaints.samples.length, 1);
+    assert.ok(complaints.samples[0]!.summary.length <= 480);
+    assert.match(complaints.samples[0]!.summary, /…$/);
   });
 
   it("skips the UNKNOWN OR OTHER complaint bucket", () => {
@@ -180,6 +255,27 @@ describe("model extras parsers", () => {
     assert.ok(ymm);
     assert.equal(composeModelExtras(ymm, {}), null);
     assert.equal(hasModelExtras(null), false);
+    assert.equal(
+      hasModelExtras({
+        year: "2012",
+        make: "Toyota",
+        model: "Camry",
+        ymmLabel: "2012 Toyota Camry",
+      }),
+      false,
+    );
+  });
+});
+
+describe("model extras retry policy", () => {
+  it("retries transient HTTP failures three times and not 404s", () => {
+    assert.equal(MODEL_EXTRAS_FETCH_ATTEMPTS, 3);
+    assert.equal(isRetryableHttpStatus(500), true);
+    assert.equal(isRetryableHttpStatus(503), true);
+    assert.equal(isRetryableHttpStatus(429), true);
+    assert.equal(isRetryableHttpStatus(408), true);
+    assert.equal(isRetryableHttpStatus(404), false);
+    assert.equal(isRetryableHttpStatus(400), false);
   });
 });
 
@@ -200,7 +296,20 @@ describe("model extras copy", () => {
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
     assert.equal(extras.recalls?.total, 2);
     assert.equal(extras.complaints?.total, 644);
+    assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
+    assert.match(extras.complaints?.samples[0]?.summary ?? "", /transmission shudder/i);
     assert.equal(extras.mpg?.combined, 28);
+  });
+});
+
+describe("model extras cache key", () => {
+  it("versions the cache so a theme-only extras blob cannot stick", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/model-extras.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /EXTRAS_CACHE_VERSION = "v2"/);
+    assert.match(source, /\$\{EXTRAS_CACHE_VERSION\}\|\$\{ymmCacheKey/);
   });
 });
 
@@ -209,6 +318,7 @@ describe("model extras fetch and cache", () => {
   let calls = 0;
 
   before(() => {
+    setModelExtrasRetryDelaysForTests([0, 0]);
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       calls += 1;
       const href = String(input);
@@ -234,6 +344,7 @@ describe("model extras fetch and cache", () => {
   after(() => {
     globalThis.fetch = realFetch;
     resetModelExtrasCacheForTests();
+    resetModelExtrasRetryForTests();
   });
 
   it("fetches once per YMM and reuses that for another order of the same car", async () => {
@@ -244,6 +355,8 @@ describe("model extras fetch and cache", () => {
     assert.ok(first);
     assert.equal(first.recalls?.total, 2);
     assert.equal(first.complaints?.total, 10);
+    assert.ok((first.complaints?.samples.length ?? 0) >= 3);
+    assert.equal(first.complaints?.samples[0]?.crash, true);
     assert.deepEqual(first.mpg, {
       city: 24,
       highway: 34,
@@ -311,5 +424,137 @@ describe("model extras fetch and cache", () => {
     });
     assert.equal(extras, null);
     assert.equal(calls, before);
+  });
+
+  it("retries a 5xx then returns the slice that recovered", async () => {
+    resetModelExtrasCacheForTests();
+    let recallTries = 0;
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("recallsByVehicle")) {
+        recallTries += 1;
+        if (recallTries < MODEL_EXTRAS_FETCH_ATTEMPTS) {
+          return new Response("down", { status: 503 });
+        }
+      }
+      return previous(input);
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.ok(extras);
+      assert.equal(extras.recalls?.total, 2);
+      assert.equal(recallTries, MODEL_EXTRAS_FETCH_ATTEMPTS);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("retries a timeout then keeps the recovered slice", async () => {
+    resetModelExtrasCacheForTests();
+    let complaintTries = 0;
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("complaintsByVehicle")) {
+        complaintTries += 1;
+        if (complaintTries < 2) throw new Error("timeout");
+      }
+      return previous(input);
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.ok(extras);
+      assert.ok(extras.complaints);
+      assert.equal(complaintTries, 2);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("does not retry a 404 and omits extras when every slice stays empty", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const seen: Record<string, number> = {};
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      const key = href.includes("recalls")
+        ? "recalls"
+        : href.includes("complaints")
+          ? "complaints"
+          : href.includes("menu/options")
+            ? "epa"
+            : "other";
+      seen[key] = (seen[key] ?? 0) + 1;
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.equal(extras, null);
+      assert.equal(seen.recalls, 1);
+      assert.equal(seen.complaints, 1);
+      assert.equal(seen.epa, 1);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("gives up after three 5xx attempts and omits the empty model zone", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const seen: Record<string, number> = {};
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      const key = href.includes("recalls")
+        ? "recalls"
+        : href.includes("complaints")
+          ? "complaints"
+          : href.includes("menu/options")
+            ? "epa"
+            : "other";
+      seen[key] = (seen[key] ?? 0) + 1;
+      return new Response("down", { status: 503 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.equal(extras, null);
+      assert.equal(seen.recalls, MODEL_EXTRAS_FETCH_ATTEMPTS);
+      assert.equal(seen.complaints, MODEL_EXTRAS_FETCH_ATTEMPTS);
+      assert.equal(seen.epa, MODEL_EXTRAS_FETCH_ATTEMPTS);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+});
+
+describe("paid extras client request", () => {
+  it("retries 5xx then returns extras, and stops on a clean unavailable", async () => {
+    setModelExtrasRetryDelaysForTests([0, 0]);
+    try {
+      let tries = 0;
+      const recovered = await requestPaidModelExtras("tok", async () => {
+        tries += 1;
+        if (tries < 3) return new Response("down", { status: 503 });
+        return new Response(
+          JSON.stringify({ status: "ready", extras: buildSampleModelExtras() }),
+          { status: 200 },
+        );
+      });
+      assert.ok(recovered);
+      assert.equal(recovered.recalls?.total, 2);
+      assert.equal(tries, 3);
+
+      let unavailableTries = 0;
+      const empty = await requestPaidModelExtras("tok", async () => {
+        unavailableTries += 1;
+        return new Response(JSON.stringify({ status: "unavailable" }), {
+          status: 200,
+        });
+      });
+      assert.equal(empty, null);
+      assert.equal(unavailableTries, 1);
+    } finally {
+      resetModelExtrasRetryForTests();
+    }
   });
 });

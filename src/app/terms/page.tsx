@@ -25,8 +25,8 @@ export default function TermsPage() {
       <LegalSection heading="1. What we sell">
         <p>
           We sell a single product: one vehicle history report for one VIN,
-          compiled from third-party records. The data processors we rely on to
-          produce it are named in our{" "}
+          compiled from third-party records. The processors we rely on to
+          produce it are described in our{" "}
           <Link href="/privacy" className="font-semibold text-brand-600 hover:underline">
             privacy policy
           </Link>

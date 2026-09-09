@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { sectionListingGroups } from "../src/lib/report.ts";
+import { hasModelExtras } from "../src/lib/model-extras.ts";
+import { headerSpecifications, sectionListingGroups } from "../src/lib/report.ts";
 import {
   buildSampleModelExtras,
   buildSampleReport,
@@ -35,11 +36,23 @@ describe("sample report", () => {
 
   it("ships a stable Also-for-this-model fixture that is not this VIN", () => {
     const extras = buildSampleModelExtras();
+    assert.equal(hasModelExtras(extras), true);
     assert.equal(extras.ymmLabel, "2012 Toyota Camry");
     assert.equal(extras.recalls?.total, 2);
     assert.ok((extras.complaints?.total ?? 0) > 0);
+    assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
+    assert.ok((extras.complaints?.samples[0]?.summary.length ?? 0) > 40);
     assert.equal(extras.mpg?.city, 24);
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
+  });
+
+  it("surfaces Super White from the listing rows on the vehicle card", () => {
+    const specs = headerSpecifications(buildSampleReport());
+    assert.deepEqual(specs[0], { label: "Color", value: "Super White" });
+    assert.equal(
+      specs.some((field) => field.label === "Interior colour" || /ivory|ash/i.test(field.value)),
+      false,
+    );
   });
 
   it("folds sister rooftops into listing chapters so the sample shows that layout", () => {

@@ -5,6 +5,8 @@ import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
 import type { ModelExtras } from "@/lib/model-extras";
+import { hasModelExtras } from "@/lib/model-extras";
+import { THIS_VIN_CHIP } from "@/lib/report-zones";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -22,6 +24,7 @@ import {
   formatGeneratedAt,
   foundIssueChecks,
   hasOdometerRollback,
+  headerSpecifications,
   headerSpecSummary,
   reportChips,
   reportNavItems,
@@ -32,6 +35,7 @@ import {
   sectionLead,
   sectionListingGroups,
   sectionTable,
+  stackedRecordRow,
   sectionsWithRecords,
   vehicleTitle,
 } from "@/lib/report";
@@ -169,7 +173,7 @@ function WhatToKnow({
           What to know
         </h2>
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
-          From the records below
+          {THIS_VIN_CHIP}
         </span>
       </div>
 
@@ -209,6 +213,23 @@ function MoreHint({ count }: { count: number }) {
     <span className="when-closed font-medium text-brand-600">
       {count} more {count === 1 ? "detail" : "details"}
     </span>
+  );
+}
+
+function Chevron({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`h-4 w-4 shrink-0 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
   );
 }
 
@@ -287,80 +308,146 @@ function SharedFields({ fields, count }: { fields: Field[]; count: number }) {
   );
 }
 
+function ExtraFields({ fields }: { fields: Field[] }) {
+  if (fields.length === 0) return null;
+
+  return (
+    <details>
+      <summary className="cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden">
+        <MoreHint count={fields.length} />
+      </summary>
+      <dl className="mt-2 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
+        {fields.map((field, extraIndex) => (
+          <div key={`${field.label}-${extraIndex}`} className="min-w-0">
+            <dt className="inline text-slate-400">{field.label}: </dt>
+            <dd className="inline break-words text-slate-600">{field.value}</dd>
+          </div>
+        ))}
+      </dl>
+    </details>
+  );
+}
+
+/**
+ * One table row as a phone card: event first, then date, then State · Mileage.
+ * Brand and Current stay on the card so a salvage title cannot scroll away.
+ */
+function RecordRowCard({
+  table,
+  row,
+}: {
+  table: SectionTable;
+  row: SectionTable["rows"][number];
+}) {
+  const stacked = stackedRecordRow(table, row);
+
+  return (
+    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <p className="text-sm font-semibold text-slate-900">{stacked.headline}</p>
+      {stacked.date && (
+        <p className="mt-0.5 text-sm text-slate-600">{stacked.date}</p>
+      )}
+      {stacked.meta && (
+        <p className="mt-0.5 text-xs text-slate-500">{stacked.meta}</p>
+      )}
+      {(stacked.brand || stacked.current || stacked.rest.length > 0) && (
+        <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
+          {stacked.brand && (
+            <span>
+              <span className="text-slate-400">Brand: </span>
+              {stacked.brand}
+            </span>
+          )}
+          {stacked.current && (
+            <span className="inline-flex items-center gap-1">
+              <span className="text-slate-400">Current:</span>
+              <Cell value={stacked.current} />
+            </span>
+          )}
+          {stacked.rest.map((field) => (
+            <span key={field.label}>
+              <span className="text-slate-400">{field.label}: </span>
+              {field.value}
+            </span>
+          ))}
+        </p>
+      )}
+      {stacked.extras.length > 0 && (
+        <div className="mt-2">
+          <ExtraFields fields={stacked.extras} />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function RecordTable({ table }: { table: SectionTable }) {
   const mileageIndex = table.columns.indexOf("Mileage");
 
   return (
-    <div className="mt-4 overflow-x-auto rounded-xl border border-slate-200 bg-white">
-      <table className="w-full border-collapse text-left text-sm">
-        <thead>
-          <tr className="bg-slate-50">
-            {table.columns.map((column) => (
-              <th
-                key={column}
-                scope="col"
-                className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
-              >
-                {column}
-              </th>
-            ))}
-          </tr>
-        </thead>
+    <>
+      <div className="mt-4 space-y-3 sm:hidden print:hidden">
         {table.rows.map((row, index) => (
-          <tbody key={index} className="border-t border-slate-200">
-            <tr>
-              {row.cells.map((cell, cellIndex) => (
-                <td
-                  key={cellIndex}
-                  className={`px-4 pt-3 align-top ${
-                    row.extras.length > 0 ? "pb-1" : "pb-3"
-                  } ${
-                    cellIndex === 0
-                      ? "whitespace-nowrap font-medium text-slate-900"
-                      : row.mileageUnchanged && cellIndex === mileageIndex
-                        ? "text-slate-400"
-                        : "text-slate-700"
-                  }`}
+          <RecordRowCard key={index} table={table} row={row} />
+        ))}
+      </div>
+      <div className="mt-4 hidden overflow-x-auto rounded-xl border border-slate-200 bg-white sm:block print:block">
+        <table className="w-full border-collapse text-left text-sm">
+          <thead>
+            <tr className="bg-slate-50">
+              {table.columns.map((column) => (
+                <th
+                  key={column}
+                  scope="col"
+                  className="whitespace-nowrap px-4 py-2.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500"
                 >
-                  <Cell
-                    value={cell}
-                    note={
-                      cellIndex === mileageIndex && row.mileageUnchanged
-                        ? "unchanged"
-                        : undefined
-                    }
-                  />
-                </td>
+                  {column}
+                </th>
               ))}
             </tr>
-            {row.extras.length > 0 && (
+          </thead>
+          {table.rows.map((row, index) => (
+            <tbody key={index} className="border-t border-slate-200">
               <tr>
-                <td colSpan={table.columns.length} className="px-4 pb-3">
-                  {/* A title number and a claim code under every row is the
-                      noise that buried the date and the mileage above them.
-                      They stay in the report, one keystroke down. */}
-                  <details>
-                    <summary className="cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden">
-                      <MoreHint count={row.extras.length} />
-                    </summary>
-                    <dl className="mt-2 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
-                      {row.extras.map((field, extraIndex) => (
-                        <div key={`${field.label}-${extraIndex}`} className="min-w-0">
-                          <dt className="inline text-slate-400">{field.label}: </dt>
-                          <dd className="inline break-words text-slate-600">
-                            {field.value}
-                          </dd>
-                        </div>
-                      ))}
-                    </dl>
-                  </details>
-                </td>
+                {row.cells.map((cell, cellIndex) => (
+                  <td
+                    key={cellIndex}
+                    className={`px-4 pt-3 align-top ${
+                      row.extras.length > 0 ? "pb-1" : "pb-3"
+                    } ${
+                      cellIndex === 0
+                        ? "whitespace-nowrap font-medium text-slate-900"
+                        : row.mileageUnchanged && cellIndex === mileageIndex
+                          ? "text-slate-400"
+                          : "text-slate-700"
+                    }`}
+                  >
+                    <Cell
+                      value={cell}
+                      note={
+                        cellIndex === mileageIndex && row.mileageUnchanged
+                          ? "unchanged"
+                          : undefined
+                      }
+                    />
+                  </td>
+                ))}
               </tr>
-            )}
-          </tbody>
-        ))}
-      </table>
-    </div>
+              {row.extras.length > 0 && (
+                <tr>
+                  <td colSpan={table.columns.length} className="px-4 pb-3">
+                    {/* A title number and a claim code under every row is the
+                        noise that buried the date and the mileage above them.
+                        They stay in the report, one keystroke down. */}
+                    <ExtraFields fields={row.extras} />
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          ))}
+        </table>
+      </div>
+    </>
   );
 }
 
@@ -526,11 +613,16 @@ function SectionFace({
           <span className="rounded-full bg-white px-2.5 py-1 text-xs font-medium text-slate-500 ring-1 ring-slate-200">
             {count}
           </span>
+          <Chevron className="disclosure-chevron text-slate-400" />
         </div>
       </div>
       {lead && (
         <p className="when-closed mt-1.5 text-sm text-slate-600">{lead.text}</p>
       )}
+      <span className="when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600">
+        Show {count}
+        <Chevron />
+      </span>
     </>
   );
 }
@@ -633,7 +725,7 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
       }
     >
       <p className="mt-3 text-xs text-slate-500">
-        Decoded from the VIN and the manufacturer&apos;s build record.
+        From the VIN build record and listing fields on this report.
       </p>
       <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {specifications.map((spec, index) => (
@@ -650,8 +742,14 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
 }
 
 /** Outline of the report. Only parts that came back with something are listed. */
-function JumpNav({ report }: { report: VehicleReport }) {
-  const items = reportNavItems(report);
+function JumpNav({
+  report,
+  modelExtras = false,
+}: {
+  report: VehicleReport;
+  modelExtras?: boolean;
+}) {
+  const items = reportNavItems(report, { modelExtras });
   if (items.length < 2) return null;
 
   return (
@@ -702,7 +800,8 @@ export function ReportView({
 }) {
   const report = withResolvedDispositions(incoming);
   const chips = reportChips(report);
-  const specs = headerSpecSummary(report.specifications);
+  const specList = headerSpecifications(report);
+  const specs = headerSpecSummary(specList);
   const facts = heroFacts(report);
   const illustrationAlt = facts
     ? heroAlt(facts)
@@ -725,6 +824,12 @@ export function ReportView({
               <h1 className="text-2xl font-semibold tracking-tight text-slate-900 sm:text-3xl">
                 {vehicleTitle(report.vehicle)}
               </h1>
+              {flags.length > 0 && (
+                <p className="mt-3 border-l-4 border-amber-400 bg-amber-50/80 px-3 py-2 text-sm leading-relaxed text-slate-800">
+                  <span className="font-semibold text-slate-900">Summary. </span>
+                  {report.headline}
+                </p>
+              )}
               <p className="mt-2 font-mono text-sm tracking-wider text-slate-500">
                 {prettyVin(report.vin)}
               </p>
@@ -756,17 +861,22 @@ export function ReportView({
           </div>
         </div>
 
-        <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-7">
-          <p className="text-sm leading-relaxed text-slate-700">
-            <span className="font-semibold text-slate-900">Summary. </span>
-            {report.headline}
-          </p>
-        </div>
+        {flags.length === 0 && (
+          <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-7">
+            <p className="text-sm leading-relaxed text-slate-700">
+              <span className="font-semibold text-slate-900">Summary. </span>
+              {report.headline}
+            </p>
+          </div>
+        )}
 
-        <HeaderSpecs specifications={report.specifications} />
+        <HeaderSpecs specifications={specList} />
       </header>
 
-      <JumpNav report={report} />
+      <JumpNav
+        report={report}
+        modelExtras={hasModelExtras(modelExtras)}
+      />
 
       <WhatToKnow
         report={report}

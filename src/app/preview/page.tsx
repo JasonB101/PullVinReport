@@ -33,7 +33,7 @@ export const metadata: Metadata = {
  * Whether a customer can buy right now.
  *
  * Which credential is missing is an operator concern, so the buyer gets one
- * calm sentence and a link to `/status` rather than our configuration.
+ * calm sentence rather than our configuration.
  */
 function orderingAvailability(): { available: boolean; reason?: string } {
   if (isVinAuditConfigured() && isStripeConfigured()) return { available: true };
@@ -178,10 +178,6 @@ export default async function PreviewPage({
                   <li>
                     Coverage is strongest for US vehicles from roughly 1981
                     onward. Imports and very new vehicles may return little.
-                  </li>
-                  <li>
-                    If no usable report comes back for your VIN, email support
-                    and we will refund you.
                   </li>
                   <li>
                     A report is informational only and is not a substitute for

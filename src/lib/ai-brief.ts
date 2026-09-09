@@ -351,7 +351,9 @@ const SALVAGE_CHANNEL = [
 /** True when the records already put this car in the salvage / total-loss channel. */
 export function factsIndicateSalvageChannel(facts: BriefFacts): boolean {
   const haystack = [
-    ...facts.checks.map((check) => `${check.check} ${check.result}`),
+    ...facts.checks
+      .filter((check) => check.result !== "nothing on file")
+      .map((check) => `${check.check} ${check.result}`),
     ...facts.records.flatMap((entry) => [entry.section, ...entry.rows]),
     ...(facts.sales
       ? [

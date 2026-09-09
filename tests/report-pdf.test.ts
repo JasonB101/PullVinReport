@@ -100,6 +100,58 @@ describe("report PDF", () => {
     );
   });
 
+  it("labels this-VIN brief copy separately from the model zone", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /FROM_THIS_VIN/);
+    assert.match(source, /COMMON_FOR_MODEL/);
+    assert.match(source, /MODEL_ZONE_TITLE/);
+    assert.match(source, /MODEL_ZONE_NOTE/);
+    assert.match(source, /reportNavItems\(report, \{\s*modelExtras: hasModelExtras\(modelExtras\),\s*\}\)/);
+
+    const fromReport = source.indexOf("brief.fromReport");
+    const questions = source.indexOf("brief.questions");
+    const common = source.indexOf("brief.commonForModel");
+    const extras = source.indexOf("<ModelExtrasBlock");
+    const sections = source.indexOf("{sections.map((section) =>");
+    assert.ok(fromReport > 0 && questions > fromReport && common > questions);
+    assert.ok(extras > sections, "PDF model extras must follow VIN history sections");
+    assert.match(source, /complaintSamples\(extras\.complaints\)/);
+    assert.match(source, /clipPdf\(sample\.summary\)/);
+    assert.match(source, /owner write-ups[\s\S]*not this VIN/);
+    assert.match(source, /if \(!hasModelExtras\(extras\)\) return null/);
+    assert.doesNotMatch(source, /failed to load/i);
+  });
+
+  it("omits the model zone from the PDF when extras are missing", async () => {
+    const withExtras = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      buildSampleModelExtras(),
+    );
+    const without = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      null,
+    );
+    assert.ok(
+      withExtras.byteLength > without.byteLength,
+      "empty extras must not leave a placeholder card in the PDF",
+    );
+    assert.doesNotMatch(without.toString("latin1"), /failed to load/i);
+  });
+
+  it("attaches model extras to the receipt PDF so the email copy matches the page", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/email.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /extrasForReport/);
+    assert.match(source, /renderReportPdf\(\s*withCurrentLayout\(order\.report\),\s*order\.aiBrief,\s*modelExtras,/);
+  });
+
   it("carries the written brief into the forwarded copy", async () => {
     const withBrief = await renderReportPdf(
       buildSampleReport(),

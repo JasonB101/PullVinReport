@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 import { LegalPage, LegalSection } from "@/components/legal-page";
-import { BRAND, emailConfig } from "@/lib/config";
+import { BRAND } from "@/lib/config";
 
 export const metadata: Metadata = {
   title: "Disclaimer",
@@ -53,14 +53,7 @@ export default function DisclaimerPage() {
           Coverage is strongest for vehicles titled in the United States from
           roughly 1981 onwards. Very new vehicles, imports, and vehicles that
           have spent time outside the reporting system may return few records or
-          none at all. If your VIN returns nothing usable, contact us at{" "}
-          <a
-            className="font-semibold text-brand-600 hover:underline"
-            href={`mailto:${emailConfig.supportEmail}`}
-          >
-            {emailConfig.supportEmail}
-          </a>{" "}
-          for a refund.
+          none at all.
         </p>
       </LegalSection>
 

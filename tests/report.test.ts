@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
 import {
   currentEvent,
+  headerSpecifications,
   headerSpecSummary,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
@@ -17,6 +18,7 @@ import {
   preferResolvedDisposition,
   recordCalendarDay,
   reportChips,
+  reportPaintColor,
   reportNavItems,
   searchedAndEmpty,
   sectionClosedTitle,
@@ -26,6 +28,7 @@ import {
   sectionListings,
   sectionTable,
   sectionsWithRecords,
+  stackedRecordRow,
 } from "../src/lib/report.ts";
 
 function section(overrides: Partial<ReportSection>): ReportSection {
@@ -783,6 +786,113 @@ describe("the specs on the vehicle card", () => {
       ],
     );
   });
+
+  it("puts a build-record paint colour first on the header line", () => {
+    const specs = headerSpecifications(
+      report({
+        specifications: [
+          { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+          { label: "Exterior color", value: "Crystal White Pearl" },
+          { label: "Engine", value: "2.4L H4" },
+          { label: "Fuel type", value: "Gasoline" },
+        ],
+        sections: [
+          section({
+            key: "sales",
+            layout: "listings",
+            records: [
+              [
+                { label: "Date", value: "May 12, 2024" },
+                { label: "Vehicle color", value: "Magnetite Gray" },
+              ],
+            ],
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(specs[0], { label: "Color", value: "Crystal White Pearl" });
+    assert.equal(
+      specs.some((field) => /magnetite/i.test(field.value) || /exterior/i.test(field.label)),
+      false,
+    );
+    assert.deepEqual(headerSpecSummary(specs).map((field) => field.value), [
+      "Crystal White Pearl",
+      "Limited Sedan AWD CVT 2.4L H4",
+      "Gasoline",
+    ]);
+  });
+
+  it("uses listing Vehicle color when the build record has none", () => {
+    const paid = report({
+      specifications: [
+        { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+        { label: "Engine", value: "2.4L H4" },
+      ],
+      sections: [
+        section({
+          key: "sales",
+          layout: "listings",
+          records: [
+            [
+              { label: "Date", value: "May 12, 2024" },
+              { label: "Vehicle color", value: "Magnetite Gray" },
+              { label: "Interior color", value: "Ivory" },
+            ],
+            [
+              { label: "Date", value: "May 13, 2024" },
+              { label: "Vehicle color", value: "Gray" },
+            ],
+            [
+              { label: "Date", value: "May 14, 2024" },
+              { label: "Exterior color", value: "Magnetite Gray" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(reportPaintColor(paid), "Magnetite Gray");
+    const specs = headerSpecifications(paid);
+    assert.deepEqual(specs[0], { label: "Color", value: "Magnetite Gray" });
+    assert.match(headerSpecSummary(specs).map((field) => field.value).join(" · "), /Magnetite Gray/);
+  });
+
+  it("omits colour when the report has none", () => {
+    const bare = report({
+      specifications: [
+        { label: "Style", value: "4 Door Sedan" },
+        { label: "Engine", value: "2.5L L4" },
+      ],
+    });
+    assert.equal(reportPaintColor(bare), "");
+    assert.equal(
+      headerSpecifications(bare).some((field) => field.label === "Color"),
+      false,
+    );
+  });
+
+  it("does not prefer an interior colour over exterior paint", () => {
+    const interiorOnly = report({
+      specifications: [{ label: "Interior color", value: "Ivory" }],
+      sections: [
+        section({
+          key: "sales",
+          layout: "listings",
+          records: [
+            [
+              { label: "Date", value: "May 12, 2024" },
+              { label: "Interior color", value: "Ivory" },
+              { label: "Interior colour", value: "Ivory leather" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(reportPaintColor(interiorOnly), "");
+    assert.equal(
+      headerSpecifications(interiorOnly).some((field) => field.label === "Color"),
+      false,
+    );
+  });
 });
 
 function report(overrides: Partial<VehicleReport> = {}): VehicleReport {
@@ -867,6 +977,14 @@ describe("the header of a report", () => {
     ]);
   });
 
+  it("appends the model zone last when extras are present", () => {
+    assert.deepEqual(reportNavItems(report(), { modelExtras: true }), [
+      { href: "#brief", label: "What to know" },
+      { href: "#titles", label: "Titles" },
+      { href: "#model-extras", label: "This model" },
+    ]);
+  });
+
   it("lists an empty category by name instead of giving it a section", () => {
     assert.deepEqual(searchedAndEmpty(report()), ["Thefts"]);
     assert.deepEqual(
@@ -910,6 +1028,83 @@ describe("the header of a report", () => {
       ["accidents"],
     );
   });
+
+  it("surfaces junk/salvage from the section even when no jsi check was stored", () => {
+    const flags = foundIssueChecks(
+      report({
+        sections: [
+          section({
+            key: "titles",
+            navLabel: "Titles",
+            records: [[{ label: "State", value: "TN" }]],
+          }),
+          section({
+            key: "jsi",
+            navLabel: "Junk & salvage",
+            records: [
+              [
+                { label: "Date", value: "May 11, 2026" },
+                { label: "Obtained from", value: "Copart" },
+              ],
+            ],
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(
+      flags.map((check) => [check.key, check.count]),
+      [
+        ["jsi", 1],
+        ["accidents", 2],
+      ],
+    );
+  });
+
+  it("keeps branded-title and junk/salvage counts as separate findings", () => {
+    const flags = foundIssueChecks(
+      report({
+        checks: [
+          { key: "titles", label: "Title records", status: "found", count: 9, detail: "" },
+          { key: "branded", label: "Branded title", status: "found", count: 1, detail: "" },
+          { key: "jsi", label: "Junk & salvage", status: "found", count: 2, detail: "" },
+        ],
+        sections: [
+          section({
+            key: "titles",
+            records: [[{ label: "Event", value: "Salvage" }]],
+          }),
+          section({
+            key: "jsi",
+            navLabel: "Junk & salvage",
+            records: [
+              [{ label: "Date", value: "May 11, 2026" }],
+              [{ label: "Date", value: "May 11, 2026" }],
+            ],
+          }),
+        ],
+      }),
+    );
+    const branded = flags.find((check) => check.key === "branded");
+    const jsi = flags.find((check) => check.key === "jsi");
+    assert.equal(branded?.count, 1);
+    assert.equal(jsi?.count, 2);
+  });
+
+  it("puts junk/salvage on its own chip, not under branded title", () => {
+    const chips = reportChips(
+      report({
+        checks: [
+          { key: "titles", label: "Title records", status: "found", count: 9, detail: "" },
+          { key: "branded", label: "Branded title", status: "found", count: 1, detail: "" },
+          { key: "jsi", label: "Junk & salvage", status: "found", count: 2, detail: "" },
+        ],
+      }),
+    );
+    assert.ok(chips.some((chip) => chip.key === "branded" && chip.label === "Branded title"));
+    assert.ok(
+      chips.some((chip) => chip.key === "jsi" && chip.label === "2 junk/salvage records"),
+    );
+  });
 });
 
 describe("section summary cards", () => {
@@ -946,6 +1141,44 @@ describe("section summary cards", () => {
         }),
       ),
       "Junk & salvage",
+    );
+  });
+
+  it("stacks a title row so Event, Current and brand stay on a phone card", () => {
+    const titles = section({
+      key: "titles",
+      columns: ["Date", "State", "Mileage", "Event", "Brand", "Current"],
+      records: [
+        [
+          { label: "Date", value: "May 29, 2026" },
+          { label: "State", value: "CO" },
+          { label: "Mileage", value: "84,310 mi" },
+          { label: "Event", value: "Salvage title issued" },
+          { label: "Brand", value: "Salvage" },
+          { label: "Current", value: "Yes" },
+          { label: "Title number", value: "1234567" },
+        ],
+        [
+          { label: "Date", value: "May 11, 2026" },
+          { label: "State", value: "CO" },
+          { label: "Mileage", value: "84,310 mi" },
+          { label: "Event", value: "Salvage" },
+          { label: "Brand", value: "Salvage" },
+          { label: "Current", value: "No" },
+        ],
+      ],
+    });
+    const table = sectionTable(titles);
+    assert.ok(table);
+    const stacked = stackedRecordRow(table, table.rows[0]);
+    assert.equal(stacked.headline, "Salvage title issued");
+    assert.equal(stacked.date, "May 29, 2026");
+    assert.equal(stacked.meta, "CO · 84,310 mi unchanged");
+    assert.equal(stacked.brand, "Salvage");
+    assert.equal(stacked.current, "Yes");
+    assert.equal(
+      stacked.extras.some((field) => field.label === "Title number"),
+      true,
     );
   });
 

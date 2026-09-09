@@ -57,7 +57,8 @@ export function buildSampleBrief(): VehicleBrief {
  *
  * Frozen so `/sample` never calls NHTSA or EPA. The numbers are a stable
  * snapshot of the real 2012 Toyota Camry public records (not this fictional
- * VIN): two NHTSA campaigns, complaint themes, and the 2.5L EPA listing.
+ * VIN): two NHTSA campaigns, complaint themes plus sampled write-ups, and
+ * the 2.5L EPA listing. The same fixture feeds the sample page and the PDF.
  */
 export function buildSampleModelExtras(): ModelExtras {
   return {
@@ -93,6 +94,30 @@ export function buildSampleModelExtras(): ModelExtras {
         { component: "Air Bags", count: 83 },
         { component: "Vehicle Speed Control", count: 73 },
         { component: "Structure", count: 68 },
+      ],
+      samples: [
+        {
+          date: "Aug 18, 2026",
+          components: "Power Train, Engine",
+          summary:
+            "Severe transmission shudder during normal driving, especially around 25–35 mph. The check-engine light came on and a shop found a transmission pressure-control code. Fluid service did not stop the shudder.",
+          odiNumber: "11757762",
+        },
+        {
+          date: "Mar 4, 2024",
+          components: "Air Bags",
+          summary:
+            "The airbag warning light stayed on after a low-speed parking-lot bump. The dealer said the occupant-classification sensor needed replacement and that the passenger airbag might not deploy until it was fixed.",
+          odiNumber: "11510200",
+        },
+        {
+          date: "Nov 12, 2021",
+          components: "Vehicle Speed Control",
+          summary:
+            "While approaching a stop, the car surged forward as if the throttle stuck for a second. The driver braked hard and did not hit anything. It happened twice in one week.",
+          odiNumber: "11422011",
+          crash: true,
+        },
       ],
     },
     mpg: {
@@ -256,7 +281,7 @@ export function buildSampleReport(): VehicleReport {
         title: "Junk, salvage & insurance records",
         navLabel: "Junk & salvage",
         description:
-          "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
+          "Junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
         emptyLabel: "No junk, salvage or insurance-loss records came back.",
         records: [],
       },

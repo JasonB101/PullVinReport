@@ -6,6 +6,7 @@ import {
   formatDuration,
   healthLabel,
   reportHealth,
+  SALVAGE_SCORE_CAP,
   sortableDate,
 } from "../src/lib/report-health.ts";
 import type { Field, ReportSection, VehicleReport } from "../src/lib/report.ts";
@@ -179,7 +180,19 @@ describe("report health", () => {
     assert.doesNotMatch(after.reason, /years after|rising from/i);
     assert.doesNotMatch(after.reason, /\breliable\b/i);
     assert.equal(health.factors.find((factor) => factor.key === "salvage")?.impact, "hurts");
-    assert.equal(health.score < 80, true);
+    assert.equal(health.score <= SALVAGE_SCORE_CAP, true);
+    assert.equal(health.label, "Caution");
+  });
+
+  it("cannot render salvage as Strong, even after the post-salvage bonus", () => {
+    const health = reportHealth(longPostSalvage());
+    const after = health.factors.find((factor) => factor.key === "post-salvage");
+    assert.ok(after);
+    assert.equal(after.delta, 8);
+    assert.equal(health.score <= SALVAGE_SCORE_CAP, true);
+    assert.equal(health.label, "Caution");
+    assert.notEqual(health.label, "Strong");
+    assert.equal(health.score < 55, true);
   });
 
   it("credits later climbing mileage after a year of post-salvage records, as facts only", () => {
