@@ -107,7 +107,7 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
   const sketchVisible = drafting || failedEmpty;
 
   return (
-    <figure className="mx-auto w-full max-w-md shrink-0 md:mx-0 md:w-[min(46%,22rem)]">
+    <figure className="mx-auto w-full max-w-[13.5rem] shrink-0 sm:max-w-md md:mx-0 md:w-[min(46%,22rem)]">
       <div className={`relative w-full ${reserveHeight ? "min-h-[11rem] sm:min-h-[12.5rem]" : ""}`}>
         {keepSketchLayer && (
           <div

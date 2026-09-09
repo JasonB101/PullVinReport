@@ -111,6 +111,38 @@ describe("report view layout", () => {
     assert.match(source, /disclosure-chevron/);
   });
 
+  it("cleans provider markup on the shared sample/paid view and PDF", async () => {
+    const view = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    const pdf = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    const css = await readFile(
+      fileURLToPath(new URL("../src/app/globals.css", import.meta.url)),
+      "utf8",
+    );
+    const details = await readFile(
+      fileURLToPath(new URL("../src/components/scroll-open-details.tsx", import.meta.url)),
+      "utf8",
+    );
+
+    assert.match(view, /cleanReport\(withResolvedDispositions/);
+    assert.match(view, /function FieldValue/);
+    assert.match(view, /whitespace-pre-line/);
+    assert.match(pdf, /cleanReport\(withResolvedDispositions/);
+    assert.match(css, /details\[open\] > summary \.when-closed/);
+    assert.doesNotMatch(
+      css,
+      /details\[open\] \.when-closed \{/,
+      "nested when-closed hints must survive an open parent section",
+    );
+    assert.match(details, /disclosure-summary/);
+    assert.match(view, /disclosure-summary/);
+  });
+
   it("stacks tabulated rows as cards below sm so Event and brand stay on screen", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),

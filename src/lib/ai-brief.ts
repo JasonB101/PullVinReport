@@ -14,6 +14,7 @@
  * before the brief existed.
  */
 import { anthropic, isAnthropicConfigured } from "@/lib/config";
+import { cleanCustomerText } from "@/lib/customer-text";
 import type {
   Listing,
   ListingGroup,
@@ -559,7 +560,9 @@ function bullets(
   if (!Array.isArray(value)) return [];
   return value
     .filter((entry): entry is string => typeof entry === "string")
-    .map((entry) => clipBullet(entry.trim().replace(/^[-•*]\s*/, "")))
+    .map((entry) =>
+      clipBullet(cleanCustomerText(entry).replace(/^[-•*]\s*/, "")),
+    )
     .filter((entry) => entry.length > 0)
     .filter((entry) => !VALUATION_CLAIMS.some((pattern) => pattern.test(entry)))
     .filter(

@@ -101,8 +101,28 @@
   }
 }
 
-/* A hint about what is behind a card has no business on an open one. */
-details[open] .when-closed {
+/*
+ * Hide closed-state hints only on the summary that opened. The previous
+ * descendant selector hid nested "N more details" / "Show snapshots"
+ * labels as soon as the parent section opened — the phone cards then
+ * looked like they had nothing left to expand.
+ */
+details[open] > summary .when-closed {
+  display: none;
+}
+
+/*
+ * Keep <summary> a list-item. `list-style: none` plus `display: flex|block`
+ * is what makes iOS Safari drop the control from the tab order and, on
+ * some versions, ignore the tap. Layout stays on the inner wrapper.
+ */
+.disclosure-summary {
+  display: list-item;
+  list-style: none;
+  cursor: pointer;
+}
+
+.disclosure-summary::-webkit-details-marker {
   display: none;
 }
 

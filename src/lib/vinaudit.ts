@@ -20,6 +20,7 @@ import {
   liftSharedFields,
   preferResolvedDisposition,
 } from "@/lib/report";
+import { cleanCustomerText } from "@/lib/customer-text";
 import { normalizeVin } from "@/lib/vin";
 
 export class ProviderNotConfiguredError extends Error {
@@ -63,7 +64,7 @@ function stringify(value: unknown): string {
   if (value === null || value === undefined) return "";
   if (typeof value === "boolean") return value ? "Yes" : "No";
   if (typeof value === "number") return String(value);
-  if (typeof value === "string") return value.trim();
+  if (typeof value === "string") return cleanCustomerText(value);
   if (Array.isArray(value)) return value.map(stringify).filter(Boolean).join(", ");
   if (typeof value === "object") {
     return Object.entries(value as Record<string, unknown>)

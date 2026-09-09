@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import type { VehicleBrief } from "@/lib/ai-brief";
+import { cleanBrief, cleanCustomerText } from "@/lib/customer-text";
 import {
   COMMON_FOR_MODEL,
   FROM_THIS_VIN,
@@ -27,7 +28,9 @@ function Bullets({ items, tone }: { items: string[]; tone: "ink" | "amber" }) {
       {items.map((item, index) => (
         <li key={index} className={`flex gap-2.5 text-sm leading-relaxed ${text}`}>
           <span className={`mt-[0.45rem] h-1.5 w-1.5 shrink-0 rounded-full ${dot}`} />
-          <span>{item}</span>
+          <span className="min-w-0 whitespace-pre-line break-words">
+            {cleanCustomerText(item)}
+          </span>
         </li>
       ))}
     </ul>
@@ -45,7 +48,9 @@ function Bullets({ items, tone }: { items: string[]; tone: "ink" | "amber" }) {
  * on screen: the records are what the buyer paid for and they never wait on this.
  */
 export function AiBrief({ brief: cached = null, token }: Props) {
-  const [brief, setBrief] = useState<VehicleBrief | null>(cached);
+  const [brief, setBrief] = useState<VehicleBrief | null>(
+    cached ? cleanBrief(cached) : cached,
+  );
   const [failed, setFailed] = useState(false);
   const pending = !brief && !failed && Boolean(token);
 
@@ -65,7 +70,9 @@ export function AiBrief({ brief: cached = null, token }: Props) {
           brief?: VehicleBrief;
         };
         if (!live) return;
-        if (payload.status === "ready" && payload.brief) setBrief(payload.brief);
+        if (payload.status === "ready" && payload.brief) {
+          setBrief(cleanBrief(payload.brief));
+        }
         else setFailed(true);
       } catch {
         if (live) setFailed(true);

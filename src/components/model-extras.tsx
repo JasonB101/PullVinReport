@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
+import { cleanCustomerLine, cleanModelExtras } from "@/lib/customer-text";
 import type { ModelComplaints, ModelExtras } from "@/lib/model-extras";
 import {
   complaintSamples,
@@ -144,8 +145,8 @@ function OwnerComplaints({
                             .join(" · ")}
                         </p>
                       )}
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
-                        {sample.summary}
+                      <p className="mt-1.5 text-sm leading-relaxed break-words text-slate-700">
+                        {cleanCustomerLine(sample.summary)}
                       </p>
                       {sample.odiNumber && (
                         <p className="mt-1.5 font-mono text-[11px] text-slate-400">
@@ -181,7 +182,7 @@ function OwnerComplaints({
  */
 export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   const [extras, setExtras] = useState<ModelExtras | null>(
-    hasModelExtras(cached) ? cached : null,
+    hasModelExtras(cached) ? cleanModelExtras(cached) : null,
   );
 
   useEffect(() => {
@@ -190,7 +191,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
 
     (async () => {
       const loaded = await requestPaidModelExtras(token);
-      if (live && hasModelExtras(loaded)) setExtras(loaded);
+      if (live && hasModelExtras(loaded)) setExtras(cleanModelExtras(loaded));
     })();
 
     return () => {
@@ -275,19 +276,19 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
                   const body = (
                     <>
                       {campaign.consequence && (
-                        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                          <p className="mt-2 text-sm leading-relaxed break-words text-slate-600">
                           <span className="font-medium text-slate-700">
                             Risk.{" "}
                           </span>
-                          {campaign.consequence}
+                          {cleanCustomerLine(campaign.consequence)}
                         </p>
                       )}
                       {campaign.remedy && (
-                        <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                        <p className="mt-1.5 text-sm leading-relaxed break-words text-slate-600">
                           <span className="font-medium text-slate-700">
                             Remedy.{" "}
                           </span>
-                          {campaign.remedy}
+                          {cleanCustomerLine(campaign.remedy)}
                         </p>
                       )}
                     </>
