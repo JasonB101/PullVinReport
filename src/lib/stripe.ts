@@ -18,6 +18,9 @@ export function getStripe(): Stripe {
   if (!client || clientKey !== key) {
     client = new Stripe(key, {
       appInfo: { name: "PullVinReport", url: "https://pullvinreport.com" },
+      // Pin Node HTTP so /admin balance.retrieve() is not a Next-patched
+      // GET fetch. Checkout already uses this helper and works.
+      httpClient: Stripe.createNodeHttpClient(),
     });
     clientKey = key;
   }
@@ -25,8 +28,13 @@ export function getStripe(): Stripe {
 }
 
 /** Live USD available / pending via the official Stripe SDK. */
-export async function retrieveStripeBalance(): Promise<Stripe.Balance> {
-  return getStripe().balance.retrieve();
+export async function retrieveStripeBalance(
+  options: { timeoutMs?: number } = {},
+): Promise<Stripe.Balance> {
+  return getStripe().balance.retrieve(
+    {},
+    options.timeoutMs != null ? { timeout: options.timeoutMs } : undefined,
+  );
 }
 
 export function isStripeTestMode(): boolean {

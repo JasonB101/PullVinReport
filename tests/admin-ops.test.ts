@@ -105,7 +105,14 @@ describe("admin console", () => {
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
     const stripe = await readSrc("lib/stripe.ts");
     assert.match(stripe, /export async function retrieveStripeBalance/);
-    assert.match(stripe, /getStripe\(\)\.balance\.retrieve\(\)/);
+    assert.match(stripe, /getStripe\(\)\.balance\.retrieve\(/);
+    assert.match(stripe, /createNodeHttpClient/);
+    const nextConfig = await readFile(
+      fileURLToPath(new URL("../next.config.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(nextConfig, /serverExternalPackages: \["stripe"\]/);
+    assert.match(page, /runtime = "nodejs"/);
 
     const status = await readSrc("lib/status.ts");
     const statusPage = await readSrc("app/status/page.tsx");

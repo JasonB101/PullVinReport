@@ -14,6 +14,7 @@ import { getStore } from "@/lib/store";
 import type { OrderStatus } from "@/lib/store";
 import { emptyVendorCredits, fetchVendorCredits } from "@/lib/vendor-credits";
 
+export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {

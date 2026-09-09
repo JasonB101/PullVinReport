@@ -445,6 +445,30 @@ describe("fetchVendorCredits", () => {
     );
   });
 
+  it("loads Stripe through retrieveStripeBalance, not a raw api.stripe.com fetch", async () => {
+    clearCreditEnv();
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc";
+    let stripeFetch = 0;
+    let sdkCalls = 0;
+    const report = await fetchVendorCredits({
+      fetch: async (input) => {
+        if (String(input).includes("api.stripe.com")) stripeFetch += 1;
+        return jsonResponse(500, {});
+      },
+      retrieveStripeBalance: async () => {
+        sdkCalls += 1;
+        return {
+          available: [{ amount: 0, currency: "usd" }],
+          pending: [{ amount: 0, currency: "usd" }],
+        };
+      },
+    });
+    assert.equal(stripeFetch, 0);
+    assert.equal(sdkCalls, 1);
+    assert.equal(report.items[0]?.ok, true);
+    assert.match(report.items[0]?.value ?? "", /\$0\.00 available/);
+  });
+
   it("uses a short per-vendor timeout", () => {
     assert.equal(CREDIT_FETCH_TIMEOUT_MS, 8_000);
   });

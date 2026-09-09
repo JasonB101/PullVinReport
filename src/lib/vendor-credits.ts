@@ -222,20 +222,6 @@ export function parseResendQuotaHeaders(
   return null;
 }
 
-async function withTimeout<T>(work: Promise<T>, timeoutMs: number): Promise<T> {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      reject(new Error(`Timed out after ${timeoutMs}ms`));
-    }, timeoutMs);
-  });
-  try {
-    return await Promise.race([work, timeout]);
-  } finally {
-    if (timer) clearTimeout(timer);
-  }
-}
-
 async function getJson(
   url: string,
   headers: Record<string, string>,
@@ -295,8 +281,9 @@ async function stripeCredits(
   if (!stripeConfig.secretKey || !isStripeConfigured()) return null;
 
   try {
-    const load = retrieveBalance ?? retrieveStripeBalance;
-    const body = await withTimeout(Promise.resolve().then(() => load()), timeoutMs);
+    const body = retrieveBalance
+      ? await retrieveBalance()
+      : await retrieveStripeBalance({ timeoutMs });
     const parsed = parseStripeBalance(body);
     if (!parsed) return unavailableStripe(now);
     return {
