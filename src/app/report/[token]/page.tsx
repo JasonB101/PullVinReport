@@ -172,17 +172,9 @@ export default async function ReportPage({
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
                   Your report
                 </p>
-                {/* The vehicle and its VIN head the report itself, just below. */}
-                <h1 className="mt-2 text-2xl font-semibold tracking-tight text-slate-900">
-                  Your vehicle history report
-                </h1>
                 <p className="mt-1.5 text-sm text-slate-500">
-                  {order.refundedAt ? "Refunded" : "Paid"}{" "}
-                  {formatPrice(order.amountCents, order.currency)} · Delivered{" "}
-                  {order.fulfilledAt
-                    ? `${order.fulfilledAt.replace("T", " ").slice(0, 16)} UTC`
-                    : "just now"}{" "}
-                  · Keep this page&apos;s link private.
+                  {order.refundedAt ? "Refunded · " : ""}
+                  Keep this page&apos;s link private.
                 </p>
               </div>
               <PrintButton />

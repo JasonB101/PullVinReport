@@ -136,6 +136,13 @@ function clampScore(value: number): number {
   return Math.max(0, Math.min(100, Math.round(value)));
 }
 
+/**
+ * Salvage / total-loss / Copart history is categorical. A rebuilt car that
+ * later drove can earn the post-salvage bonus, but that must not push the
+ * meter into Mixed or Strong — a green 86/100 above a branded title is a lie.
+ */
+export const SALVAGE_SCORE_CAP = 54;
+
 export function healthLabel(score: number): HealthLabel {
   if (score >= 80) return "Strong";
   if (score >= 55) return "Mixed";
@@ -515,7 +522,8 @@ export function reportHealth(incoming: VehicleReport): ReportHealth {
     });
   }
 
-  const score = clampScore(100 + factors.reduce((sum, factor) => sum + factor.delta, 0));
+  const tallied = clampScore(100 + factors.reduce((sum, factor) => sum + factor.delta, 0));
+  const score = salvage ? Math.min(tallied, SALVAGE_SCORE_CAP) : tallied;
   const earliestIso = earliestSalvageIso(report);
   const after = factors.find((factor) => factor.key === "post-salvage");
 

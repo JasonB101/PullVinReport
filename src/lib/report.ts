@@ -274,6 +274,64 @@ export function sectionTable(section: ReportSection): SectionTable | null {
   return { columns, rows };
 }
 
+/** Columns a stacked (phone) row already states as headline, date, or meta. */
+const STACKED_STATED = new Set(["Event", "Date", "State", "Mileage", "Brand", "Current"]);
+
+const STACKED_HEADLINE = ["Event", "Brand", "Type", "Severity", "Disposition"];
+
+/**
+ * One table row, reshaped for a phone card.
+ *
+ * The wide title table cuts Event / Current / brand off-screen at ~390px
+ * with no scrollbar hint. Below `sm` the renderer stacks instead: the event
+ * as the headline, the date beneath it, State · Mileage as one muted line,
+ * and brand / current always on the card.
+ */
+export type StackedRecordRow = {
+  headline: string;
+  date: string;
+  meta: string;
+  brand: string;
+  current: string;
+  rest: Field[];
+  extras: Field[];
+  mileageUnchanged: boolean;
+};
+
+export function stackedRecordRow(table: SectionTable, row: TableRow): StackedRecordRow {
+  const valueOf = (label: string): string => {
+    const index = table.columns.indexOf(label);
+    return index >= 0 ? row.cells[index] : "";
+  };
+
+  const event = valueOf("Event");
+  const brand = valueOf("Brand");
+  const date = valueOf("Date");
+  const headline =
+    event ||
+    STACKED_HEADLINE.map(valueOf).find((value) => value.length > 0) ||
+    date ||
+    "Record";
+  const mileage = valueOf("Mileage");
+  const mileageText =
+    row.mileageUnchanged && mileage.length > 0 ? `${mileage} unchanged` : mileage;
+  const meta = [valueOf("State"), mileageText].filter(Boolean).join(" · ");
+  const rest = table.columns
+    .map((label, index) => ({ label, value: row.cells[index] }))
+    .filter((field) => field.value.length > 0 && !STACKED_STATED.has(field.label));
+
+  return {
+    headline,
+    date: headline === date ? "" : date,
+    meta,
+    brand: brand && brand !== headline ? brand : "",
+    current: valueOf("Current"),
+    rest,
+    extras: row.extras,
+    mileageUnchanged: Boolean(row.mileageUnchanged),
+  };
+}
+
 /* -------------------------------------------------------------------------- */
 /* Listings                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -1166,13 +1224,48 @@ export function searchedAndEmpty(report: VehicleReport): string[] {
  * Title records almost always exist; they are not a finding. The issue
  * checks — brand, accident, salvage, lien, recall — are what belongs in
  * the brief's summary strip.
+ *
+ * Findings are also derived from sections that came back with records, so a
+ * junk/salvage (or any future) category cannot sit on the report and skip
+ * the summary just because no matching check was stored with the order.
  */
 const ROUTINE_CHECK_KEYS = new Set(["titles"]);
 
 export function foundIssueChecks(report: VehicleReport): ReportCheck[] {
-  return report.checks.filter(
-    (check) => check.status === "found" && !ROUTINE_CHECK_KEYS.has(check.key),
-  );
+  const findings: ReportCheck[] = [];
+  const seen = new Set<string>();
+
+  const branded = report.checks.find((entry) => entry.key === "branded");
+  if (branded?.status === "found") {
+    findings.push(branded);
+    seen.add("branded");
+  }
+
+  for (const section of sectionsWithRecords(report)) {
+    if (ROUTINE_CHECK_KEYS.has(section.key) || seen.has(section.key)) continue;
+    const existing = report.checks.find((entry) => entry.key === section.key);
+    findings.push(
+      existing?.status === "found"
+        ? existing
+        : {
+            key: section.key,
+            label: section.navLabel ?? section.title,
+            status: "found",
+            count: section.records.length,
+            detail: "",
+          },
+    );
+    seen.add(section.key);
+  }
+
+  for (const entry of report.checks) {
+    if (entry.status !== "found" || ROUTINE_CHECK_KEYS.has(entry.key)) continue;
+    if (seen.has(entry.key)) continue;
+    findings.push(entry);
+    seen.add(entry.key);
+  }
+
+  return findings;
 }
 
 /**

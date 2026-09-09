@@ -41,4 +41,51 @@ describe("report view layout", () => {
     );
     assert.match(source, /<SectionFace section=\{section\} odometerRollback=\{odometerRollback\} \/>/);
   });
+
+  it("gives collapsed history cards a Show-records label and a persistent chevron", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /Show \{count\}/);
+    assert.match(source, /when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600/);
+    assert.match(source, /disclosure-chevron/);
+  });
+
+  it("stacks tabulated rows as cards below sm so Event and brand stay on screen", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /function RecordRowCard/);
+    assert.match(source, /stackedRecordRow/);
+    assert.match(source, /sm:hidden print:hidden/);
+    assert.match(source, /hidden overflow-x-auto[\s\S]*sm:block print:block/);
+  });
+
+  it("promotes the summary under the vehicle title when findings exist", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    const h1 = source.indexOf("{vehicleTitle(report.vehicle)}");
+    const promoted = source.indexOf("flags.length > 0 &&");
+    const chips = source.indexOf("{chips.length > 0 &&");
+    assert.ok(h1 > 0 && promoted > h1 && chips > promoted);
+    assert.match(source, /border-l-4 border-amber-400/);
+  });
+});
+
+describe("paid report shell", () => {
+  it("does not render a second h1 or a UTC delivered stamp", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/app/report/[token]/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.doesNotMatch(source, /<h1[^>]*>\s*Your vehicle history report/);
+    assert.doesNotMatch(source, /Delivered/);
+    assert.doesNotMatch(source, /slice\(0, 16\)\} UTC/);
+    assert.match(source, /Your report/);
+    assert.match(source, /Keep this page/);
+  });
 });

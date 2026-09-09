@@ -369,6 +369,21 @@ function check(
   };
 }
 
+function checkFound(checks: ReportCheck[], key: string): boolean {
+  return checks.some((entry) => entry.key === key && entry.status === "found");
+}
+
+/** Title brands and NMVTIS salvage are separate facts; the headline says which. */
+function brandedOrSalvageHeadline(checks: ReportCheck[]): string {
+  const branded = checkFound(checks, "branded");
+  const salvage = checkFound(checks, "jsi");
+  if (branded) return "Branded-title activity was reported for this VIN.";
+  if (salvage) {
+    return "Junk, salvage or insurance-loss activity was reported for this VIN.";
+  }
+  return "No salvage, junk or insurance-loss brand was reported for this VIN.";
+}
+
 /**
  * Dates stay in sortable ISO form here — the chart is ordered by them, and the
  * renderers format them for display.
@@ -445,9 +460,16 @@ export function normalizeVinAuditReport(
     check(
       "branded",
       "Branded title",
-      brandedTitles.length + jsi.length,
-      "Salvage, junk or insurance-loss activity reported",
+      brandedTitles.length,
+      "A salvage, junk or other brand is on the title records",
       "No salvage, junk or insurance brand found",
+    ),
+    check(
+      "jsi",
+      "Junk & salvage",
+      jsi.length,
+      `${jsi.length} junk/salvage record${jsi.length === 1 ? "" : "s"} on file`,
+      "No junk, salvage or insurance-loss records",
     ),
     check(
       "accidents",
@@ -601,9 +623,14 @@ export function normalizeVinAuditReport(
 
   const jsiShown =
     sections.find((section) => section.key === "jsi")?.records.length ?? 0;
-  const branded = checks.find((entry) => entry.key === "branded");
-  if (branded) {
-    branded.count = brandedTitles.length + jsiShown;
+  const jsiCheck = checks.find((entry) => entry.key === "jsi");
+  if (jsiCheck && jsiCheck.count !== jsiShown) {
+    jsiCheck.count = jsiShown;
+    jsiCheck.status = jsiShown > 0 ? "found" : "clear";
+    jsiCheck.detail =
+      jsiShown > 0
+        ? `${jsiShown} junk/salvage record${jsiShown === 1 ? "" : "s"} on file`
+        : "No junk, salvage or insurance-loss records";
   }
 
   const specifications: Field[] = Object.entries(attributes)
@@ -623,10 +650,7 @@ export function normalizeVinAuditReport(
     isSample: false,
     generatedAt: new Date().toISOString(),
     vehicle,
-    headline:
-      checks.some((c) => c.key === "branded" && c.status === "found")
-        ? "Branded-title activity was reported for this VIN."
-        : "No salvage, junk or insurance-loss brand was reported for this VIN.",
+    headline: brandedOrSalvageHeadline(checks),
     specifications,
     checks,
     sections,

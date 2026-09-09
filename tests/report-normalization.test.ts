@@ -363,6 +363,76 @@ describe("provider report normalization", () => {
     });
   });
 
+  it("emits junk/salvage as its own check and does not fold that count into branded", () => {
+    const withBoth = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        titles: [
+          ...PAYLOAD.titles,
+          {
+            vin: VIN,
+            date: "2026-05-11",
+            state: "CO",
+            meter: "84200",
+            meterunit: "M",
+            brand: "Salvage",
+            title: "Salvage",
+          },
+        ],
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+            city: "Denver",
+            state: "CO",
+          },
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "TO BE DETERMINED",
+            city: "Denver",
+            state: "CO",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = withBoth.checks.find((entry) => entry.key === "branded");
+    const jsi = withBoth.checks.find((entry) => entry.key === "jsi");
+    assert.ok(branded);
+    assert.ok(jsi);
+    assert.equal(branded.status, "found");
+    assert.equal(branded.count, 1);
+    assert.equal(jsi.status, "found");
+    assert.equal(jsi.count, 1);
+    assert.match(withBoth.headline, /Branded-title/);
+  });
+
+  it("headlines salvage-channel activity when titles are unbranded", () => {
+    const salvageOnly = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = salvageOnly.checks.find((entry) => entry.key === "branded");
+    const jsi = salvageOnly.checks.find((entry) => entry.key === "jsi");
+    assert.equal(branded?.status, "clear");
+    assert.equal(branded?.count, 0);
+    assert.equal(jsi?.status, "found");
+    assert.equal(jsi?.count, 1);
+    assert.match(salvageOnly.headline, /Junk, salvage or insurance-loss/);
+    assert.doesNotMatch(salvageOnly.headline, /Branded-title/);
+  });
+
   it("describes empty sections in our own voice", () => {
     const thefts = find(report.sections, "thefts");
     assert.equal(thefts.records.length, 0);
