@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import {
+  ANTHROPIC_CONSOLE_BILLING_URL,
   BILLING_UNAVAILABLE,
   CREDIT_FETCH_TIMEOUT_MS,
   FAL_NEEDS_ADMIN_KEY,
@@ -264,6 +265,7 @@ describe("fetchVendorCredits", () => {
     });
     assert.deepEqual(report.items, []);
     assert.equal(report.vinauditAccountUrl, undefined);
+    assert.equal(report.anthropicBillingUrl, undefined);
     assert.deepEqual(emptyVendorCredits().items, []);
   });
 
@@ -314,6 +316,7 @@ describe("fetchVendorCredits", () => {
     assert.equal(resend?.error, BILLING_UNAVAILABLE);
     assert.equal(resend?.value, "");
     assert.equal(report.vinauditAccountUrl, VINAUDIT_ACCOUNT_URL);
+    assert.equal(report.anthropicBillingUrl, undefined);
     assert.equal(
       report.items.some((item) => "key" in item && item.key === "anthropic"),
       false,
@@ -335,6 +338,7 @@ describe("fetchVendorCredits", () => {
       },
     });
     assert.deepEqual(report.items, []);
+    assert.equal(report.anthropicBillingUrl, undefined);
     assert.equal(
       seen.some((url) => url.includes("anthropic.com")),
       false,
@@ -460,6 +464,11 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items[0]?.ok, true);
     assert.equal(report.items[0]?.metric, "USD spend MTD");
     assert.equal(report.items[0]?.value, "$3.00");
+    assert.equal(report.anthropicBillingUrl, ANTHROPIC_CONSOLE_BILLING_URL);
+    assert.equal(
+      Object.keys(report.items[0] ?? {}).includes("remaining"),
+      false,
+    );
   });
 
   it("marks Anthropic unavailable when Cost Report fails instead of showing $0", async () => {
@@ -476,6 +485,7 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
     assert.equal(report.items[0]?.value, "");
     assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
+    assert.equal(report.anthropicBillingUrl, ANTHROPIC_CONSOLE_BILLING_URL);
   });
 
   it("marks Resend unavailable when usage and quota headers are unreadable", async () => {
@@ -613,6 +623,7 @@ describe("fetchVendorCredits", () => {
     assert.ok(report.items.every((item) => item.error === BILLING_UNAVAILABLE));
     assert.ok(report.items.every((item) => !/\$0\.00|\b0\b/.test(item.value)));
     assert.ok(report.items.some((item) => item.key === "anthropic"));
+    assert.equal(report.anthropicBillingUrl, ANTHROPIC_CONSOLE_BILLING_URL);
   });
 
   it("does not put vendor keys in the outgoing URL", async () => {
@@ -658,6 +669,23 @@ describe("fetchVendorCredits", () => {
     assert.equal(sdkCalls, 1);
     assert.equal(report.items[0]?.ok, true);
     assert.match(report.items[0]?.value ?? "", /\$0\.00 available/);
+  });
+
+  it("links Anthropic remaining credits to Console Billing instead of inventing a balance", async () => {
+    clearCreditEnv();
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    const report = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://api.anthropic.com/v1/organizations/cost_report": () =>
+          jsonResponse(200, { data: [] }),
+      }),
+    });
+    assert.equal(report.anthropicBillingUrl, ANTHROPIC_CONSOLE_BILLING_URL);
+    assert.match(ANTHROPIC_CONSOLE_BILLING_URL, /console\.anthropic\.com\/settings\/billing/);
+    assert.equal(
+      report.items.some((item) => /remaining/i.test(item.metric) || /remaining/i.test(item.value)),
+      false,
+    );
   });
 
   it("uses a short per-vendor timeout", () => {

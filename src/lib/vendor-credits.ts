@@ -27,6 +27,14 @@ export const CREDIT_FETCH_TIMEOUT_MS = 8_000;
 /** Official VinAudit client login — report keys have no balance API. */
 export const VINAUDIT_ACCOUNT_URL = "https://www.vinaudit.com/client-login";
 
+/**
+ * Claude Console Billing. Prepaid remaining credits are not on the official
+ * Admin API (Cost Report is spend only) — /admin links here instead of
+ * inventing a leftover balance or scraping Console cookies.
+ */
+export const ANTHROPIC_CONSOLE_BILLING_URL =
+  "https://console.anthropic.com/settings/billing";
+
 export const BILLING_UNAVAILABLE = "billing API unavailable";
 export const FAL_NEEDS_ADMIN_KEY = "needs Admin-scope key";
 
@@ -47,6 +55,11 @@ export type VendorCreditsReport = {
   items: VendorCredit[];
   /** Present when VinAudit is configured — a refill link, never a count. */
   vinauditAccountUrl?: string;
+  /**
+   * Present when the Anthropic admin key is set — Console Billing only.
+   * Never a remaining-credit number.
+   */
+  anthropicBillingUrl?: string;
 };
 
 export type FetchLike = (
@@ -130,11 +143,23 @@ export function configuredUnavailableCredits(now: Date = new Date()): VendorCred
   return items;
 }
 
+function creditReportLinks(): Pick<
+  VendorCreditsReport,
+  "vinauditAccountUrl" | "anthropicBillingUrl"
+> {
+  return {
+    vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
+    anthropicBillingUrl: isAnthropicAdminConfigured()
+      ? ANTHROPIC_CONSOLE_BILLING_URL
+      : undefined,
+  };
+}
+
 export function emptyVendorCredits(now: Date = new Date()): VendorCreditsReport {
   return {
     checkedAt: asOf(now),
     items: configuredUnavailableCredits(now),
-    vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
+    ...creditReportLinks(),
   };
 }
 
@@ -551,8 +576,10 @@ async function safeVendor(
 /**
  * Fetches every vendor that has a usable official API, in parallel.
  *
- * Anthropic is included only with ANTHROPIC_ADMIN_API_KEY. Neon is skipped
- * until a management key exists. VinAudit is a refill link only.
+ * Anthropic is included only with ANTHROPIC_ADMIN_API_KEY (MTD spend plus
+ * a Console Billing link — remaining prepaid credits are not API-available).
+ * Neon is skipped until a management key exists. VinAudit is a refill link
+ * only.
  *
  * Never throws — a vendor outage must not take down /admin. Configured
  * vendors that fail are returned as unavailable, not omitted.
@@ -587,7 +614,7 @@ export async function fetchVendorCredits(
     return {
       checkedAt: asOf(now),
       items: settled.filter((item): item is VendorCredit => item !== null),
-      vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
+      ...creditReportLinks(),
     };
   } catch {
     return emptyVendorCredits(now);

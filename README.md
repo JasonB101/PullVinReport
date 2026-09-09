@@ -335,6 +335,9 @@ can be re-sent, and any charged order can be refunded in place — see
 the customer footer. A configured vendor whose official API fails is shown
 as unavailable (never faked as zero). “No credit APIs configured” appears
 only when Stripe, fal, Resend, and Anthropic admin keys are all absent.
+Anthropic prepaid remaining credits are not in the official Admin API;
+the card keeps MTD USD spend and links to Console Billing instead of
+inventing a leftover balance.
 
 This is the only surface that shows raw provider errors, so it is also the
 place to look when a customer reports the soft "we couldn't retrieve this
