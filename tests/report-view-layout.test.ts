@@ -132,6 +132,18 @@ describe("report view layout", () => {
     assert.match(source, /<HeaderSpecs specifications=\{specList\} \/>/);
   });
 
+  it("keeps the illustrated hero in the header and marks the sample as static", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /<VehicleHero/);
+    assert.match(source, /sample=\{report\.isSample\}/);
+    assert.match(source, /src=\{heroSrc\}/);
+    assert.match(source, /token=\{heroToken\}/);
+    assert.match(source, /alt=\{illustrationAlt\}/);
+  });
+
   it("promotes the summary under the vehicle title when findings exist", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
@@ -170,6 +182,11 @@ describe("sample and paid extras parity", () => {
       samplePage,
       /extrasToken/,
       "the sample fixture is complete; it must not fetch extras",
+    );
+    assert.doesNotMatch(
+      samplePage,
+      /heroToken|heroSrc/,
+      "the sample ships a static hero; it must not fetch or flash a draft",
     );
     assert.match(paidPage, /<ReportView/);
     assert.match(paidPage, /modelExtras=\{modelExtras\}/);

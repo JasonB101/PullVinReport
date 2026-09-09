@@ -1,13 +1,17 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
+
 import {
   generateVehicleHero,
   heroAlt,
   heroFacts,
   heroPrompt,
   HERO_CACHE_VERSION,
+  HERO_DRAFT_COPY,
 } from "../src/lib/vehicle-hero.ts";
 import { buildSampleReport } from "../src/lib/sample-report.ts";
 import { fal, isFalConfigured } from "../src/lib/config.ts";
@@ -126,6 +130,47 @@ describe("the illustration prompt", () => {
     assert.doesNotMatch(prompt, new RegExp(buildSampleReport().vin, "i"));
     assert.match(heroAlt(facts), /^Illustrated 2012 Toyota Camry SE/);
     assert.doesNotMatch(heroAlt(facts), /not this VIN/i);
+  });
+});
+
+describe("the drafting placeholder", () => {
+  it("labels the wait as drafting an illustration, not a generic load", () => {
+    assert.equal(HERO_DRAFT_COPY, "Drafting vehicle illustration…");
+    assert.doesNotMatch(HERO_DRAFT_COPY, /loading|spinner|progress|vinaudit/i);
+  });
+
+  it("holds the hero slot with a sketch until pixels arrive, then crossfades", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/vehicle-hero.tsx", import.meta.url)),
+      "utf8",
+    );
+    const css = await readFile(
+      fileURLToPath(new URL("../src/app/globals.css", import.meta.url)),
+      "utf8",
+    );
+
+    assert.match(source, /HERO_DRAFT_COPY/);
+    assert.match(source, /HERO_DRAFT_REVEAL_MS/);
+    assert.match(source, /onLoad=\{markPixelsReady\}/);
+    assert.match(source, /transition-opacity duration-500/);
+    assert.match(source, /generating \|\| slowLoad \|\| awaitingGenerated/);
+    assert.match(source, /sample \? SAMPLE_HERO_SRC/);
+    assert.match(source, /role="status"/);
+    assert.match(source, /HeroDraftPlaceholder/);
+    assert.match(source, /hero-draft-stroke/);
+    assert.doesNotMatch(source, /if \(!src\) return null/);
+    assert.doesNotMatch(source, /Loading…/);
+    assert.doesNotMatch(source, /spinner|progress bar|role="progressbar"/i);
+    assert.doesNotMatch(source, /vinaudit/i);
+    assert.doesNotMatch(
+      source,
+      /sample-vehicle-hero\.svg[\s\S]*drafting|placeholder[\s\S]*sample-vehicle/,
+    );
+
+    assert.match(css, /@keyframes hero-draft-dash/);
+    assert.match(css, /@keyframes hero-draft-shimmer/);
+    assert.match(css, /prefers-reduced-motion/);
+    assert.doesNotMatch(css, /gif/i);
   });
 });
 

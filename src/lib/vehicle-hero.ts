@@ -121,6 +121,12 @@ export function heroAlt(facts: HeroFacts): string {
   return `Illustrated ${name}${color}`;
 }
 
+/**
+ * Buyer-facing status while fal is still drawing, or while the browser is
+ * still decoding the cutout. Illustration language, never a spinner label.
+ */
+export const HERO_DRAFT_COPY = "Drafting vehicle illustration…";
+
 function falInput(facts: HeroFacts): Record<string, unknown> {
   const prompt = heroPrompt(facts);
   if (fal.model.includes("recraft")) {
