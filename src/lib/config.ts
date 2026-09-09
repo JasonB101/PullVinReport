@@ -110,6 +110,13 @@ export const anthropic = {
   get apiKey(): string | undefined {
     return env("ANTHROPIC_API_KEY");
   },
+  /**
+   * Admin API key (`sk-ant-admin…`) for /admin USD spend. The Messages
+   * `ANTHROPIC_API_KEY` cannot read Cost Report and is never used here.
+   */
+  get adminApiKey(): string | undefined {
+    return env("ANTHROPIC_ADMIN_API_KEY");
+  },
   get model(): string {
     return env("ANTHROPIC_MODEL") ?? "claude-sonnet-5";
   },
@@ -129,6 +136,10 @@ export const anthropic = {
 
 export function isAnthropicConfigured(): boolean {
   return Boolean(anthropic.apiKey);
+}
+
+export function isAnthropicAdminConfigured(): boolean {
+  return Boolean(anthropic.adminApiKey);
 }
 
 /**
@@ -167,6 +178,9 @@ export const fal = {
   get rembgModel(): string {
     return env("FAL_REMBG_MODEL") ?? "fal-ai/imageutils/rembg";
   },
+  get adminKey(): string | undefined {
+    return env("FAL_ADMIN_KEY");
+  },
   /**
    * Key for the Platform billing API. Prefers an Admin-scope `FAL_ADMIN_KEY`
    * and falls back to `FAL_KEY`. An API-scope key 401/403s; /admin then
@@ -174,7 +188,7 @@ export const fal = {
    * a zero balance.
    */
   get billingKey(): string | undefined {
-    return env("FAL_ADMIN_KEY") ?? env("FAL_KEY");
+    return fal.adminKey ?? fal.apiKey;
   },
 };
 

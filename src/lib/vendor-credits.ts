@@ -4,13 +4,16 @@
  * Server-only. Nothing here is imported by customer pages, public /status,
  * or anonymous /api/status. Each vendor is fetched independently with a
  * short timeout. A missing official API or any failed call marks that
- * vendor unavailable rather than inventing a zero — Anthropic and Neon
- * are skipped until an admin / management key exists.
+ * vendor unavailable rather than inventing a zero. Anthropic appears only
+ * when ANTHROPIC_ADMIN_API_KEY is set. Neon is skipped until a management
+ * key exists.
  */
 import {
+  anthropic,
   emailConfig,
   fal,
   formatPrice,
+  isAnthropicAdminConfigured,
   isEmailConfigured,
   isFalBillingConfigured,
   isStripeConfigured,
@@ -31,7 +34,7 @@ const USER_AGENT = "PullVinReport/1.0 (+https://pullvinreport.com)";
 
 export type VendorCredit = {
   vendor: string;
-  key: "stripe" | "fal" | "resend";
+  key: "stripe" | "fal" | "resend" | "anthropic";
   ok: boolean;
   metric: string;
   value: string;
@@ -104,8 +107,17 @@ function unavailableResend(now: Date, error = BILLING_UNAVAILABLE): VendorCredit
   return unavailableCredit("Resend", "resend", "Emails this month", now, error);
 }
 
+function unavailableAnthropic(now: Date, error = BILLING_UNAVAILABLE): VendorCredit {
+  return unavailableCredit("Anthropic", "anthropic", "USD spend MTD", now, error);
+}
+
 export function hasAnyCreditApiConfigured(): boolean {
-  return isStripeConfigured() || isFalBillingConfigured() || isEmailConfigured();
+  return (
+    isStripeConfigured() ||
+    isFalBillingConfigured() ||
+    isEmailConfigured() ||
+    isAnthropicAdminConfigured()
+  );
 }
 
 /** Configured vendors with no live number — used when the whole fetch fails. */
@@ -114,6 +126,7 @@ export function configuredUnavailableCredits(now: Date = new Date()): VendorCred
   if (isStripeConfigured()) items.push(unavailableStripe(now));
   if (isFalBillingConfigured()) items.push(unavailableFal(now, BILLING_UNAVAILABLE));
   if (isEmailConfigured()) items.push(unavailableResend(now));
+  if (isAnthropicAdminConfigured()) items.push(unavailableAnthropic(now));
   return items;
 }
 
@@ -137,6 +150,30 @@ function formatUsdAmount(amount: number, currency: string): string {
     }).format(amount);
   }
   return `${formatCount(amount)} ${currency}`;
+}
+
+/** Accepts a finite number or a numeric string. Empty / blank is not zero. */
+export function parseFiniteNumber(value: unknown): number | null {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : null;
+  }
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+    const n = Number(trimmed);
+    return Number.isFinite(n) ? n : null;
+  }
+  return null;
+}
+
+/**
+ * fal docs show `Authorization: Key <secret>`. Operators often paste that
+ * whole prefix into FAL_ADMIN_KEY / FAL_KEY. Strip one leading `Key` so we
+ * prefix it exactly once.
+ */
+export function falAuthorizationHeader(rawKey: string): string {
+  const secret = rawKey.trim().replace(/^(key\s+)+/i, "").trim();
+  return `Key ${secret}`;
 }
 
 function moneyEntries(
@@ -179,14 +216,13 @@ export function parseFalCredits(
   const credits = (body as Record<string, unknown>).credits;
   if (!credits || typeof credits !== "object") return null;
   const rec = credits as Record<string, unknown>;
-  if (typeof rec.current_balance !== "number" || !Number.isFinite(rec.current_balance)) {
-    return null;
-  }
+  const balance = parseFiniteNumber(rec.current_balance);
+  if (balance === null) return null;
   const currency =
     typeof rec.currency === "string" && rec.currency.trim()
       ? rec.currency.trim()
       : "USD";
-  return { balance: rec.current_balance, currency };
+  return { balance, currency };
 }
 
 export function parseResendUsage(
@@ -266,9 +302,12 @@ async function getJson(
 }
 
 function falFailureReason(status: number): string {
-  const hasAdminKey = Boolean(process.env.FAL_ADMIN_KEY?.trim());
+  const hasAdminKey = Boolean(fal.adminKey);
   if ((status === 401 || status === 403) && !hasAdminKey) {
     return FAL_NEEDS_ADMIN_KEY;
+  }
+  if ((status === 401 || status === 403) && hasAdminKey) {
+    return `${BILLING_UNAVAILABLE} (${status})`;
   }
   return BILLING_UNAVAILABLE;
 }
@@ -309,7 +348,7 @@ async function falCredits(
 
   const result = await getJson(
     "https://api.fal.ai/v1/account/billing?expand=credits",
-    { authorization: `Key ${key}` },
+    { authorization: falAuthorizationHeader(key) },
     fetchImpl,
     timeoutMs,
   );
@@ -398,6 +437,106 @@ async function resendCredits(
   return unavailableResend(now);
 }
 
+/**
+ * Inclusive UTC month start through exclusive start-of-tomorrow, so today's
+ * daily Cost Report bucket is included (ending_at excludes buckets that
+ * have not ended yet).
+ */
+function rfc3339Utc(date: Date): string {
+  return date.toISOString().replace(/\.\d{3}Z$/, "Z");
+}
+
+export function utcMonthToDateBounds(now: Date): { startingAt: string; endingAt: string } {
+  const startingAt = rfc3339Utc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1)),
+  );
+  const endingAt = rfc3339Utc(
+    new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + 1)),
+  );
+  return { startingAt, endingAt };
+}
+
+/**
+ * Anthropic Cost Report amounts are decimal strings in lowest currency
+ * units (cents). `"123.45"` USD is $1.23. Empty `data` is a real $0, not
+ * an invented zero — unreadable payloads return null.
+ */
+export function parseAnthropicCostReport(body: unknown): { usd: number } | null {
+  if (!body || typeof body !== "object") return null;
+  const data = (body as Record<string, unknown>).data;
+  if (!Array.isArray(data)) return null;
+
+  let cents = 0;
+  let sawAmount = false;
+  for (const bucket of data) {
+    if (!bucket || typeof bucket !== "object") continue;
+    const results = (bucket as Record<string, unknown>).results;
+    if (!Array.isArray(results)) continue;
+    for (const item of results) {
+      if (!item || typeof item !== "object") continue;
+      const rec = item as Record<string, unknown>;
+      const amount = parseFiniteNumber(rec.amount);
+      if (amount === null) continue;
+      if (typeof rec.currency === "string" && rec.currency.trim()) {
+        if (rec.currency.trim().toUpperCase() !== "USD") continue;
+      }
+      cents += amount;
+      sawAmount = true;
+    }
+  }
+
+  if (data.length === 0) return { usd: 0 };
+  if (!sawAmount) {
+    const anyResults = data.some((bucket) => {
+      if (!bucket || typeof bucket !== "object") return false;
+      const results = (bucket as Record<string, unknown>).results;
+      return Array.isArray(results) && results.length > 0;
+    });
+    // Successful empty month (buckets with empty results) is $0.
+    return anyResults ? null : { usd: 0 };
+  }
+  return { usd: cents / 100 };
+}
+
+async function anthropicCredits(
+  now: Date,
+  fetchImpl: FetchLike,
+  timeoutMs: number,
+): Promise<VendorResult> {
+  const key = anthropic.adminApiKey;
+  if (!key || !isAnthropicAdminConfigured()) return null;
+
+  const { startingAt, endingAt } = utcMonthToDateBounds(now);
+  const params = new URLSearchParams({
+    starting_at: startingAt,
+    ending_at: endingAt,
+    limit: "31",
+  });
+  const result = await getJson(
+    `${anthropic.baseUrl}/v1/organizations/cost_report?${params}`,
+    {
+      "x-api-key": key,
+      "anthropic-version": "2023-06-01",
+    },
+    fetchImpl,
+    timeoutMs,
+  );
+  if (result.kind === "error" || result.status !== 200) {
+    return unavailableAnthropic(now);
+  }
+  const parsed = parseAnthropicCostReport(result.body);
+  if (!parsed) return unavailableAnthropic(now);
+
+  return {
+    vendor: "Anthropic",
+    key: "anthropic",
+    ok: true,
+    metric: "USD spend MTD",
+    value: formatUsdAmount(parsed.usd, "USD"),
+    asOf: asOf(now),
+  };
+}
+
 async function safeVendor(
   load: () => Promise<VendorResult>,
   onThrow: () => VendorResult,
@@ -412,8 +551,8 @@ async function safeVendor(
 /**
  * Fetches every vendor that has a usable official API, in parallel.
  *
- * Anthropic and Neon are skipped: those numbers need admin / management
- * keys we do not have. VinAudit is a refill link only.
+ * Anthropic is included only with ANTHROPIC_ADMIN_API_KEY. Neon is skipped
+ * until a management key exists. VinAudit is a refill link only.
  *
  * Never throws — a vendor outage must not take down /admin. Configured
  * vendors that fail are returned as unavailable, not omitted.
@@ -438,6 +577,10 @@ export async function fetchVendorCredits(
       safeVendor(
         () => resendCredits(now, fetchImpl, timeoutMs),
         () => (isEmailConfigured() ? unavailableResend(now) : null),
+      ),
+      safeVendor(
+        () => anthropicCredits(now, fetchImpl, timeoutMs),
+        () => (isAnthropicAdminConfigured() ? unavailableAnthropic(now) : null),
       ),
     ]);
 

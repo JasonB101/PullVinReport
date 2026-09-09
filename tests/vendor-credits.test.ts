@@ -7,12 +7,16 @@ import {
   FAL_NEEDS_ADMIN_KEY,
   VINAUDIT_ACCOUNT_URL,
   emptyVendorCredits,
+  falAuthorizationHeader,
   fetchVendorCredits,
   hasAnyCreditApiConfigured,
+  parseAnthropicCostReport,
   parseFalCredits,
+  parseFiniteNumber,
   parseResendQuotaHeaders,
   parseResendUsage,
   parseStripeBalance,
+  utcMonthToDateBounds,
   type FetchLike,
 } from "@/lib/vendor-credits";
 
@@ -103,8 +107,89 @@ describe("parseFalCredits", () => {
     );
   });
 
+  it("reads current_balance when fal sends a numeric string", () => {
+    assert.deepEqual(
+      parseFalCredits({
+        credits: { current_balance: "8.25", currency: "USD" },
+      }),
+      { balance: 8.25, currency: "USD" },
+    );
+  });
+
+  it("does not invent 0 from a missing or blank current_balance", () => {
+    assert.equal(parseFalCredits({ credits: { currency: "USD" } }), null);
+    assert.equal(parseFalCredits({ credits: { current_balance: "" } }), null);
+    assert.equal(parseFalCredits({ credits: { current_balance: "   " } }), null);
+    assert.equal(parseFalCredits({ credits: { current_balance: "n/a" } }), null);
+  });
+
   it("refuses a billing payload with no credits expand", () => {
     assert.equal(parseFalCredits({ username: "team" }), null);
+  });
+});
+
+describe("parseFiniteNumber", () => {
+  it("accepts finite numbers and numeric strings, not blanks", () => {
+    assert.equal(parseFiniteNumber(0), 0);
+    assert.equal(parseFiniteNumber("12.5"), 12.5);
+    assert.equal(parseFiniteNumber(" 3 "), 3);
+    assert.equal(parseFiniteNumber(""), null);
+    assert.equal(parseFiniteNumber("  "), null);
+    assert.equal(parseFiniteNumber(Number.NaN), null);
+  });
+});
+
+describe("falAuthorizationHeader", () => {
+  it("prefixes Key once and strips a leading Key copied from the env", () => {
+    assert.equal(falAuthorizationHeader("fal_admin"), "Key fal_admin");
+    assert.equal(falAuthorizationHeader("Key fal_admin"), "Key fal_admin");
+    assert.equal(falAuthorizationHeader("key  fal_admin  "), "Key fal_admin");
+    assert.equal(falAuthorizationHeader("Key Key fal_admin"), "Key fal_admin");
+  });
+});
+
+describe("utcMonthToDateBounds", () => {
+  it("is the UTC month start through start-of-tomorrow so today is included", () => {
+    assert.deepEqual(utcMonthToDateBounds(new Date("2026-09-09T20:16:00.000Z")), {
+      startingAt: "2026-09-01T00:00:00Z",
+      endingAt: "2026-09-10T00:00:00Z",
+    });
+  });
+});
+
+describe("parseAnthropicCostReport", () => {
+  it("sums USD amounts in cents across daily buckets", () => {
+    assert.deepEqual(
+      parseAnthropicCostReport({
+        data: [
+          {
+            results: [{ amount: "123.45", currency: "USD" }],
+          },
+          {
+            results: [{ amount: 50, currency: "USD" }],
+          },
+        ],
+      }),
+      { usd: 1.7345 },
+    );
+  });
+
+  it("treats an empty successful month as $0, not an unreadable payload", () => {
+    assert.deepEqual(parseAnthropicCostReport({ data: [] }), { usd: 0 });
+    assert.deepEqual(
+      parseAnthropicCostReport({ data: [{ results: [] }] }),
+      { usd: 0 },
+    );
+  });
+
+  it("does not invent 0 from a missing or unreadable report", () => {
+    assert.equal(parseAnthropicCostReport({}), null);
+    assert.equal(
+      parseAnthropicCostReport({
+        data: [{ results: [{ amount: "n/a", currency: "USD" }] }],
+      }),
+      null,
+    );
   });
 });
 
@@ -188,7 +273,6 @@ describe("fetchVendorCredits", () => {
     process.env.FAL_KEY = "fal_api_scope";
     process.env.RESEND_API_KEY = "re_test";
     process.env.ANTHROPIC_API_KEY = "sk-ant-regular";
-    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
     process.env.VINAUDIT_API_KEY = "va";
     process.env.VINAUDIT_USER = "user";
     process.env.VINAUDIT_PASS = "pass";
@@ -240,9 +324,9 @@ describe("fetchVendorCredits", () => {
     );
   });
 
-  it("never calls Anthropic even when an admin key is set", async () => {
+  it("omits Anthropic unless ANTHROPIC_ADMIN_API_KEY is set", async () => {
     clearCreditEnv();
-    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    process.env.ANTHROPIC_API_KEY = "sk-ant-regular";
     const seen: string[] = [];
     const report = await fetchVendorCredits({
       fetch: async (input) => {
@@ -255,6 +339,9 @@ describe("fetchVendorCredits", () => {
       seen.some((url) => url.includes("anthropic.com")),
       false,
     );
+    assert.equal(hasAnyCreditApiConfigured(), false);
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    assert.equal(hasAnyCreditApiConfigured(), true);
   });
 
   it("shows fal credits when FAL_ADMIN_KEY works, preferring it over FAL_KEY", async () => {
@@ -307,15 +394,88 @@ describe("fetchVendorCredits", () => {
     assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
   });
 
-  it("says billing API unavailable when an Admin-scope fal key still fails", async () => {
+  it("says billing API unavailable with the status when an Admin-scope fal key still fails", async () => {
     clearCreditEnv();
     process.env.FAL_ADMIN_KEY = "fal_admin";
-    const report = await fetchVendorCredits({
+    const report401 = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://api.fal.ai/v1/account/billing": () => jsonResponse(401, {}),
+      }),
+    });
+    assert.equal(report401.items[0]?.ok, false);
+    assert.equal(report401.items[0]?.error, `${BILLING_UNAVAILABLE} (401)`);
+    assert.equal(report401.items[0]?.value, "");
+
+    const report403 = await fetchVendorCredits({
       fetch: mockFetch({
         "https://api.fal.ai/v1/account/billing": () => jsonResponse(403, {}),
       }),
     });
+    assert.equal(report403.items[0]?.error, `${BILLING_UNAVAILABLE} (403)`);
+    assert.doesNotMatch(report403.items[0]?.value ?? "x", /0/);
+  });
+
+  it("strips a leading Key from FAL_ADMIN_KEY before sending Authorization", async () => {
+    clearCreditEnv();
+    process.env.FAL_ADMIN_KEY = "Key fal_admin";
+    const fetchImpl = mockFetch({
+      "https://api.fal.ai/v1/account/billing": (_url, init) => {
+        assert.equal(
+          init?.headers && new Headers(init.headers).get("authorization"),
+          "Key fal_admin",
+        );
+        return jsonResponse(200, {
+          credits: { current_balance: "4", currency: "USD" },
+        });
+      },
+    });
+    const report = await fetchVendorCredits({ fetch: fetchImpl });
+    assert.equal(report.items[0]?.ok, true);
+    assert.equal(report.items[0]?.value, "$4.00");
+  });
+
+  it("shows Anthropic USD spend MTD for the current UTC month", async () => {
+    clearCreditEnv();
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    const now = new Date("2026-09-09T20:16:00.000Z");
+    const fetchImpl = mockFetch({
+      "https://api.anthropic.com/v1/organizations/cost_report": (url, init) => {
+        const headers = new Headers(init?.headers);
+        assert.equal(headers.get("x-api-key"), "sk-ant-admin-test");
+        assert.equal(headers.get("anthropic-version"), "2023-06-01");
+        assert.equal(headers.get("authorization"), null);
+        assert.equal(url.searchParams.get("starting_at"), "2026-09-01T00:00:00Z");
+        assert.equal(url.searchParams.get("ending_at"), "2026-09-10T00:00:00Z");
+        return jsonResponse(200, {
+          data: [
+            { results: [{ amount: "250", currency: "USD" }] },
+            { results: [{ amount: "50", currency: "USD" }] },
+          ],
+        });
+      },
+    });
+    const report = await fetchVendorCredits({ fetch: fetchImpl, now });
+    assert.equal(report.items.length, 1);
+    assert.equal(report.items[0]?.key, "anthropic");
+    assert.equal(report.items[0]?.ok, true);
+    assert.equal(report.items[0]?.metric, "USD spend MTD");
+    assert.equal(report.items[0]?.value, "$3.00");
+  });
+
+  it("marks Anthropic unavailable when Cost Report fails instead of showing $0", async () => {
+    clearCreditEnv();
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    const report = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://api.anthropic.com/v1/organizations/cost_report": () =>
+          jsonResponse(403, { error: { type: "forbidden" } }),
+      }),
+    });
+    assert.equal(report.items[0]?.key, "anthropic");
+    assert.equal(report.items[0]?.ok, false);
     assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.equal(report.items[0]?.value, "");
+    assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
   });
 
   it("marks Resend unavailable when usage and quota headers are unreadable", async () => {
@@ -396,6 +556,7 @@ describe("fetchVendorCredits", () => {
     process.env.STRIPE_SECRET_KEY = "sk_test_x";
     process.env.FAL_KEY = "fal_x";
     process.env.RESEND_API_KEY = "re_x";
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-x";
     const report = await fetchVendorCredits({
       fetch: async () => {
         throw new Error("boom");
@@ -404,12 +565,39 @@ describe("fetchVendorCredits", () => {
         throw new Error("boom");
       },
     });
-    assert.equal(report.items.length, 3);
+    assert.equal(report.items.length, 4);
     assert.ok(report.items.every((item) => item.ok === false));
     assert.ok(report.items.every((item) => item.value === ""));
     assert.equal(
       report.items.find((item) => item.key === "fal")?.error,
       BILLING_UNAVAILABLE,
+    );
+    assert.equal(
+      report.items.find((item) => item.key === "anthropic")?.error,
+      BILLING_UNAVAILABLE,
+    );
+  });
+
+  it("sends the Anthropic admin key, never the Messages key", async () => {
+    clearCreditEnv();
+    process.env.ANTHROPIC_API_KEY = "sk-ant-regular-must-not-send";
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    const seen: { url: string; apiKey: string | null }[] = [];
+    await fetchVendorCredits({
+      fetch: async (input, init) => {
+        seen.push({
+          url: String(input),
+          apiKey: new Headers(init?.headers).get("x-api-key"),
+        });
+        return jsonResponse(200, { data: [] });
+      },
+    });
+    assert.equal(seen.length, 1);
+    assert.match(seen[0]?.url ?? "", /\/v1\/organizations\/cost_report/);
+    assert.equal(seen[0]?.apiKey, "sk-ant-admin-test");
+    assert.equal(
+      seen.some((call) => (call.apiKey ?? call.url).includes("regular-must-not-send")),
+      false,
     );
   });
 
@@ -418,17 +606,20 @@ describe("fetchVendorCredits", () => {
     process.env.STRIPE_SECRET_KEY = "sk_live_abc";
     process.env.FAL_KEY = "fal_x";
     process.env.RESEND_API_KEY = "re_x";
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
     const report = emptyVendorCredits();
-    assert.equal(report.items.length, 3);
+    assert.equal(report.items.length, 4);
     assert.ok(report.items.every((item) => item.ok === false));
     assert.ok(report.items.every((item) => item.error === BILLING_UNAVAILABLE));
     assert.ok(report.items.every((item) => !/\$0\.00|\b0\b/.test(item.value)));
+    assert.ok(report.items.some((item) => item.key === "anthropic"));
   });
 
   it("does not put vendor keys in the outgoing URL", async () => {
     clearCreditEnv();
     process.env.STRIPE_SECRET_KEY = "sk_test_secret_value";
     process.env.FAL_ADMIN_KEY = "fal_secret_value";
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-secret_value";
     const seen: string[] = [];
     await fetchVendorCredits({
       fetch: async (input) => {

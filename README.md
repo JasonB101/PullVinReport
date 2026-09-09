@@ -65,6 +65,7 @@ version:
 | `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
 | `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
 | `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
+| `ANTHROPIC_ADMIN_API_KEY` | No | Admin API key (`sk-ant-admin…`) for /admin USD spend MTD. Unset omits Anthropic from the credits card; a failed Cost Report is shown as unavailable, never as $0. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
@@ -326,14 +327,14 @@ Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
 The console shows order counts, collected revenue, refunded totals, a compact
-API credits card (Stripe, fal, Resend), and the full order list with the
-provider error for anything that failed. Failed or stuck orders can be
-retried, a delivered report's email can be re-sent, and any charged order
-can be refunded in place — see [Refunds](#refunds). Credit numbers are
-admin-only and never linked from the customer footer. A configured vendor
-whose official API fails is shown as unavailable (never faked as zero).
-“No credit APIs configured” appears only when Stripe, fal, and Resend keys
-are all absent.
+API credits card (Stripe, fal, Resend, and Anthropic when an admin key is
+set), and the full order list with the provider error for anything that
+failed. Failed or stuck orders can be retried, a delivered report's email
+can be re-sent, and any charged order can be refunded in place — see
+[Refunds](#refunds). Credit numbers are admin-only and never linked from
+the customer footer. A configured vendor whose official API fails is shown
+as unavailable (never faked as zero). “No credit APIs configured” appears
+only when Stripe, fal, Resend, and Anthropic admin keys are all absent.
 
 This is the only surface that shows raw provider errors, so it is also the
 place to look when a customer reports the soft "we couldn't retrieve this
