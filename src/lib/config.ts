@@ -125,10 +125,21 @@ export const anthropic = {
   get timeoutMs(): number {
     return intEnv("ANTHROPIC_TIMEOUT_MS", 45_000);
   },
+  /**
+   * Admin API key (`sk-ant-admin…`). The regular Messages key cannot call
+   * the Cost Report, so /admin omits Anthropic spend unless this is set.
+   */
+  get adminApiKey(): string | undefined {
+    return env("ANTHROPIC_ADMIN_API_KEY");
+  },
 };
 
 export function isAnthropicConfigured(): boolean {
   return Boolean(anthropic.apiKey);
+}
+
+export function isAnthropicAdminConfigured(): boolean {
+  return Boolean(anthropic.adminApiKey);
 }
 
 /**
@@ -167,10 +178,22 @@ export const fal = {
   get rembgModel(): string {
     return env("FAL_REMBG_MODEL") ?? "fal-ai/imageutils/rembg";
   },
+  /**
+   * Key for the Platform billing API. Prefers an Admin-scope `FAL_ADMIN_KEY`
+   * and falls back to `FAL_KEY`. An API-scope key 401/403s; /admin then
+   * omits fal rather than inventing a zero balance.
+   */
+  get billingKey(): string | undefined {
+    return env("FAL_ADMIN_KEY") ?? env("FAL_KEY");
+  },
 };
 
 export function isFalConfigured(): boolean {
   return Boolean(fal.apiKey);
+}
+
+export function isFalBillingConfigured(): boolean {
+  return Boolean(fal.billingKey);
 }
 
 export const stripeConfig = {

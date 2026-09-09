@@ -3,6 +3,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { logoutAction } from "@/app/admin/actions";
+import { ApiCredits } from "@/app/admin/api-credits";
 import { OrderActions } from "@/app/admin/order-actions";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
@@ -11,6 +12,7 @@ import { formatPrice, isVinAuditConfigured } from "@/lib/config";
 import { formatGeneratedAt } from "@/lib/report";
 import { getStore } from "@/lib/store";
 import type { OrderStatus } from "@/lib/store";
+import { fetchVendorCredits } from "@/lib/vendor-credits";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,11 @@ export default async function AdminPage() {
 
   const store = getStore();
   await store.init();
-  const [orders, stats] = await Promise.all([store.list(200), store.stats()]);
+  const [orders, stats, credits] = await Promise.all([
+    store.list(200),
+    store.stats(),
+    fetchVendorCredits(),
+  ]);
 
   const goal = firstSalesGoal(stats.revenueCents);
   const cards = [
@@ -135,6 +141,8 @@ export default async function AdminPage() {
             </div>
           ))}
         </div>
+
+        <ApiCredits report={credits} />
 
         {orders.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">

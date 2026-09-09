@@ -8,7 +8,9 @@ import {
   emailConfig,
   fal,
   formatPrice,
+  isAnthropicAdminConfigured,
   isAnthropicConfigured,
+  isFalBillingConfigured,
   isFalConfigured,
   pricing,
 } from "../src/lib/config.ts";
@@ -115,6 +117,26 @@ describe("the model that writes the brief", () => {
       if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
     }
   });
+
+  it("keeps Cost Report spend behind a separate admin key", () => {
+    const regular = process.env.ANTHROPIC_API_KEY;
+    const admin = process.env.ANTHROPIC_ADMIN_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_ADMIN_API_KEY;
+    try {
+      process.env.ANTHROPIC_API_KEY = "sk-ant-regular";
+      assert.equal(isAnthropicAdminConfigured(), false);
+      assert.equal(anthropic.adminApiKey, undefined);
+      process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+      assert.equal(isAnthropicAdminConfigured(), true);
+      assert.equal(anthropic.adminApiKey, "sk-ant-admin-test");
+    } finally {
+      if (regular === undefined) delete process.env.ANTHROPIC_API_KEY;
+      else process.env.ANTHROPIC_API_KEY = regular;
+      if (admin === undefined) delete process.env.ANTHROPIC_ADMIN_API_KEY;
+      else process.env.ANTHROPIC_ADMIN_API_KEY = admin;
+    }
+  });
 });
 
 describe("the model that draws the vehicle hero", () => {
@@ -144,6 +166,25 @@ describe("the model that draws the vehicle hero", () => {
       assert.equal(fal.apiKey, undefined);
     } finally {
       if (before !== undefined) process.env.FAL_KEY = before;
+    }
+  });
+
+  it("prefers FAL_ADMIN_KEY for billing and still accepts FAL_KEY", () => {
+    const api = process.env.FAL_KEY;
+    const admin = process.env.FAL_ADMIN_KEY;
+    delete process.env.FAL_KEY;
+    delete process.env.FAL_ADMIN_KEY;
+    try {
+      assert.equal(isFalBillingConfigured(), false);
+      process.env.FAL_KEY = "fal_api";
+      assert.equal(fal.billingKey, "fal_api");
+      process.env.FAL_ADMIN_KEY = "fal_admin";
+      assert.equal(fal.billingKey, "fal_admin");
+    } finally {
+      if (api === undefined) delete process.env.FAL_KEY;
+      else process.env.FAL_KEY = api;
+      if (admin === undefined) delete process.env.FAL_ADMIN_KEY;
+      else process.env.FAL_ADMIN_KEY = admin;
     }
   });
 });

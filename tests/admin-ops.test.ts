@@ -83,4 +83,22 @@ describe("admin console", () => {
     assert.doesNotMatch(footer, /VinAudit/);
     assert.doesNotMatch(home, /VinAudit/);
   });
+
+  it("loads live vendor credits on /admin and never hard-codes fake zeros", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const card = await readSrc("app/admin/api-credits.tsx");
+    assert.match(page, /fetchVendorCredits\(\)/);
+    assert.match(page, /<ApiCredits report=\{credits\} \/>/);
+    assert.match(card, /API credits/);
+    assert.match(card, /No credit APIs configured/);
+    assert.doesNotMatch(card, /\$0\.00/);
+    assert.doesNotMatch(page, /\$0\.00 available/);
+
+    const status = await readSrc("lib/status.ts");
+    const statusPage = await readSrc("app/status/page.tsx");
+    const statusApi = await readSrc("app/api/status/route.ts");
+    assert.doesNotMatch(status, /fetchVendorCredits|vendor-credits/);
+    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits/);
+    assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits/);
+  });
 });

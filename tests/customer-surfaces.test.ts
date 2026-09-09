@@ -39,6 +39,7 @@ const ALLOWED = [
   "lib/fulfillment.ts",
   "lib/status.ts",
   "lib/vinaudit.ts",
+  "lib/vendor-credits.ts",
   "lib/report.ts",
   "lib/store/types.ts",
 ];
@@ -158,5 +159,24 @@ describe("customer-facing surfaces", () => {
     assert.match(route, /isAdminAuthenticated/);
     assert.match(route, /ordersEnabled: report\.ordersEnabled/);
     assert.doesNotMatch(route, /VinAudit Vehicle History API/);
+  });
+
+  it("does not expose vendor credit balances on customer surfaces", async () => {
+    const home = await readSrc("app/page.tsx");
+    const footer = await readSrc("components/site-footer.tsx");
+    const header = await readSrc("components/site-header.tsx");
+    const preview = await readSrc("app/preview/page.tsx");
+    const publicStatus = await readSrc("app/api/status/route.ts");
+    for (const [name, source] of [
+      ["home", home],
+      ["footer", footer],
+      ["header", header],
+      ["preview", preview],
+      ["api/status", publicStatus],
+    ] as const) {
+      assert.doesNotMatch(source, /API credits/, name);
+      assert.doesNotMatch(source, /fetchVendorCredits/, name);
+      assert.doesNotMatch(source, /vendor-credits/, name);
+    }
   });
 });
