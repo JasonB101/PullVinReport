@@ -1,11 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
+import { ReportActions } from "@/components/report-actions";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { VinForm } from "@/components/vin-form";
 import { formatPrice } from "@/lib/config";
+import { SAMPLE_REPORT_PDF_PATH } from "@/lib/report-pdf-serve";
 import {
   buildSampleBrief,
   buildSampleModelExtras,
@@ -37,9 +39,12 @@ export default function SamplePage() {
               <span className="text-slate-900">Sample report</span>
             </nav>
 
-            <p className="mt-4 text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
-              Sample report — {SAMPLE_VEHICLE_LABEL}
-            </p>
+            <div className="mt-4 flex flex-wrap items-start justify-between gap-4">
+              <p className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
+                Sample report — {SAMPLE_VEHICLE_LABEL}
+              </p>
+              <ReportActions pdfHref={SAMPLE_REPORT_PDF_PATH} />
+            </div>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               This is the exact layout of a purchased report, filled with
               fictional data. Nothing here describes a real vehicle. When you

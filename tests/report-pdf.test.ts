@@ -61,6 +61,10 @@ describe("report PDF", () => {
   it("names the file so a buyer can find it after forwarding", () => {
     assert.equal(reportPdfFilename("4t1bf1fk8cu512345"), `PullVinReport-${VIN}.pdf`);
     assert.equal(reportPdfFilename("4T1BF1FK8-CU512345"), `PullVinReport-${VIN}.pdf`);
+    assert.equal(
+      reportPdfFilename("4t1bf1fk8cu512345", true),
+      `PullVinReport-SAMPLE-${VIN}.pdf`,
+    );
   });
 
   it("renders a real PDF from a purchased report", async () => {

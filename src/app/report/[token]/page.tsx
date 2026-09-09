@@ -3,7 +3,7 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 
 import { GoogleAdsPurchase } from "@/components/google-ads-purchase";
-import { PrintButton } from "@/components/print-button";
+import { ReportActions } from "@/components/report-actions";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -14,6 +14,7 @@ import {
   refundPromise,
 } from "@/lib/customer-copy";
 import { cachedExtrasForReport } from "@/lib/model-extras";
+import { paidReportPdfPath } from "@/lib/report-pdf-serve";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
@@ -181,7 +182,7 @@ export default async function ReportPage({
                   Keep this page&apos;s link private.
                 </p>
               </div>
-              <PrintButton />
+              <ReportActions pdfHref={paidReportPdfPath(token)} />
             </div>
           </div>
         </div>
