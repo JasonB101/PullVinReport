@@ -1,11 +1,18 @@
 import { formatGeneratedAt } from "@/lib/report";
-import type { VendorCreditsReport } from "@/lib/vendor-credits";
+import {
+  BILLING_UNAVAILABLE,
+  hasAnyCreditApiConfigured,
+  type VendorCreditsReport,
+} from "@/lib/vendor-credits";
 
 /**
  * Compact operator card. Numbers come from official vendor APIs only —
- * omitted vendors are not rendered as zeros.
+ * never rendered as invented zeros. “No credit APIs configured” is only
+ * for a literal absence of Stripe / fal / Resend keys.
  */
 export function ApiCredits({ report }: { report: VendorCreditsReport }) {
+  const noneConfigured = report.items.length === 0 && !hasAnyCreditApiConfigured();
+
   return (
     <section className="mt-6 rounded-2xl border border-slate-200 bg-white p-4 sm:p-5">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
@@ -17,8 +24,10 @@ export function ApiCredits({ report }: { report: VendorCreditsReport }) {
         </p>
       </div>
 
-      {report.items.length === 0 ? (
+      {noneConfigured ? (
         <p className="mt-3 text-sm text-slate-500">No credit APIs configured</p>
+      ) : report.items.length === 0 ? (
+        <p className="mt-3 text-sm text-slate-500">{BILLING_UNAVAILABLE}</p>
       ) : (
         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {report.items.map((item) => (

@@ -24,6 +24,11 @@ export function getStripe(): Stripe {
   return client;
 }
 
+/** Live USD available / pending via the official Stripe SDK. */
+export async function retrieveStripeBalance(): Promise<Stripe.Balance> {
+  return getStripe().balance.retrieve();
+}
+
 export function isStripeTestMode(): boolean {
   return Boolean(stripeConfig.secretKey?.startsWith("sk_test_"));
 }

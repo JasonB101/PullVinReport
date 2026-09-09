@@ -91,8 +91,21 @@ describe("admin console", () => {
     assert.match(page, /<ApiCredits report=\{credits\} \/>/);
     assert.match(card, /API credits/);
     assert.match(card, /No credit APIs configured/);
+    assert.match(card, /noneConfigured/);
+    assert.match(card, /hasAnyCreditApiConfigured/);
+    assert.match(card, /BILLING_UNAVAILABLE/);
+    assert.match(card, /item\.error \?\? "Unavailable"/);
     assert.doesNotMatch(card, /\$0\.00/);
     assert.doesNotMatch(page, /\$0\.00 available/);
+
+    const credits = await readSrc("lib/vendor-credits.ts");
+    assert.match(credits, /retrieveStripeBalance/);
+    assert.match(credits, /BILLING_UNAVAILABLE/);
+    assert.match(credits, /FAL_NEEDS_ADMIN_KEY/);
+    assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
+    const stripe = await readSrc("lib/stripe.ts");
+    assert.match(stripe, /export async function retrieveStripeBalance/);
+    assert.match(stripe, /getStripe\(\)\.balance\.retrieve\(\)/);
 
     const status = await readSrc("lib/status.ts");
     const statusPage = await readSrc("app/status/page.tsx");
