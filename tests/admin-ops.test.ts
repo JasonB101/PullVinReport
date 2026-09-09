@@ -117,8 +117,9 @@ describe("admin console", () => {
     assert.match(credits, /googleads\.googleapis\.com/);
     assert.match(credits, /oauth2\/v3\/token/);
     assert.match(credits, /metrics\.cost_micros/);
-    assert.match(credits, /DURING TODAY/);
-    assert.match(credits, /DURING THIS_MONTH/);
+    assert.match(credits, /DURING \$\{range\}/);
+    assert.match(credits, /"TODAY"/);
+    assert.match(credits, /"THIS_MONTH"/);
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
     assert.doesNotMatch(credits, /from ["']@\/lib\/google-ads["']/);
     const stripe = await readSrc("lib/stripe.ts");
