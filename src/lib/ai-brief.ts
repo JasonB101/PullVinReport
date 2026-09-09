@@ -14,7 +14,7 @@
  * before the brief existed.
  */
 import { anthropic, isAnthropicConfigured } from "@/lib/config";
-import { cleanCustomerText } from "@/lib/customer-text";
+import { cleanCustomerLine, cleanCustomerText, cleanReport } from "@/lib/customer-text";
 import type {
   Listing,
   ListingGroup,
@@ -81,9 +81,10 @@ export type BriefFacts = {
 };
 
 function clip(value: string): string {
-  return value.length <= MAX_VALUE_LENGTH
-    ? value
-    : `${value.slice(0, MAX_VALUE_LENGTH - 1)}…`;
+  const text = cleanCustomerLine(value);
+  return text.length <= MAX_VALUE_LENGTH
+    ? text
+    : `${text.slice(0, MAX_VALUE_LENGTH - 1)}…`;
 }
 
 /**
@@ -194,7 +195,7 @@ function briefSales(report: VehicleReport): BriefFacts["sales"] {
 }
 
 export function briefFacts(incoming: VehicleReport): BriefFacts {
-  const report = withResolvedDispositions(incoming);
+  const report = cleanReport(withResolvedDispositions(incoming));
   return {
     vehicle: vehicleTitle(report.vehicle),
     yearMakeModel: exactYearMakeModel(report.vehicle) || "unknown",

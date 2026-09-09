@@ -779,9 +779,14 @@ function JumpNav({
       aria-label="Report sections"
       className="no-print sticky top-16 z-30 rounded-2xl border border-slate-200 bg-white/90 px-2 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur"
     >
-      <ul className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+      {/*
+        Flex items shrink by default, so a nowrap row on a 390px phone ate
+        "Accidents" down to "Accide" instead of wrapping or scrolling.
+        Wrap + shrink-0 keeps every label whole.
+      */}
+      <ul className="flex flex-wrap items-center gap-1">
         {items.map((item) => (
-          <li key={item.href}>
+          <li key={item.href} className="shrink-0">
             <a
               href={item.href}
               className="inline-flex rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"

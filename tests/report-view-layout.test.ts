@@ -143,6 +143,21 @@ describe("report view layout", () => {
     assert.match(view, /disclosure-summary/);
   });
 
+  it("wraps the sticky section nav so phone labels are not clipped mid-word", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    const nav = source.slice(source.indexOf("function JumpNav"));
+    assert.match(nav, /flex flex-wrap items-center gap-1/);
+    assert.match(nav, /shrink-0/);
+    assert.doesNotMatch(
+      nav,
+      /overflow-x-auto whitespace-nowrap/,
+      "nowrap + shrinkable pills clip Accidents to Accide on a 390px phone",
+    );
+  });
+
   it("stacks tabulated rows as cards below sm so Event and brand stay on screen", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),

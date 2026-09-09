@@ -132,4 +132,25 @@ describe("the brief on an order", () => {
     const stored = await getStore().getById(order.id);
     assert.deepEqual(stored?.aiBrief, brief);
   });
+
+  it("scrubs leftover markup off a cached brief without calling the model", async () => {
+    const order = await fulfilledOrder();
+    const stored = await getStore().update(order.id, {
+      aiBrief: {
+        fromReport: ["Five title records<br>across two states."],
+        commonForModel: [],
+        questions: ["Any receipts?</br>Ask the seller."],
+        model: "cached",
+      },
+      aiBriefGeneratedAt: new Date().toISOString(),
+    });
+    const before = calls;
+    const outcome = await briefForOrder(stored);
+    assert.equal(outcome.status, "ready");
+    assert.equal(outcome.status === "ready" && outcome.cached, true);
+    assert.equal(calls, before);
+    if (outcome.status !== "ready") return;
+    assert.equal(outcome.brief.fromReport[0], "Five title records\nacross two states.");
+    assert.doesNotMatch(JSON.stringify(outcome.brief), /<\/?br/i);
+  });
 });

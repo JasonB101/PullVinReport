@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { briefFacts, parseBrief } from "@/lib/ai-brief";
 import { cleanCustomerLine, cleanCustomerText } from "@/lib/customer-text";
+import { parseComplaintsPayload, parseRecallsPayload } from "@/lib/model-extras";
 import { sectionListings } from "@/lib/report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
-import { parseComplaintsPayload, parseRecallsPayload } from "@/lib/model-extras";
-import { parseBrief } from "@/lib/ai-brief";
 
 const VIN = "4T1BF1FK8CU512345";
 
@@ -109,6 +109,30 @@ describe("provider and extras ingest", () => {
       "Airbags may not deploy. Risk of injury.",
     );
     assert.doesNotMatch(JSON.stringify(recalls), /<br/i);
+  });
+
+  it("strips recall HTML before the paid brief ever sees the facts", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+          recalls: [
+            {
+              campaign: "14V-651",
+              summary: "Inflator rupture<br>Metal fragments</br>See dealer.",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+    const recalls = facts.records.find((entry) => /recall/i.test(entry.section));
+    assert.ok(recalls);
+    const blob = recalls.rows.join(" ");
+    assert.match(blob, /Inflator rupture/);
+    assert.match(blob, /Metal fragments/);
+    assert.doesNotMatch(blob, /<\/?br/i);
+    assert.doesNotMatch(JSON.stringify(facts), /<\/?br|&lt;br/i);
   });
 
   it("strips HTML and markdown from a generated brief", () => {
