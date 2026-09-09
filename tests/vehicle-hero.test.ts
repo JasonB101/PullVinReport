@@ -158,7 +158,16 @@ describe("the drafting placeholder", () => {
     assert.match(source, /role="status"/);
     assert.match(source, /HeroDraftPlaceholder/);
     assert.match(source, /hero-draft-stroke/);
+    assert.match(source, /useId\(\)/);
+    assert.match(source, /hero-draft-wash-\$\{uid\}/);
+    assert.match(source, /hero-draft-sheen-\$\{uid\}/);
+    assert.match(source, /failedEmpty/);
+    assert.match(source, /quiet=\{failedEmpty\}/);
+    assert.match(source, /reserveHeight \? "min-h-\[11rem\] sm:min-h-\[12\.5rem\]"/);
+    assert.match(source, /const reserveHeight = drafting \|\| failedEmpty/);
     assert.doesNotMatch(source, /if \(!src\) return null/);
+    assert.doesNotMatch(source, /if \(\(failed && !src\)/);
+    assert.doesNotMatch(source, /pixelsReady \? "" : "min-h-/);
     assert.doesNotMatch(source, /Loading…/);
     assert.doesNotMatch(source, /spinner|progress bar|role="progressbar"/i);
     assert.doesNotMatch(source, /vinaudit/i);
