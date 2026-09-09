@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
  * Guards the report page's reading order: VIN history first, model extras last.
  */
 describe("report view layout", () => {
-  it("places Also for this model after every VIN history section", async () => {
+  it("places the model zone after every VIN history section and fences it", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
       "utf8",
@@ -19,12 +19,43 @@ describe("report view layout", () => {
       extras > sections,
       "the model card must follow the VIN history sections, not sit under What to know",
     );
+    assert.match(source, /border-t-2 border-dashed border-amber-300/);
+    assert.match(source, /MODEL_ZONE_TITLE/);
+    assert.match(source, /THIS_VIN_CHIP/);
+
     const card = await readFile(
       fileURLToPath(new URL("../src/components/model-extras.tsx", import.meta.url)),
       "utf8",
     );
     assert.match(card, /id="model-extras"/);
-    assert.match(card, /Not this VIN/);
+    assert.match(card, /NOT_THIS_VIN_CHIP/);
+    assert.match(card, /border-dashed border-amber-300/);
+    assert.match(card, /Also for this model/);
+  });
+
+  it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/ai-brief.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /FROM_THIS_VIN/);
+    assert.match(source, /THIS_VIN_CHIP/);
+    assert.match(source, /COMMON_FOR_MODEL/);
+    assert.match(source, /NOT_THIS_VIN_CHIP/);
+    assert.match(source, /QUESTIONS_HEADING/);
+
+    const fromReport = source.indexOf("brief.fromReport");
+    const questions = source.indexOf("brief.questions");
+    const common = source.indexOf("brief.commonForModel");
+    assert.ok(fromReport > 0 && questions > fromReport && common > questions);
+
+    assert.doesNotMatch(
+      source,
+      /\[\s*\.\.\.brief\.fromReport[\s\S]*commonForModel/,
+      "VIN and model bullets must not share one list",
+    );
+    assert.match(source, /border-dashed border-amber-300/);
+    assert.match(source, /not findings on this VIN/);
   });
 
   it("collapses every history section, including sales, to a short closed face", async () => {

@@ -100,6 +100,26 @@ describe("report PDF", () => {
     );
   });
 
+  it("labels this-VIN brief copy separately from the model zone", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /FROM_THIS_VIN/);
+    assert.match(source, /COMMON_FOR_MODEL/);
+    assert.match(source, /MODEL_ZONE_TITLE/);
+    assert.match(source, /MODEL_ZONE_NOTE/);
+    assert.match(source, /reportNavItems\(report, \{\s*modelExtras: hasModelExtras\(modelExtras\),\s*\}\)/);
+
+    const fromReport = source.indexOf("brief.fromReport");
+    const questions = source.indexOf("brief.questions");
+    const common = source.indexOf("brief.commonForModel");
+    const extras = source.indexOf("<ModelExtrasBlock");
+    const sections = source.indexOf("{sections.map((section) =>");
+    assert.ok(fromReport > 0 && questions > fromReport && common > questions);
+    assert.ok(extras > sections, "PDF model extras must follow VIN history sections");
+  });
+
   it("carries the written brief into the forwarded copy", async () => {
     const withBrief = await renderReportPdf(
       buildSampleReport(),

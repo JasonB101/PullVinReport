@@ -1,5 +1,5 @@
 /**
- * Public, model-level extras shown under What to know.
+ * Public, model-level extras shown after VIN history, in a fenced model-only zone.
  *
  * NHTSA recalls, NHTSA owner complaints, and EPA fuel economy for the
  * report's year/make/model — never for this VIN. A buyer who skims must not

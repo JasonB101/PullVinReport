@@ -31,6 +31,14 @@ import {
   modelExtrasSummaryLine,
 } from "@/lib/model-extras";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
+import {
+  COMMON_FOR_MODEL,
+  FROM_THIS_VIN,
+  MODEL_ZONE_NOTE,
+  MODEL_ZONE_TITLE,
+  QUESTIONS_HEADING,
+  THIS_VIN_CHIP,
+} from "@/lib/report-zones";
 import type {
   Field,
   Listing,
@@ -335,15 +343,26 @@ function Brief({
     <View style={styles.section} wrap>
       <View minPresenceAhead={96} wrap={false}>
         <Text style={styles.sectionTitle}>What to know</Text>
-        <Text style={styles.sectionNote}>From the records in this report.</Text>
+        <Text style={styles.sectionNote}>{THIS_VIN_CHIP} — from the records in this report.</Text>
         <Health report={report} />
         <Findings flags={flags} clear={clear} />
       </View>
 
       {brief && (
         <View wrap={false}>
-          <Text style={styles.briefHeading}>FROM THIS REPORT</Text>
+          <Text style={styles.briefHeading}>{FROM_THIS_VIN.toUpperCase()}</Text>
           {brief.fromReport.map((item, index) => (
+            <Text key={index} style={styles.bullet}>
+              • {item}
+            </Text>
+          ))}
+        </View>
+      )}
+
+      {brief && brief.questions.length > 0 && (
+        <View wrap={false}>
+          <Text style={styles.briefHeading}>{QUESTIONS_HEADING.toUpperCase()}</Text>
+          {brief.questions.map((item, index) => (
             <Text key={index} style={styles.bullet}>
               • {item}
             </Text>
@@ -354,24 +373,16 @@ function Brief({
       {brief && brief.commonForModel.length > 0 && (
         <View style={styles.briefAside} wrap={false}>
           <Text style={styles.briefAsideHeading}>
-            COMMON FOR THIS MODEL — NOT CONFIRMED ON THIS VIN
+            {COMMON_FOR_MODEL.toUpperCase()}
           </Text>
           {brief.commonForModel.map((item, index) => (
             <Text key={index} style={[styles.bullet, { color: "#92400e" }]}>
               • {item}
             </Text>
           ))}
-        </View>
-      )}
-
-      {brief && brief.questions.length > 0 && (
-        <View wrap={false}>
-          <Text style={styles.briefHeading}>QUESTIONS TO ASK THE SELLER</Text>
-          {brief.questions.map((item, index) => (
-            <Text key={index} style={styles.bullet}>
-              • {item}
-            </Text>
-          ))}
+          <Text style={[styles.caveat, { color: "#92400e" }]}>
+            Known issues for this year, make and model — not findings on this VIN.
+          </Text>
         </View>
       )}
     </View>
@@ -553,9 +564,9 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
   if (!hasModelExtras(extras)) return null;
   return (
     <View style={styles.section} wrap={false}>
-      <Text style={styles.sectionTitle}>Also for this model</Text>
+      <Text style={styles.sectionTitle}>{MODEL_ZONE_TITLE}</Text>
       <Text style={styles.sectionNote}>
-        Public records for the {extras.ymmLabel} — not the history of this VIN.
+        {MODEL_ZONE_NOTE} The {extras.ymmLabel} only.
       </Text>
       <Text style={styles.bullet}>{modelExtrasSummaryLine(extras)}</Text>
     </View>
@@ -577,7 +588,9 @@ export function ReportDocument({
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
   const specList = headerSpecifications(report);
-  const contents = reportNavItems(report).map((item) => item.label);
+  const contents = reportNavItems(report, {
+    modelExtras: hasModelExtras(modelExtras),
+  }).map((item) => item.label);
   const odometerRollback = hasOdometerRollback(report.odometer);
 
   return (

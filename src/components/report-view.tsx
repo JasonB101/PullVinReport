@@ -5,6 +5,8 @@ import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
 import type { ModelExtras } from "@/lib/model-extras";
+import { hasModelExtras } from "@/lib/model-extras";
+import { MODEL_ZONE_TITLE, THIS_VIN_CHIP } from "@/lib/report-zones";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -171,7 +173,7 @@ function WhatToKnow({
           What to know
         </h2>
         <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
-          From the records below
+          {THIS_VIN_CHIP}
         </span>
       </div>
 
@@ -740,8 +742,14 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
 }
 
 /** Outline of the report. Only parts that came back with something are listed. */
-function JumpNav({ report }: { report: VehicleReport }) {
-  const items = reportNavItems(report);
+function JumpNav({
+  report,
+  modelExtras = false,
+}: {
+  report: VehicleReport;
+  modelExtras?: boolean;
+}) {
+  const items = reportNavItems(report, { modelExtras });
   if (items.length < 2) return null;
 
   return (
@@ -865,7 +873,10 @@ export function ReportView({
         <HeaderSpecs specifications={specList} />
       </header>
 
-      <JumpNav report={report} />
+      <JumpNav
+        report={report}
+        modelExtras={hasModelExtras(modelExtras) || Boolean(extrasToken)}
+      />
 
       <WhatToKnow
         report={report}
@@ -885,7 +896,20 @@ export function ReportView({
         />
       ))}
 
-      <ModelExtrasCard extras={modelExtras} token={extrasToken} />
+      {(hasModelExtras(modelExtras) || extrasToken) && (
+        <section
+          aria-labelledby="model-zone-heading"
+          className="border-t-2 border-dashed border-amber-300 pt-6"
+        >
+          <p
+            id="model-zone-heading"
+            className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900"
+          >
+            {MODEL_ZONE_TITLE}
+          </p>
+          <ModelExtrasCard extras={modelExtras} token={extrasToken} />
+        </section>
+      )}
 
       <p className="px-1 text-xs leading-relaxed text-slate-500">
         {report.isSample

@@ -4,6 +4,7 @@ import {
   PAINT_COLOR_LABEL,
   pickColor,
 } from "@/lib/vehicle-color";
+import { MODEL_ZONE_NAV } from "@/lib/report-zones";
 
 /**
  * The normalized report model that every renderer in the app consumes.
@@ -1196,7 +1197,10 @@ export function reportChips(report: VehicleReport): ReportChip[] {
 export type ReportNavItem = { href: string; label: string };
 
 /** Outline of the report, listing only the parts that came back with content. */
-export function reportNavItems(report: VehicleReport): ReportNavItem[] {
+export function reportNavItems(
+  report: VehicleReport,
+  options: { modelExtras?: boolean } = {},
+): ReportNavItem[] {
   const items: ReportNavItem[] = [{ href: "#brief", label: "What to know" }];
   for (const section of report.sections) {
     if (section.records.length === 0) continue;
@@ -1204,6 +1208,9 @@ export function reportNavItems(report: VehicleReport): ReportNavItem[] {
       href: `#${section.key}`,
       label: section.navLabel ?? section.title,
     });
+  }
+  if (options.modelExtras) {
+    items.push({ href: "#model-extras", label: MODEL_ZONE_NAV });
   }
   return items;
 }

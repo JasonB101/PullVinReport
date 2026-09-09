@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
+import { MODEL_ZONE_NOTE, NOT_THIS_VIN_CHIP } from "@/lib/report-zones";
 
 type Props = {
   /** Already-summarised extras, from a cache hit or the sample fixture. */
@@ -20,9 +21,9 @@ function formatCount(n: number): string {
 /**
  * Compact public-records card for this year/make/model.
  *
- * Sits after every VIN history section so it cannot be read as part of this
- * car's records. Labelled as NHTSA/EPA data for the model year — not this VIN.
- * A failed or empty fetch leaves nothing here.
+ * Sits after every VIN history section, in a dashed/amber zone, so it cannot
+ * be read as part of this car's records. Labelled as NHTSA/EPA data for the
+ * model year — not this VIN. A failed or empty fetch leaves nothing here.
  */
 export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   const [extras, setExtras] = useState<ModelExtras | null>(
@@ -66,8 +67,9 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
     if (!pending) return null;
     return (
       <section
+        id="model-extras"
         aria-busy="true"
-        className="rounded-2xl border border-slate-200 bg-white px-5 py-4 sm:px-6"
+        className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 px-5 py-4 sm:px-6"
       >
         <p className="text-sm text-slate-500">
           Checking public records for this model…
@@ -82,18 +84,18 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   return (
     <section
       id="model-extras"
-      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+      className="scroll-mt-32 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-5 sm:p-6"
     >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold tracking-tight text-slate-900">
           Also for this model
         </h2>
-        <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
-          Not this VIN
+        <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-amber-900 ring-1 ring-amber-200">
+          {NOT_THIS_VIN_CHIP}
         </span>
       </div>
-      <p className="mt-1 text-sm text-slate-500">
-        Public records for the {ymm} — not the history of this VIN.
+      <p className="mt-1 text-sm text-slate-600">
+        {MODEL_ZONE_NOTE} The {ymm} only.
       </p>
 
       <dl className="mt-4 space-y-3">
@@ -150,7 +152,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
               {extras.mpg.fuelType ? ` · ${extras.mpg.fuelType}` : ""}
               <span className="text-slate-500">
                 {" "}
-                for this model year, when the EPA listing matches
+                for this model year, when the EPA listing matches — not this VIN
               </span>
             </dd>
           </div>

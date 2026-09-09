@@ -977,6 +977,14 @@ describe("the header of a report", () => {
     ]);
   });
 
+  it("appends the model zone last when extras are present", () => {
+    assert.deepEqual(reportNavItems(report(), { modelExtras: true }), [
+      { href: "#brief", label: "What to know" },
+      { href: "#titles", label: "Titles" },
+      { href: "#model-extras", label: "This model" },
+    ]);
+  });
+
   it("lists an empty category by name instead of giving it a section", () => {
     assert.deepEqual(searchedAndEmpty(report()), ["Thefts"]);
     assert.deepEqual(
