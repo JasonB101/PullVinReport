@@ -38,6 +38,8 @@ describe("sample report", () => {
     assert.equal(extras.ymmLabel, "2012 Toyota Camry");
     assert.equal(extras.recalls?.total, 2);
     assert.ok((extras.complaints?.total ?? 0) > 0);
+    assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
+    assert.ok((extras.complaints?.samples[0]?.summary.length ?? 0) > 40);
     assert.equal(extras.mpg?.city, 24);
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
   });

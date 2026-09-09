@@ -57,7 +57,8 @@ export function buildSampleBrief(): VehicleBrief {
  *
  * Frozen so `/sample` never calls NHTSA or EPA. The numbers are a stable
  * snapshot of the real 2012 Toyota Camry public records (not this fictional
- * VIN): two NHTSA campaigns, complaint themes, and the 2.5L EPA listing.
+ * VIN): two NHTSA campaigns, complaint themes plus sampled write-ups, and
+ * the 2.5L EPA listing. The same fixture feeds the sample page and the PDF.
  */
 export function buildSampleModelExtras(): ModelExtras {
   return {

@@ -121,14 +121,6 @@ type ReportAttachment = {
   contentType: string;
 };
 
-/**
- * Renders the forwardable PDF copy of the report.
- *
- * Best-effort on purpose: the buyer has already paid and the receipt carries a
- * working link either way, so a PDF that fails to render is logged for the
- * operator and dropped rather than costing the customer their receipt. The PDF
- * contains no link or token — a forwarded copy must not hand over access.
- */
 async function loadModelExtras(order: Order): Promise<ModelExtras | null> {
   if (!order.report) return null;
   try {
@@ -139,6 +131,15 @@ async function loadModelExtras(order: Order): Promise<ModelExtras | null> {
   }
 }
 
+/**
+ * Renders the forwardable PDF copy of the report.
+ *
+ * Best-effort on purpose: the buyer has already paid and the receipt carries a
+ * working link either way, so a PDF that fails to render is logged for the
+ * operator and dropped rather than costing the customer their receipt. The PDF
+ * contains no link or token — a forwarded copy must not hand over access.
+ * Model extras ride along when we have them so the attachment matches the page.
+ */
 async function reportAttachment(
   order: Order,
   modelExtras: ModelExtras | null,

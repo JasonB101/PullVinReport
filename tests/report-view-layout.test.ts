@@ -135,6 +135,50 @@ describe("report view layout", () => {
   });
 });
 
+describe("sample and paid extras parity", () => {
+  it("feeds one ReportView extras card from the sample fixture and the paid cache", async () => {
+    const samplePage = await readFile(
+      fileURLToPath(new URL("../src/app/sample/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const paidPage = await readFile(
+      fileURLToPath(new URL("../src/app/report/[token]/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const view = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    const pdf = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+
+    assert.match(samplePage, /<ReportView/);
+    assert.match(samplePage, /modelExtras=\{buildSampleModelExtras\(\)\}/);
+    assert.doesNotMatch(
+      samplePage,
+      /extrasToken/,
+      "the sample fixture is complete; it must not fetch extras",
+    );
+    assert.match(paidPage, /<ReportView/);
+    assert.match(paidPage, /modelExtras=\{modelExtras\}/);
+    assert.match(paidPage, /extrasToken=\{token\}/);
+    assert.match(view, /<ModelExtrasCard extras=\{modelExtras\} token=\{extrasToken\} \/>/);
+    assert.match(view, /MODEL_ZONE_TITLE/);
+
+    const extrasAfter = view.indexOf("<ModelExtrasCard");
+    const sections = view.indexOf("{sections.map((section) =>");
+    assert.ok(extrasAfter > sections);
+
+    const pdfExtras = pdf.indexOf("<ModelExtrasBlock");
+    const pdfSections = pdf.indexOf("{sections.map((section) =>");
+    assert.ok(pdfExtras > pdfSections, "PDF model extras must follow VIN history");
+    assert.match(pdf, /MODEL_ZONE_TITLE/);
+    assert.match(pdf, /complaintSamples\(extras\.complaints\)/);
+  });
+});
+
 describe("paid report shell", () => {
   it("does not render a second h1 or a UTC delivered stamp", async () => {
     const source = await readFile(
