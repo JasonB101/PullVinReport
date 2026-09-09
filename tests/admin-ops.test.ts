@@ -102,6 +102,9 @@ describe("admin console", () => {
     assert.match(credits, /retrieveStripeBalance/);
     assert.match(credits, /BILLING_UNAVAILABLE/);
     assert.match(credits, /FAL_NEEDS_ADMIN_KEY/);
+    assert.match(credits, /organizations\/cost_report/);
+    assert.match(credits, /anthropic-version/);
+    assert.match(credits, /ANTHROPIC_ADMIN_API_KEY|adminApiKey/);
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
     const stripe = await readSrc("lib/stripe.ts");
     assert.match(stripe, /export async function retrieveStripeBalance/);

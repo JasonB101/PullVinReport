@@ -110,6 +110,13 @@ export const anthropic = {
   get apiKey(): string | undefined {
     return env("ANTHROPIC_API_KEY");
   },
+  /**
+   * Admin API key (`sk-ant-admin…`) for /admin USD spend. The Messages
+   * `ANTHROPIC_API_KEY` cannot read Cost Report and is never used here.
+   */
+  get adminApiKey(): string | undefined {
+    return env("ANTHROPIC_ADMIN_API_KEY");
+  },
   get model(): string {
     return env("ANTHROPIC_MODEL") ?? "claude-sonnet-5";
   },
@@ -129,6 +136,10 @@ export const anthropic = {
 
 export function isAnthropicConfigured(): boolean {
   return Boolean(anthropic.apiKey);
+}
+
+export function isAnthropicAdminConfigured(): boolean {
+  return Boolean(anthropic.adminApiKey);
 }
 
 /**
