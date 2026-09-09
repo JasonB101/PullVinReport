@@ -170,7 +170,8 @@ export const fal = {
   /**
    * Key for the Platform billing API. Prefers an Admin-scope `FAL_ADMIN_KEY`
    * and falls back to `FAL_KEY`. An API-scope key 401/403s; /admin then
-   * omits fal rather than inventing a zero balance.
+   * shows fal as unavailable (needs Admin-scope key) rather than inventing
+   * a zero balance.
    */
   get billingKey(): string | undefined {
     return env("FAL_ADMIN_KEY") ?? env("FAL_KEY");

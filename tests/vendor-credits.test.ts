@@ -2,9 +2,13 @@ import assert from "node:assert/strict";
 import { afterEach, describe, it } from "node:test";
 
 import {
+  BILLING_UNAVAILABLE,
   CREDIT_FETCH_TIMEOUT_MS,
+  FAL_NEEDS_ADMIN_KEY,
   VINAUDIT_ACCOUNT_URL,
+  emptyVendorCredits,
   fetchVendorCredits,
+  hasAnyCreditApiConfigured,
   parseFalCredits,
   parseResendQuotaHeaders,
   parseResendUsage,
@@ -154,19 +158,31 @@ describe("parseResendQuotaHeaders", () => {
   });
 });
 
+function stripeBalance(available: number, pending: number) {
+  return async () => ({
+    available: [{ amount: available, currency: "usd" }],
+    pending: [{ amount: pending, currency: "usd" }],
+  });
+}
+
 describe("fetchVendorCredits", () => {
   it("returns no vendor cards when nothing is configured", async () => {
     clearCreditEnv();
+    assert.equal(hasAnyCreditApiConfigured(), false);
     const report = await fetchVendorCredits({
       fetch: async () => {
         throw new Error("no vendor should be fetched");
       },
+      retrieveStripeBalance: async () => {
+        throw new Error("Stripe should not be fetched");
+      },
     });
     assert.deepEqual(report.items, []);
     assert.equal(report.vinauditAccountUrl, undefined);
+    assert.deepEqual(emptyVendorCredits().items, []);
   });
 
-  it("includes Stripe and omits fal/Resend/Anthropic when those APIs fail", async () => {
+  it("includes Stripe and marks fal/Resend unavailable when those APIs fail", async () => {
     clearCreditEnv();
     process.env.STRIPE_SECRET_KEY = "sk_test_123";
     process.env.FAL_KEY = "fal_api_scope";
@@ -176,31 +192,50 @@ describe("fetchVendorCredits", () => {
     process.env.VINAUDIT_API_KEY = "va";
     process.env.VINAUDIT_USER = "user";
     process.env.VINAUDIT_PASS = "pass";
+    assert.equal(hasAnyCreditApiConfigured(), true);
 
+    const seen: string[] = [];
     const fetchImpl = mockFetch({
-      "https://api.stripe.com/v1/balance": () =>
-        jsonResponse(200, {
-          available: [{ amount: 2500, currency: "usd" }],
-          pending: [{ amount: 100, currency: "usd" }],
-        }),
-      "https://api.fal.ai/v1/account/billing": () => jsonResponse(401, {}),
-      "https://api.resend.com/usage": () => jsonResponse(404, { message: "not found" }),
+      "https://api.fal.ai/v1/account/billing": (url) => {
+        seen.push(`${url.origin}${url.pathname}`);
+        return jsonResponse(401, {});
+      },
+      "https://api.resend.com/usage": (url) => {
+        seen.push(`${url.origin}${url.pathname}`);
+        return jsonResponse(404, { message: "not found" });
+      },
     });
 
-    const report = await fetchVendorCredits({ fetch: fetchImpl });
-    assert.equal(report.items.length, 1);
-    assert.equal(report.items[0]?.key, "stripe");
-    assert.equal(report.items[0]?.ok, true);
-    assert.match(report.items[0]?.vendor ?? "", /Stripe \(test\)/);
-    assert.match(report.items[0]?.value ?? "", /\$25\.00 available/);
-    assert.match(report.items[0]?.value ?? "", /\$1\.00 pending/);
+    const report = await fetchVendorCredits({
+      fetch: async (input, init) => {
+        if (String(input).includes("api.stripe.com")) {
+          throw new Error("Stripe must use the SDK helper, not a raw fetch");
+        }
+        return fetchImpl(input, init);
+      },
+      retrieveStripeBalance: stripeBalance(2500, 100),
+    });
+    assert.equal(report.items.length, 3);
+    const stripe = report.items.find((item) => item.key === "stripe");
+    const falItem = report.items.find((item) => item.key === "fal");
+    const resend = report.items.find((item) => item.key === "resend");
+    assert.equal(stripe?.ok, true);
+    assert.match(stripe?.vendor ?? "", /Stripe \(test\)/);
+    assert.match(stripe?.value ?? "", /\$25\.00 available/);
+    assert.match(stripe?.value ?? "", /\$1\.00 pending/);
+    assert.equal(falItem?.ok, false);
+    assert.equal(falItem?.error, FAL_NEEDS_ADMIN_KEY);
+    assert.equal(falItem?.value, "");
+    assert.equal(resend?.ok, false);
+    assert.equal(resend?.error, BILLING_UNAVAILABLE);
+    assert.equal(resend?.value, "");
     assert.equal(report.vinauditAccountUrl, VINAUDIT_ACCOUNT_URL);
     assert.equal(
-      report.items.some((item) => item.key === "fal" || item.key === "resend"),
+      report.items.some((item) => "key" in item && item.key === "anthropic"),
       false,
     );
     assert.equal(
-      report.items.some((item) => "key" in item && item.key === "anthropic"),
+      seen.some((url) => url.includes("api.stripe.com")),
       false,
     );
   });
@@ -257,7 +292,7 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items[0]?.value, "$3.50");
   });
 
-  it("omits fal on 403 instead of showing 0", async () => {
+  it("marks fal unavailable on 403 instead of showing 0", async () => {
     clearCreditEnv();
     process.env.FAL_KEY = "fal_api_scope";
     const report = await fetchVendorCredits({
@@ -265,10 +300,25 @@ describe("fetchVendorCredits", () => {
         "https://api.fal.ai/v1/account/billing": () => jsonResponse(403, {}),
       }),
     });
-    assert.deepEqual(report.items, []);
+    assert.equal(report.items.length, 1);
+    assert.equal(report.items[0]?.key, "fal");
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, FAL_NEEDS_ADMIN_KEY);
+    assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
   });
 
-  it("omits Resend when usage and quota headers are unreadable", async () => {
+  it("says billing API unavailable when an Admin-scope fal key still fails", async () => {
+    clearCreditEnv();
+    process.env.FAL_ADMIN_KEY = "fal_admin";
+    const report = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://api.fal.ai/v1/account/billing": () => jsonResponse(403, {}),
+      }),
+    });
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+  });
+
+  it("marks Resend unavailable when usage and quota headers are unreadable", async () => {
     clearCreditEnv();
     process.env.RESEND_API_KEY = "re_test";
     const report = await fetchVendorCredits({
@@ -277,7 +327,11 @@ describe("fetchVendorCredits", () => {
         "https://api.resend.com/domains": () => jsonResponse(200, { data: [] }),
       }),
     });
-    assert.deepEqual(report.items, []);
+    assert.equal(report.items.length, 1);
+    assert.equal(report.items[0]?.key, "resend");
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
   });
 
   it("includes Resend monthly usage when the beta API works", async () => {
@@ -311,15 +365,30 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items[0]?.value, "18 sent");
   });
 
-  it("omits Stripe on failure instead of inventing $0.00", async () => {
+  it("marks Stripe unavailable on failure instead of inventing $0.00", async () => {
     clearCreditEnv();
     process.env.STRIPE_SECRET_KEY = "sk_live_abc";
     const report = await fetchVendorCredits({
-      fetch: mockFetch({
-        "https://api.stripe.com/v1/balance": () => jsonResponse(500, { error: {} }),
-      }),
+      retrieveStripeBalance: async () => {
+        throw new Error("stripe down");
+      },
     });
-    assert.deepEqual(report.items, []);
+    assert.equal(report.items.length, 1);
+    assert.equal(report.items[0]?.vendor, "Stripe");
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.doesNotMatch(report.items[0]?.value ?? "", /\$0\.00/);
+  });
+
+  it("marks Stripe unavailable when the SDK returns unusable data", async () => {
+    clearCreditEnv();
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc";
+    const report = await fetchVendorCredits({
+      retrieveStripeBalance: async () => ({ object: "balance" }),
+    });
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.doesNotMatch(report.items[0]?.value ?? "", /\$0\.00/);
   });
 
   it("never throws when a vendor fetch rejects", async () => {
@@ -331,8 +400,29 @@ describe("fetchVendorCredits", () => {
       fetch: async () => {
         throw new Error("boom");
       },
+      retrieveStripeBalance: async () => {
+        throw new Error("boom");
+      },
     });
-    assert.deepEqual(report.items, []);
+    assert.equal(report.items.length, 3);
+    assert.ok(report.items.every((item) => item.ok === false));
+    assert.ok(report.items.every((item) => item.value === ""));
+    assert.equal(
+      report.items.find((item) => item.key === "fal")?.error,
+      BILLING_UNAVAILABLE,
+    );
+  });
+
+  it("emptyVendorCredits still lists configured vendors as unavailable", () => {
+    clearCreditEnv();
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc";
+    process.env.FAL_KEY = "fal_x";
+    process.env.RESEND_API_KEY = "re_x";
+    const report = emptyVendorCredits();
+    assert.equal(report.items.length, 3);
+    assert.ok(report.items.every((item) => item.ok === false));
+    assert.ok(report.items.every((item) => item.error === BILLING_UNAVAILABLE));
+    assert.ok(report.items.every((item) => !/\$0\.00|\b0\b/.test(item.value)));
   });
 
   it("does not put vendor keys in the outgoing URL", async () => {
@@ -345,11 +435,38 @@ describe("fetchVendorCredits", () => {
         seen.push(input);
         return jsonResponse(401, {});
       },
+      retrieveStripeBalance: async () => {
+        throw new Error("no url to leak");
+      },
     });
     assert.equal(
       seen.some((url) => url.includes("secret_value")),
       false,
     );
+  });
+
+  it("loads Stripe through retrieveStripeBalance, not a raw api.stripe.com fetch", async () => {
+    clearCreditEnv();
+    process.env.STRIPE_SECRET_KEY = "sk_live_abc";
+    let stripeFetch = 0;
+    let sdkCalls = 0;
+    const report = await fetchVendorCredits({
+      fetch: async (input) => {
+        if (String(input).includes("api.stripe.com")) stripeFetch += 1;
+        return jsonResponse(500, {});
+      },
+      retrieveStripeBalance: async () => {
+        sdkCalls += 1;
+        return {
+          available: [{ amount: 0, currency: "usd" }],
+          pending: [{ amount: 0, currency: "usd" }],
+        };
+      },
+    });
+    assert.equal(stripeFetch, 0);
+    assert.equal(sdkCalls, 1);
+    assert.equal(report.items[0]?.ok, true);
+    assert.match(report.items[0]?.value ?? "", /\$0\.00 available/);
   });
 
   it("uses a short per-vendor timeout", () => {

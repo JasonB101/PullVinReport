@@ -3,6 +3,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
+  // Keep the Stripe SDK on Node's HTTP client, not a bundled web/fetch build.
+  serverExternalPackages: ["stripe"],
   async headers() {
     return [
       {

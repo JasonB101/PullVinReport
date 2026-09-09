@@ -3,9 +3,9 @@
  *
  * Server-only. Nothing here is imported by customer pages, public /status,
  * or anonymous /api/status. Each vendor is fetched independently with a
- * short timeout. A missing official API or any failed call omits that
- * vendor rather than inventing a zero — Anthropic and Neon are skipped
- * until an admin / management key exists.
+ * short timeout. A missing official API or any failed call marks that
+ * vendor unavailable rather than inventing a zero — Anthropic and Neon
+ * are skipped until an admin / management key exists.
  */
 import {
   emailConfig,
@@ -17,11 +17,15 @@ import {
   isVinAuditConfigured,
   stripeConfig,
 } from "@/lib/config";
+import { retrieveStripeBalance } from "@/lib/stripe";
 
 export const CREDIT_FETCH_TIMEOUT_MS = 8_000;
 
 /** Official VinAudit client login — report keys have no balance API. */
 export const VINAUDIT_ACCOUNT_URL = "https://www.vinaudit.com/client-login";
+
+export const BILLING_UNAVAILABLE = "billing API unavailable";
+export const FAL_NEEDS_ADMIN_KEY = "needs Admin-scope key";
 
 const USER_AGENT = "PullVinReport/1.0 (+https://pullvinreport.com)";
 
@@ -47,10 +51,13 @@ export type FetchLike = (
   init?: RequestInit,
 ) => Promise<Response>;
 
+export type StripeBalanceRetriever = () => Promise<unknown>;
+
 export type VendorCreditsOptions = {
   fetch?: FetchLike;
   now?: Date;
   timeoutMs?: number;
+  retrieveStripeBalance?: StripeBalanceRetriever;
 };
 
 type VendorResult = VendorCredit | null;
@@ -63,10 +70,57 @@ function asOf(now: Date): string {
   return now.toISOString();
 }
 
+function stripeVendorName(): string {
+  return stripeConfig.secretKey?.startsWith("sk_test_") ? "Stripe (test)" : "Stripe";
+}
+
+function unavailableCredit(
+  vendor: string,
+  key: VendorCredit["key"],
+  metric: string,
+  now: Date,
+  error: string,
+): VendorCredit {
+  return {
+    vendor,
+    key,
+    ok: false,
+    metric,
+    value: "",
+    asOf: asOf(now),
+    error,
+  };
+}
+
+function unavailableStripe(now: Date, error = BILLING_UNAVAILABLE): VendorCredit {
+  return unavailableCredit(stripeVendorName(), "stripe", "USD balance", now, error);
+}
+
+function unavailableFal(now: Date, error: string): VendorCredit {
+  return unavailableCredit("fal.ai", "fal", "Credits", now, error);
+}
+
+function unavailableResend(now: Date, error = BILLING_UNAVAILABLE): VendorCredit {
+  return unavailableCredit("Resend", "resend", "Emails this month", now, error);
+}
+
+export function hasAnyCreditApiConfigured(): boolean {
+  return isStripeConfigured() || isFalBillingConfigured() || isEmailConfigured();
+}
+
+/** Configured vendors with no live number — used when the whole fetch fails. */
+export function configuredUnavailableCredits(now: Date = new Date()): VendorCredit[] {
+  const items: VendorCredit[] = [];
+  if (isStripeConfigured()) items.push(unavailableStripe(now));
+  if (isFalBillingConfigured()) items.push(unavailableFal(now, BILLING_UNAVAILABLE));
+  if (isEmailConfigured()) items.push(unavailableResend(now));
+  return items;
+}
+
 export function emptyVendorCredits(now: Date = new Date()): VendorCreditsReport {
   return {
     checkedAt: asOf(now),
-    items: [],
+    items: configuredUnavailableCredits(now),
     vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
   };
 }
@@ -211,33 +265,38 @@ async function getJson(
   }
 }
 
+function falFailureReason(status: number): string {
+  const hasAdminKey = Boolean(process.env.FAL_ADMIN_KEY?.trim());
+  if ((status === 401 || status === 403) && !hasAdminKey) {
+    return FAL_NEEDS_ADMIN_KEY;
+  }
+  return BILLING_UNAVAILABLE;
+}
+
 async function stripeCredits(
   now: Date,
-  fetchImpl: FetchLike,
   timeoutMs: number,
+  retrieveBalance?: StripeBalanceRetriever,
 ): Promise<VendorResult> {
-  const key = stripeConfig.secretKey;
-  if (!key || !isStripeConfigured()) return null;
+  if (!stripeConfig.secretKey || !isStripeConfigured()) return null;
 
-  const result = await getJson(
-    "https://api.stripe.com/v1/balance",
-    { authorization: `Bearer ${key}` },
-    fetchImpl,
-    timeoutMs,
-  );
-  if (result.kind === "error" || result.status !== 200) return null;
-  const parsed = parseStripeBalance(result.body);
-  if (!parsed) return null;
-
-  const vendor = key.startsWith("sk_test_") ? "Stripe (test)" : "Stripe";
-  return {
-    vendor,
-    key: "stripe",
-    ok: true,
-    metric: "USD balance",
-    value: `${formatPrice(parsed.availableCents, "usd")} available · ${formatPrice(parsed.pendingCents, "usd")} pending`,
-    asOf: asOf(now),
-  };
+  try {
+    const body = retrieveBalance
+      ? await retrieveBalance()
+      : await retrieveStripeBalance({ timeoutMs });
+    const parsed = parseStripeBalance(body);
+    if (!parsed) return unavailableStripe(now);
+    return {
+      vendor: stripeVendorName(),
+      key: "stripe",
+      ok: true,
+      metric: "USD balance",
+      value: `${formatPrice(parsed.availableCents, "usd")} available · ${formatPrice(parsed.pendingCents, "usd")} pending`,
+      asOf: asOf(now),
+    };
+  } catch {
+    return unavailableStripe(now);
+  }
 }
 
 async function falCredits(
@@ -254,9 +313,10 @@ async function falCredits(
     fetchImpl,
     timeoutMs,
   );
-  if (result.kind === "error" || result.status !== 200) return null;
+  if (result.kind === "error") return unavailableFal(now, BILLING_UNAVAILABLE);
+  if (result.status !== 200) return unavailableFal(now, falFailureReason(result.status));
   const parsed = parseFalCredits(result.body);
-  if (!parsed) return null;
+  if (!parsed) return unavailableFal(now, BILLING_UNAVAILABLE);
 
   return {
     vendor: "fal.ai",
@@ -308,7 +368,7 @@ async function resendCredits(
   const auth = { authorization: `Bearer ${key}` };
 
   // Private-beta Usage API first. Quota headers on any authenticated
-  // response are the fallback. Either failing means omit — never invent 0.
+  // response are the fallback. Either failing means unavailable — never invent 0.
   const usage = await getJson(
     "https://api.resend.com/usage",
     auth,
@@ -335,14 +395,17 @@ async function resendCredits(
     if (fromProbe) return resendFromQuota(fromProbe, now);
   }
 
-  return null;
+  return unavailableResend(now);
 }
 
-async function safeVendor(load: () => Promise<VendorResult>): Promise<VendorResult> {
+async function safeVendor(
+  load: () => Promise<VendorResult>,
+  onThrow: () => VendorResult,
+): Promise<VendorResult> {
   try {
     return await load();
   } catch {
-    return null;
+    return onThrow();
   }
 }
 
@@ -352,7 +415,8 @@ async function safeVendor(load: () => Promise<VendorResult>): Promise<VendorResu
  * Anthropic and Neon are skipped: those numbers need admin / management
  * keys we do not have. VinAudit is a refill link only.
  *
- * Never throws — a vendor outage must not take down /admin.
+ * Never throws — a vendor outage must not take down /admin. Configured
+ * vendors that fail are returned as unavailable, not omitted.
  */
 export async function fetchVendorCredits(
   options: VendorCreditsOptions = {},
@@ -363,9 +427,18 @@ export async function fetchVendorCredits(
     const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
 
     const settled = await Promise.all([
-      safeVendor(() => stripeCredits(now, fetchImpl, timeoutMs)),
-      safeVendor(() => falCredits(now, fetchImpl, timeoutMs)),
-      safeVendor(() => resendCredits(now, fetchImpl, timeoutMs)),
+      safeVendor(
+        () => stripeCredits(now, timeoutMs, options.retrieveStripeBalance),
+        () => (isStripeConfigured() ? unavailableStripe(now) : null),
+      ),
+      safeVendor(
+        () => falCredits(now, fetchImpl, timeoutMs),
+        () => (isFalBillingConfigured() ? unavailableFal(now, BILLING_UNAVAILABLE) : null),
+      ),
+      safeVendor(
+        () => resendCredits(now, fetchImpl, timeoutMs),
+        () => (isEmailConfigured() ? unavailableResend(now) : null),
+      ),
     ]);
 
     return {
