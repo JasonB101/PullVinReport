@@ -20,9 +20,9 @@ function formatCount(n: number): string {
 /**
  * Compact public-records card for this year/make/model.
  *
- * Lives under What to know, not inside it: the VIN findings stay "from the
- * records below", and this card is labelled as NHTSA/EPA data for the model
- * year — not this VIN. A failed or empty fetch leaves nothing here.
+ * Sits after every VIN history section so it cannot be read as part of this
+ * car's records. Labelled as NHTSA/EPA data for the model year — not this VIN.
+ * A failed or empty fetch leaves nothing here.
  */
 export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   const [extras, setExtras] = useState<ModelExtras | null>(
@@ -80,7 +80,10 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   const hasDetails = Boolean(extras.recalls && extras.recalls.campaigns.length > 0);
 
   return (
-    <section className="rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
+    <section
+      id="model-extras"
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6"
+    >
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h2 className="text-base font-semibold tracking-tight text-slate-900">
           Also for this model

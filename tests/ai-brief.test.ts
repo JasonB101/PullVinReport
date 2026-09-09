@@ -4,7 +4,9 @@ import { afterEach, describe, it } from "node:test";
 import {
   briefFacts,
   exactYearMakeModel,
+  factsIndicateResolvedSalvageSale,
   factsIndicateSalvageChannel,
+  filterSellerQuestions,
   generateBrief,
   parseBrief,
 } from "@/lib/ai-brief";
@@ -336,6 +338,90 @@ describe("reading a brief out of a reply", () => {
     assert.equal(brief?.fromReport.length, 1);
   });
 
+  it("drops TBD questions once the salvage disposition is Sold", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2021", Make: "Subaru", Model: "Legacy" },
+          jsi: [
+            {
+              date: "2026-05-11",
+              obtainedfrom: "Copart",
+              disposition: "SOLD",
+            },
+            {
+              date: "2026-05-11",
+              obtainedfrom: "Copart",
+              disposition: "TO BE DETERMINED",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+    assert.equal(factsIndicateResolvedSalvageSale(facts), true);
+
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "A Copart salvage record from May 11, 2026 shows Sold, which usually follows a total loss.",
+        ],
+        questions: [
+          "Has that to be determined status been resolved?",
+          "What was the reason for the salvage, and are repair receipts available?",
+          "Has the open air bag recall been completed?",
+        ],
+      }),
+      "test-model",
+      { year: "2021", make: "Subaru", model: "Legacy" },
+      facts,
+    );
+    assert.deepEqual(brief?.questions, [
+      "What was the reason for the salvage, and are repair receipts available?",
+      "Has the open air bag recall been completed?",
+    ]);
+  });
+
+  it("keeps a TBD question when TBD is still the only salvage disposition", () => {
+    const facts = briefFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: { Year: "2021", Make: "Subaru", Model: "Legacy" },
+          jsi: [
+            {
+              date: "2026-05-11",
+              obtainedfrom: "Copart",
+              disposition: "TBD",
+            },
+          ],
+        },
+        VIN,
+      ),
+    );
+    assert.equal(factsIndicateResolvedSalvageSale(facts), false);
+    assert.deepEqual(
+      filterSellerQuestions(
+        ["Has the to be determined disposition been resolved?"],
+        facts,
+      ),
+      ["Has the to be determined disposition been resolved?"],
+    );
+  });
+
+  it("keeps one salvage/title-brand paperwork question, not a stacked pair", () => {
+    assert.deepEqual(
+      filterSellerQuestions([
+        "What caused the salvage entry, and can you show the repair paperwork?",
+        "Can you show the branded-title documentation and receipts?",
+        "Was the 2018 rear-end damage repaired, and are the receipts available?",
+      ]),
+      [
+        "What caused the salvage entry, and can you show the repair paperwork?",
+        "Was the 2018 rear-end damage repaired, and are the receipts available?",
+      ],
+    );
+  });
+
   it("keeps a bullet that says what a record costs without naming a number", () => {
     // The point of the brief is the clause after the record. An earlier guard
     // matched the word "worth" and threw exactly this bullet away.
@@ -492,6 +578,8 @@ describe("generating a brief", () => {
     );
     assert.match(system, /stated as facts only/);
     assert.match(system, /two sentences and 400 characters/);
+    assert.match(system, /do not ask for that paperwork twice/i);
+    assert.match(system, /Do not ask whether a TBD/);
   });
 
   it("sends no temperature, which current models reject outright", async () => {

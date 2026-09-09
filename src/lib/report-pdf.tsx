@@ -619,7 +619,6 @@ export function ReportDocument({
         </View>
 
         <Brief report={report} brief={brief} flags={flags} clear={clear} />
-        <ModelExtrasBlock extras={modelExtras} />
 
         {sections.map((section) => (
           <Section
@@ -628,6 +627,8 @@ export function ReportDocument({
             odometerRollback={section.key === "titles" && odometerRollback}
           />
         ))}
+
+        <ModelExtrasBlock extras={modelExtras} />
 
         <View style={styles.footer} fixed>
           <Text>

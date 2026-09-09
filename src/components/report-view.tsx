@@ -27,6 +27,7 @@ import {
   reportNavItems,
   searchedAndEmpty,
   withResolvedDispositions,
+  sectionClosedTitle,
   sectionCountLabel,
   sectionLead,
   sectionListingGroups,
@@ -514,7 +515,7 @@ function SectionFace({
     <>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="text-base font-semibold tracking-tight text-slate-900">
-          {section.title}
+          {sectionClosedTitle(section)}
         </h3>
         <div className="flex flex-wrap items-center gap-2">
           {odometerRollback && (
@@ -528,14 +529,8 @@ function SectionFace({
         </div>
       </div>
       {lead && (
-        <p className="mt-2 text-sm text-slate-700">
-          <span className="font-semibold text-slate-900">{lead.label}: </span>
-          {lead.text}
-        </p>
+        <p className="when-closed mt-1.5 text-sm text-slate-600">{lead.text}</p>
       )}
-      <p className="mt-1.5 max-w-2xl text-sm leading-relaxed text-slate-500">
-        {section.description}
-      </p>
     </>
   );
 }
@@ -584,36 +579,32 @@ function SectionBlock({
   const listings =
     section.layout === "listings" ? sectionListingGroups(section) : null;
   const table = listings ? null : sectionTable(section);
-  const count = sectionCountLabel(section);
 
   return (
     <section
       id={section.key}
-      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-slate-50/60 p-5 sm:p-6"
+      className="scroll-mt-32 rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3.5 sm:px-5 sm:py-4"
     >
-      {listings && listings.length > 0 ? (
-        <>
+      <ScrollOpenDetails
+        className="scroll-mt-32"
+        summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+        summary={
           <SectionFace section={section} odometerRollback={odometerRollback} />
-          <SectionRecords section={section} listings={listings} table={null} />
-        </>
-      ) : (
-        <ScrollOpenDetails
-          className="scroll-mt-32"
-          summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-          summary={
-            <>
-              <SectionFace section={section} odometerRollback={odometerRollback} />
-              <span className="when-closed mt-3 flex text-sm font-medium text-brand-600">
-                Show {count}
-              </span>
-            </>
-          }
-        >
-          <div className="border-t border-slate-200/80 pt-1">
-            <SectionRecords section={section} listings={null} table={table} />
-          </div>
-        </ScrollOpenDetails>
-      )}
+        }
+      >
+        {section.description && (
+          <p className="mt-3 max-w-2xl text-sm leading-relaxed text-slate-500">
+            {section.description}
+          </p>
+        )}
+        <div className="border-t border-slate-200/80 pt-1">
+          <SectionRecords
+            section={section}
+            listings={listings}
+            table={table}
+          />
+        </div>
+      </ScrollOpenDetails>
     </section>
   );
 }
@@ -785,8 +776,6 @@ export function ReportView({
         clear={clear}
       />
 
-      <ModelExtrasCard extras={modelExtras} token={extrasToken} />
-
       {sections.map((section) => (
         <SectionBlock
           key={section.key}
@@ -796,6 +785,8 @@ export function ReportView({
           }
         />
       ))}
+
+      <ModelExtrasCard extras={modelExtras} token={extrasToken} />
 
       <p className="px-1 text-xs leading-relaxed text-slate-500">
         {report.isSample

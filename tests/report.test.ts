@@ -19,6 +19,7 @@ import {
   reportChips,
   reportNavItems,
   searchedAndEmpty,
+  sectionClosedTitle,
   sectionCountLabel,
   sectionLead,
   sectionListingGroups,
@@ -914,10 +915,24 @@ describe("section summary cards", () => {
     });
 
     assert.equal(sectionCountLabel(titles), "1 record");
+    assert.equal(sectionClosedTitle(titles), "Title & registration history");
     assert.deepEqual(sectionLead(titles), {
       label: "Current title",
       text: "Sep 27, 2024 · TN · 121,477 mi · Title transfer",
     });
+  });
+
+  it("uses the short nav label on a closed card when one exists", () => {
+    assert.equal(
+      sectionClosedTitle(
+        section({
+          key: "jsi",
+          title: "Junk, salvage & insurance records",
+          navLabel: "Junk & salvage",
+        }),
+      ),
+      "Junk & salvage",
+    );
   });
 
   it("counts sales as chapters and snapshots", () => {

@@ -277,7 +277,7 @@ Reply with JSON and nothing else:
 
 fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the listings when FACTS.sales is present, stated as facts only. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
 commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
-questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, one of them must ask for the reason for it and for the repair documentation.`;
+questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, include one question that asks for the reason and the repair documentation. A junk/salvage entry and a branded title are usually the same event — do not ask for that paperwork twice. A distinct accident may have its own ask. Do not ask whether a TBD or "to be determined" status has been resolved when FACTS already record Sold (or another final salvage/auction disposition) for that event.`;
 
 /* -------------------------------------------------------------------------- */
 /* Reading the answer back                                                     */
@@ -373,6 +373,79 @@ function dropCleanFrontWhenSalvage(fromReport: string[], salvage: boolean): stri
   return fromReport.filter(
     (bullet) => !CLEAN_ACCIDENT_FRONT.some((pattern) => pattern.test(bullet)),
   );
+}
+
+const TBD_QUESTION =
+  /\b(tbd|to be determined|to-be-determined)\b|has that status been resolved|still (?:pending|unresolved|to be determined)|disposition (?:been )?(?:resolved|updated|finalised|finalized)|what (?:does|is) tbd/i;
+
+const PAPERWORK_ASK =
+  /paperwork|receipts?|documentation|repair records?|can you show|are (?:the )?(?:receipts|records) available|reason for/i;
+
+const SALVAGE_OR_BRAND_ASK =
+  /salvage|junk|rebuilt|branded[\s-]?title|title[\s-]?brand|insurance-loss|total(?:ed|led)? loss|\bcopart\b|\biaa\b/i;
+
+const PENDING_DISPOSITION =
+  /\b(tbd|pending|undetermined)\b|to[\s-]?be[\s-]?determined/i;
+const FINAL_DISPOSITION =
+  /\b(sold|salvaged|crushed|destroyed|scrapped|scrap|recycled|exported)\b/i;
+
+function salvageDispositionLines(facts: BriefFacts): string[] {
+  const lines: string[] = [];
+  for (const entry of facts.records) {
+    if (/junk|salvage|insurance/i.test(entry.section)) {
+      lines.push(...entry.rows);
+    }
+  }
+  if (facts.sales) {
+    for (const group of facts.sales.groups) {
+      const blob = [group.headline, ...group.channels, ...group.listings].join(
+        " ",
+      );
+      if (/\bcopart\b|\biaa\b|\bauction\b|\bsalvage\b|\bjunk\b/i.test(blob)) {
+        lines.push(...group.listings);
+      }
+    }
+  }
+  return lines;
+}
+
+/** After TBD/Sold collapse: Sold with no leftover pending row. */
+export function factsIndicateResolvedSalvageSale(facts: BriefFacts): boolean {
+  const lines = salvageDispositionLines(facts);
+  const sold = lines.some((line) => FINAL_DISPOSITION.test(line));
+  const pending = lines.some((line) => PENDING_DISPOSITION.test(line));
+  return sold && !pending;
+}
+
+/**
+ * Drops resolved-TBD questions and stacked salvage/title-brand paperwork asks.
+ *
+ * Once FACTS already record Sold for the salvage/auction event, asking whether
+ * TBD was resolved is leftover from the twin row. A junk/salvage entry and a
+ * branded title are usually one event — keep the first paperwork question.
+ */
+export function filterSellerQuestions(
+  questions: string[],
+  facts?: BriefFacts,
+): string[] {
+  let kept = questions.filter((question) => question.trim().length > 0);
+
+  if (facts && factsIndicateResolvedSalvageSale(facts)) {
+    kept = kept.filter((question) => !TBD_QUESTION.test(question));
+  }
+
+  let sawSalvageBrandPaperwork = false;
+  const out: string[] = [];
+  for (const question of kept) {
+    const salvagePaper =
+      PAPERWORK_ASK.test(question) && SALVAGE_OR_BRAND_ASK.test(question);
+    if (salvagePaper) {
+      if (sawSalvageBrandPaperwork) continue;
+      sawSalvageBrandPaperwork = true;
+    }
+    out.push(question);
+  }
+  return out.slice(0, LIMITS.questions);
 }
 
 const LISTING_FICTION = [
@@ -543,7 +616,10 @@ export function parseBrief(
   return {
     fromReport,
     commonForModel: vehicle && !exactYearMakeModel(vehicle) ? [] : common,
-    questions: bullets(payload.questions, LIMITS.questions),
+    questions: filterSellerQuestions(
+      bullets(payload.questions, LIMITS.questions),
+      facts,
+    ),
     model,
   };
 }

@@ -1215,6 +1215,11 @@ export function currentEvent(
   };
 }
 
+/** Short label on a closed history card — the nav name, not the long title. */
+export function sectionClosedTitle(section: ReportSection): string {
+  return section.navLabel ?? section.title;
+}
+
 /** Record / chapter count shown on a section's closed face. */
 export function sectionCountLabel(section: ReportSection): string {
   if (section.layout === "listings") {
