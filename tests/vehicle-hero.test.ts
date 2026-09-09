@@ -152,7 +152,7 @@ describe("the drafting placeholder", () => {
     assert.match(source, /HERO_DRAFT_COPY/);
     assert.match(source, /HERO_DRAFT_REVEAL_MS/);
     assert.match(source, /onLoad=\{markPixelsReady\}/);
-    assert.match(source, /transition-opacity duration-500/);
+    assert.match(source, /transition-opacity duration-700/);
     assert.match(source, /generating \|\| slowLoad \|\| awaitingGenerated/);
     assert.match(source, /sample \? SAMPLE_HERO_SRC/);
     assert.match(source, /role="status"/);

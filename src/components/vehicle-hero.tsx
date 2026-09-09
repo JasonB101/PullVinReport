@@ -101,13 +101,15 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
 
   return (
     <figure className="mx-auto w-full max-w-md shrink-0 md:mx-0 md:w-[min(46%,22rem)]">
-      <div className="relative grid w-full [&>*]:col-start-1 [&>*]:row-start-1">
+      <div
+        className={`relative w-full ${
+          pixelsReady ? "" : "min-h-[11rem] sm:min-h-[12.5rem]"
+        }`}
+      >
         {showDraftSlot && (
           <div
-            className={`hero-draft-layer no-print transition-opacity duration-500 ease-out ${
-              drafting
-                ? "opacity-100"
-                : "pointer-events-none absolute inset-0 opacity-0"
+            className={`hero-draft-layer no-print absolute inset-0 z-0 flex items-center justify-center transition-opacity duration-700 ease-out ${
+              drafting ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
             aria-hidden={!drafting}
           >
@@ -126,7 +128,7 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
               setAwaitingGenerated(false);
               setSrc(null);
             }}
-            className={`h-auto w-full object-contain object-center transition-opacity duration-500 ease-out ${
+            className={`relative z-10 h-auto w-full object-contain object-center transition-opacity duration-700 ease-out ${
               imageVisible ? "opacity-100" : "opacity-0"
             }`}
           />
