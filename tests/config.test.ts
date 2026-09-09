@@ -3,15 +3,18 @@ import { afterEach, describe, it } from "node:test";
 
 import {
   BRAND,
+  DEFAULT_GOOGLE_ADS_CUSTOMER_ID,
   DEFAULT_REPORT_PRICE_CENTS,
   anthropic,
   emailConfig,
   fal,
   formatPrice,
+  googleAds,
   isAnthropicAdminConfigured,
   isAnthropicConfigured,
   isFalBillingConfigured,
   isFalConfigured,
+  isGoogleAdsConfigured,
   pricing,
 } from "../src/lib/config.ts";
 
@@ -187,6 +190,42 @@ describe("the model that draws the vehicle hero", () => {
       else process.env.FAL_KEY = api;
       if (admin === undefined) delete process.env.FAL_ADMIN_KEY;
       else process.env.FAL_ADMIN_KEY = admin;
+    }
+  });
+});
+
+describe("Google Ads admin spend config", () => {
+  it("omits Google Ads until all four official Ads API vars are set", () => {
+    const keys = [
+      "GOOGLE_ADS_DEVELOPER_TOKEN",
+      "GOOGLE_ADS_CLIENT_ID",
+      "GOOGLE_ADS_CLIENT_SECRET",
+      "GOOGLE_ADS_REFRESH_TOKEN",
+      "GOOGLE_ADS_CUSTOMER_ID",
+      "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
+    ] as const;
+    const saved = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+    for (const key of keys) delete process.env[key];
+    try {
+      assert.equal(isGoogleAdsConfigured(), false);
+      process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev";
+      process.env.GOOGLE_ADS_CLIENT_ID = "client";
+      process.env.GOOGLE_ADS_CLIENT_SECRET = "secret";
+      assert.equal(isGoogleAdsConfigured(), false);
+      process.env.GOOGLE_ADS_REFRESH_TOKEN = "refresh";
+      assert.equal(isGoogleAdsConfigured(), true);
+      assert.equal(googleAds.customerId, DEFAULT_GOOGLE_ADS_CUSTOMER_ID);
+      assert.equal(googleAds.loginCustomerId, undefined);
+      process.env.GOOGLE_ADS_CUSTOMER_ID = "754-476-2158";
+      process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID = "123-456-7890";
+      assert.equal(googleAds.customerId, "7544762158");
+      assert.equal(googleAds.loginCustomerId, "1234567890");
+    } finally {
+      for (const key of keys) {
+        const value = saved[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
     }
   });
 });

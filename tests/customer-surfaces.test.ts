@@ -179,6 +179,8 @@ describe("customer-facing surfaces", () => {
       assert.doesNotMatch(source, /vendor-credits/, name);
       assert.doesNotMatch(source, /Console Billing/, name);
       assert.doesNotMatch(source, /console\.anthropic\.com/, name);
+      assert.doesNotMatch(source, /Ads spend/, name);
+      assert.doesNotMatch(source, /GOOGLE_ADS_REFRESH_TOKEN/, name);
     }
   });
 });
