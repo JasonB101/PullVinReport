@@ -37,6 +37,14 @@ describe("report view layout", () => {
       "recall campaigns must not be jammed onto one semicolon-separated line",
     );
     assert.match(card, /Campaign \{index \+ 1\}/);
+    assert.match(card, /Show details/);
+    assert.match(card, /Show \{extras\.complaints\.themes\.length\}/);
+    assert.match(card, /ScrollOpenDetails/);
+    assert.match(card, /when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600/);
+    assert.ok(
+      card.indexOf("Show details") < card.indexOf("{body}"),
+      "recall risk and remedy must sit behind the expand, not on the closed face",
+    );
   });
 
   it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {

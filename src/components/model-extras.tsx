@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 
+import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
 import { MODEL_ZONE_NOTE, NOT_THIS_VIN_CHIP } from "@/lib/report-zones";
@@ -15,6 +16,23 @@ type Props = {
 
 function formatCount(n: number): string {
   return n.toLocaleString("en-US");
+}
+
+function Chevron({ className = "" }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`h-4 w-4 shrink-0 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d="M6 9l6 6 6-6" />
+    </svg>
+  );
 }
 
 /**
@@ -110,34 +128,75 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
             </dd>
             {extras.recalls.campaigns.length > 0 && (
               <ol className="mt-3 space-y-3">
-                {extras.recalls.campaigns.map((campaign, index) => (
-                  <li
-                    key={campaign.campaign}
-                    className="rounded-xl border border-amber-200/80 bg-white/70 px-3 py-3 sm:px-4"
-                  >
-                    <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-                      Campaign {index + 1} of {extras.recalls?.campaigns.length}
-                    </p>
-                    <p className="mt-1 text-sm font-medium leading-snug text-slate-900">
-                      {campaign.title}
-                    </p>
-                    <p className="mt-0.5 font-mono text-[11px] text-slate-400">
-                      NHTSA {campaign.campaign}
-                    </p>
-                    {campaign.consequence && (
-                      <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                        <span className="font-medium text-slate-700">Risk. </span>
-                        {campaign.consequence}
-                      </p>
-                    )}
-                    {campaign.remedy && (
-                      <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
-                        <span className="font-medium text-slate-700">Remedy. </span>
-                        {campaign.remedy}
-                      </p>
-                    )}
-                  </li>
-                ))}
+                {extras.recalls.campaigns.map((campaign, index) => {
+                  const hasBody = Boolean(campaign.consequence || campaign.remedy);
+                  const face = (
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                            Campaign {index + 1} of{" "}
+                            {extras.recalls?.campaigns.length}
+                          </p>
+                          <p className="mt-1 text-sm font-medium leading-snug text-slate-900">
+                            {campaign.title}
+                          </p>
+                          <p className="mt-0.5 font-mono text-[11px] text-slate-400">
+                            NHTSA {campaign.campaign}
+                          </p>
+                        </div>
+                        {hasBody && (
+                          <Chevron className="disclosure-chevron mt-0.5 text-slate-400" />
+                        )}
+                      </div>
+                      {hasBody && (
+                        <span className="when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600">
+                          Show details
+                          <Chevron />
+                        </span>
+                      )}
+                    </>
+                  );
+                  const body = (
+                    <>
+                      {campaign.consequence && (
+                        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+                          <span className="font-medium text-slate-700">
+                            Risk.{" "}
+                          </span>
+                          {campaign.consequence}
+                        </p>
+                      )}
+                      {campaign.remedy && (
+                        <p className="mt-1.5 text-sm leading-relaxed text-slate-600">
+                          <span className="font-medium text-slate-700">
+                            Remedy.{" "}
+                          </span>
+                          {campaign.remedy}
+                        </p>
+                      )}
+                    </>
+                  );
+
+                  return (
+                    <li
+                      key={campaign.campaign}
+                      className="rounded-xl border border-amber-200/80 bg-white/70 px-3 py-3 sm:px-4"
+                    >
+                      {hasBody ? (
+                        <ScrollOpenDetails
+                          className="scroll-mt-32"
+                          summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+                          summary={face}
+                        >
+                          {body}
+                        </ScrollOpenDetails>
+                      ) : (
+                        face
+                      )}
+                    </li>
+                  );
+                })}
               </ol>
             )}
           </div>
@@ -148,19 +207,67 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
             <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               Owner complaints
             </dt>
-            <dd className="mt-0.5 text-sm text-slate-800">
-              {formatCount(extras.complaints.total)} owner{" "}
-              {extras.complaints.total === 1 ? "complaint" : "complaints"} filed
-              for the {ymm}
-              <span className="text-slate-500"> — not this VIN</span>
-              {extras.complaints.themes.length > 0 && (
-                <span className="text-slate-500">
-                  . Most-named components:{" "}
-                  {extras.complaints.themes
-                    .map((theme) => theme.component)
-                    .join(", ")}
-                  .
-                </span>
+            <dd className="mt-0.5">
+              {extras.complaints.themes.length > 0 ? (
+                <ScrollOpenDetails
+                  className="scroll-mt-32"
+                  summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+                  summary={
+                    <>
+                      <div className="flex items-start justify-between gap-2">
+                        <p className="text-sm text-slate-800">
+                          {formatCount(extras.complaints.total)} owner{" "}
+                          {extras.complaints.total === 1
+                            ? "complaint"
+                            : "complaints"}{" "}
+                          filed for the {ymm}
+                          <span className="text-slate-500"> — not this VIN</span>
+                        </p>
+                        <Chevron className="disclosure-chevron mt-0.5 text-slate-400" />
+                      </div>
+                      <p className="when-closed mt-1.5 text-sm text-slate-600">
+                        Most-named:{" "}
+                        {extras.complaints.themes
+                          .slice(0, 2)
+                          .map((theme) => theme.component)
+                          .join(", ")}
+                        {extras.complaints.themes.length > 2 ? "…" : ""}
+                      </p>
+                      <span className="when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600">
+                        Show {extras.complaints.themes.length}{" "}
+                        {extras.complaints.themes.length === 1
+                          ? "theme"
+                          : "themes"}
+                        <Chevron />
+                      </span>
+                    </>
+                  }
+                >
+                  <ul className="mt-3 space-y-2 border-t border-amber-200/70 pt-3">
+                    {extras.complaints.themes.map((theme) => (
+                      <li
+                        key={theme.component}
+                        className="flex items-baseline justify-between gap-3 text-sm"
+                      >
+                        <span className="text-slate-800">{theme.component}</span>
+                        <span className="shrink-0 tabular-nums text-slate-500">
+                          {formatCount(theme.count)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                  <p className="mt-2 text-xs text-slate-500">
+                    Component themes from NHTSA owner complaints for the {ymm}{" "}
+                    — not this VIN.
+                  </p>
+                </ScrollOpenDetails>
+              ) : (
+                <p className="text-sm text-slate-800">
+                  {formatCount(extras.complaints.total)} owner{" "}
+                  {extras.complaints.total === 1 ? "complaint" : "complaints"}{" "}
+                  filed for the {ymm}
+                  <span className="text-slate-500"> — not this VIN</span>
+                </p>
               )}
             </dd>
           </div>
