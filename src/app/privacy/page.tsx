@@ -57,12 +57,11 @@ export default function PrivacyPage() {
 
       <LegalSection heading="Who we share it with">
         <p>
-          Only the processors needed to deliver your order:{" "}
-          <strong className="text-slate-900">VinAudit</strong> (vehicle history
-          data), <strong className="text-slate-900">Stripe</strong> (payments),
-          and <strong className="text-slate-900">Resend</strong> (transactional
-          email). Each receives only what its job requires. We may also disclose
-          information where we are legally required to.
+          Only the processors needed to deliver your order: vehicle history
+          data providers, <strong className="text-slate-900">Stripe</strong>{" "}
+          (payments), and our transactional email provider. Each receives only
+          what its job requires. We may also disclose information where we are
+          legally required to.
         </p>
       </LegalSection>
 

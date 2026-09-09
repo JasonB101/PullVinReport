@@ -11,7 +11,6 @@ const COLUMNS = [
       { href: "/#vin", label: "Buy a VIN report" },
       { href: "/sample", label: "See a sample report" },
       { href: "/lookup", label: "Find my report" },
-      { href: "/status", label: "Service status" },
     ],
   },
   {

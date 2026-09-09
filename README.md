@@ -44,9 +44,9 @@ npm run dev
 Open <http://localhost:3000>.
 
 With no credentials set you can still browse the landing page, validate a VIN,
-read the full sample report, and see `/status` report exactly which services
-are missing. Checkout is disabled until VinAudit **and** Stripe are configured —
-by design.
+read the full sample report. Checkout is disabled until VinAudit **and** Stripe
+are configured — by design. `/status` is an admin page (same login as `/admin`)
+and is not linked from the public site.
 
 ## Environment
 
@@ -276,8 +276,8 @@ you" on its own.
 | `/report/[token]` | A purchased report, gated by an unguessable access token. |
 | `/lookup` | Re-open a report using the order reference plus the buyer's email. |
 | `/order/success` | Post-Stripe landing; finalises fulfillment and redirects. |
-| `/status` | Human-readable provider readiness, each check labelled *Checked live* or *Config only*. |
-| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. Each check carries a `verification` field. |
+| `/status` | Admin-only provider readiness (same session as `/admin`). Each check labelled *Checked live* or *Config only*. |
+| `/api/status` | JSON readiness; returns HTTP 503 when orders are closed. Anonymous callers see only `ordersEnabled`; signed-in admins get the full probe. |
 | `/api/brief` | Writes or returns the cached buyer brief for one order. |
 | `/api/vehicle-hero` | Draws or returns the cached cartoon hero for one order. |
 | `/api/checkout` | Creates the order and the Stripe Checkout Session. |
@@ -344,8 +344,9 @@ report" message.
 
 ## Reading `/status` honestly
 
-`/status` and `/api/status` mix two very different kinds of check, and every
-check carries a `verification` field saying which kind it is:
+`/status` is signed-in admin only. `/api/status` and `/status` mix two very
+different kinds of check, and every check carries a `verification` field saying
+which kind it is:
 
 - `probed` — we contacted the dependency while building the report. VinAudit
   (credential probe) and order storage (`ping()`) are probed.

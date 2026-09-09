@@ -33,7 +33,7 @@ export const metadata: Metadata = {
  * Whether a customer can buy right now.
  *
  * Which credential is missing is an operator concern, so the buyer gets one
- * calm sentence and a link to `/status` rather than our configuration.
+ * calm sentence rather than our configuration.
  */
 function orderingAvailability(): { available: boolean; reason?: string } {
   if (isVinAuditConfigured() && isStripeConfigured()) return { available: true };

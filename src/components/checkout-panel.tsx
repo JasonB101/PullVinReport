@@ -1,6 +1,5 @@
 "use client";
 
-import Link from "next/link";
 import { useState, type FormEvent } from "react";
 
 type Props = {
@@ -132,17 +131,11 @@ export function CheckoutPanel({
               </p>
               <p className="mt-1.5 text-sm leading-relaxed text-amber-900/80">
                 {unavailableReason ??
-                  "This deployment is missing payment or data-provider credentials."}{" "}
+                  "We've paused new orders while we restore a service this report depends on. Nothing has been charged."}{" "}
                 We will not take a payment we can&apos;t fulfil, and we never
                 substitute sample data for a paid report.
               </p>
             </div>
-            <Link
-              href="/status"
-              className="block w-full rounded-xl border border-slate-200 bg-white px-6 py-3.5 text-center text-sm font-semibold text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
-            >
-              View service status
-            </Link>
           </div>
         )}
       </div>

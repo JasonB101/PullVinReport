@@ -17,20 +17,24 @@ import { fileURLToPath } from "node:url";
  */
 const SUPPLIER = /(?<![\w/])vinaudit(?!\w)/i;
 
+/** Marketing credit and API jargon a buyer has no use for. */
+const JARGON =
+  /powered by\s+vinaudit|vinaudit\s+api|via our api|data source:\s*vinaudit/i;
+
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 
 /**
  * Where naming the supplier is legitimate.
  *
- * Operator surfaces need it to say which dependency is down; the privacy
- * policy names it because a data processor has to be disclosed; and the
- * modules that talk to it are named after it.
+ * Operator surfaces need it to say which dependency is down. The modules that
+ * talk to it are named after it. Privacy and marketing pages are not on this
+ * list — buyers read those.
  */
 const ALLOWED = [
   "app/admin/",
   "app/status/",
-  "app/privacy/",
   "app/api/checkout/route.ts",
+  "app/api/status/route.ts",
   "lib/config.ts",
   "lib/fulfillment.ts",
   "lib/status.ts",
@@ -49,6 +53,10 @@ async function sourceFiles(directory: string): Promise<string[]> {
     }),
   );
   return files.flat();
+}
+
+function readSrc(relative: string) {
+  return readFile(path.join(SRC, relative), "utf8");
 }
 
 describe("customer-facing surfaces", () => {
@@ -76,7 +84,59 @@ describe("customer-facing surfaces", () => {
     // The point of the rule is that the name is hidden from buyers, not
     // scrubbed from the codebase — an operator still has to be able to tell
     // which dependency is failing.
-    const status = await readFile(path.join(SRC, "lib/status.ts"), "utf8");
+    const status = await readSrc("lib/status.ts");
     assert.match(status, SUPPLIER);
+    const adminStatus = await readSrc("app/status/page.tsx");
+    assert.match(adminStatus, SUPPLIER);
+  });
+
+  it("does not credit the wholesale vendor in privacy or marketing copy", async () => {
+    const privacy = await readSrc("app/privacy/page.tsx");
+    assert.doesNotMatch(privacy, SUPPLIER);
+    assert.match(privacy, /vehicle history[\s\S]*data providers/);
+
+    const home = await readSrc("app/page.tsx");
+    const terms = await readSrc("app/terms/page.tsx");
+    const disclaimer = await readSrc("app/disclaimer/page.tsx");
+    const email = await readSrc("lib/email.ts");
+    const pdf = await readSrc("lib/report-pdf.tsx");
+    for (const [name, source] of [
+      ["home", home],
+      ["terms", terms],
+      ["disclaimer", disclaimer],
+      ["email", email],
+      ["pdf", pdf],
+    ] as const) {
+      assert.doesNotMatch(source, SUPPLIER, name);
+      assert.doesNotMatch(source, JARGON, name);
+    }
+  });
+
+  it("does not link public visitors to /status", async () => {
+    const footer = await readSrc("components/site-footer.tsx");
+    const header = await readSrc("components/site-header.tsx");
+    const checkout = await readSrc("components/checkout-panel.tsx");
+    const home = await readSrc("app/page.tsx");
+    assert.doesNotMatch(footer, /href=["']\/status["']/);
+    assert.doesNotMatch(header, /\/status/);
+    assert.doesNotMatch(checkout, /href=["']\/status["']/);
+    assert.doesNotMatch(home, /href=["']\/status["']/);
+  });
+
+  it("gates /status behind the same admin session as /admin", async () => {
+    const page = await readSrc("app/status/page.tsx");
+    assert.match(page, /isAdminAuthenticated/);
+    assert.match(page, /redirect\("\/admin\/login"\)/);
+    assert.match(page, /robots:\s*\{\s*index:\s*false/);
+
+    const robots = await readSrc("app/robots.ts");
+    assert.match(robots, /"\/status"/);
+  });
+
+  it("keeps anonymous /api/status free of provider names", async () => {
+    const route = await readSrc("app/api/status/route.ts");
+    assert.match(route, /isAdminAuthenticated/);
+    assert.match(route, /ordersEnabled: report\.ordersEnabled/);
+    assert.doesNotMatch(route, /VinAudit Vehicle History API/);
   });
 });
