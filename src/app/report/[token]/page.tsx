@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { GoogleAdsPurchase } from "@/components/google-ads-purchase";
 import { PrintButton } from "@/components/print-button";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
@@ -160,11 +161,14 @@ export default async function ReportPage({
         <div className="no-print border-b border-slate-200 bg-white">
           <div className="container-page py-8">
             {isNew && (
-              <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
-                <span className="font-semibold">Payment received.</span> Your
-                report is below and a private link is on its way to{" "}
-                {order.email}.
-              </div>
+              <>
+                <GoogleAdsPurchase orderId={order.id} />
+                <div className="mb-6 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+                  <span className="font-semibold">Payment received.</span> Your
+                  report is below and a private link is on its way to{" "}
+                  {order.email}.
+                </div>
+              </>
             )}
 
             <div className="flex flex-wrap items-end justify-between gap-4">

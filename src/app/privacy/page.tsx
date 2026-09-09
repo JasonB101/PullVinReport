@@ -8,7 +8,7 @@ export const metadata: Metadata = {
   description: `How ${BRAND.name} collects, uses and retains the small amount of personal information needed to sell you a vehicle history report.`,
 };
 
-const UPDATED = "January 2026";
+const UPDATED = "September 2026";
 
 export default function PrivacyPage() {
   return (
@@ -59,9 +59,11 @@ export default function PrivacyPage() {
         <p>
           Only the processors needed to deliver your order: vehicle history
           data providers, <strong className="text-slate-900">Stripe</strong>{" "}
-          (payments), and our transactional email provider. Each receives only
-          what its job requires. We may also disclose information where we are
-          legally required to.
+          (payments), our transactional email provider, and{" "}
+          <strong className="text-slate-900">Google</strong> (a conversion tag
+          after a paid checkout, so the purchase can be recorded for advertising
+          measurement). Each receives only what its job requires. We may also
+          disclose information where we are legally required to.
         </p>
       </LegalSection>
 
@@ -77,8 +79,11 @@ export default function PrivacyPage() {
 
       <LegalSection heading="Cookies">
         <p>
-          The public site does not use advertising or analytics cookies. A single
-          cookie is set only when an administrator signs in to the internal
+          The public marketing pages, the sample report, and an abandoned
+          checkout do not load advertising or analytics tags. After a paid
+          Stripe checkout we load Google&apos;s conversion tag on the order
+          confirmation so the purchase can be recorded. A single first-party
+          cookie is also set when an administrator signs in to the internal
           console. Stripe sets its own cookies on its hosted checkout page under
           its own policy.
         </p>
