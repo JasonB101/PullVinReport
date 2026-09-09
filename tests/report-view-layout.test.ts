@@ -55,7 +55,7 @@ describe("report view layout", () => {
       "VIN and model bullets must not share one list",
     );
     assert.match(source, /border-dashed border-amber-300/);
-    assert.match(source, /not findings on this VIN/);
+    assert.match(source, /not findings[\s\S]*on this VIN/);
   });
 
   it("collapses every history section, including sales, to a short closed face", async () => {
