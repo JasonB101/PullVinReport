@@ -753,8 +753,9 @@ async function safeVendor(
  * Anthropic is included only with ANTHROPIC_ADMIN_API_KEY (MTD spend plus
  * a Console Billing link — remaining prepaid credits are not API-available).
  * Google Ads is included only when the four official Ads API env vars are
- * set. Neon is skipped until a management key exists. VinAudit is a refill
- * link only.
+ * set. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is sent as login-customer-id when set
+ * (required for the usual MCC developer-token path). Neon is skipped
+ * until a management key exists. VinAudit is a refill link only.
  *
  * Never throws — a vendor outage must not take down /admin. Configured
  * vendors that fail are returned as unavailable, not omitted.

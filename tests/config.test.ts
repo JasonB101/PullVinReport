@@ -195,7 +195,7 @@ describe("the model that draws the vehicle hero", () => {
 });
 
 describe("Google Ads admin spend config", () => {
-  it("omits Google Ads until all four official Ads API vars are set", () => {
+  it("omits Google Ads until all four official Ads API vars are set, and strips MCC ids", () => {
     const keys = [
       "GOOGLE_ADS_DEVELOPER_TOKEN",
       "GOOGLE_ADS_CLIENT_ID",

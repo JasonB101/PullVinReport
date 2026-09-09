@@ -120,6 +120,13 @@ describe("admin console", () => {
     assert.match(credits, /DURING \$\{range\}/);
     assert.match(credits, /"TODAY"/);
     assert.match(credits, /"THIS_MONTH"/);
+    assert.match(credits, /login-customer-id/);
+    const envExample = await readFile(
+      fileURLToPath(new URL("../.env.example", import.meta.url)),
+      "utf8",
+    );
+    assert.match(envExample, /GOOGLE_ADS_LOGIN_CUSTOMER_ID/);
+    assert.match(envExample, /manager \(MCC\)|MCC \/ manager/i);
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
     assert.doesNotMatch(credits, /from ["']@\/lib\/google-ads["']/);
     const stripe = await readSrc("lib/stripe.ts");

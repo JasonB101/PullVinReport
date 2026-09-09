@@ -159,8 +159,10 @@ function digitsEnv(key: string): string | undefined {
  *
  * All four auth values must be present or the tile is omitted — never
  * shown as $0.00. `GOOGLE_ADS_CUSTOMER_ID` defaults to the PullVinReport
- * account. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is MCC-only; leave it unset
- * for a direct account and the login-customer-id header is not sent.
+ * account. Developer tokens are issued on a manager (MCC) account, so
+ * `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is required on that path and is sent as
+ * `login-customer-id`. Leave it unset only for a direct-account token;
+ * the header is then omitted.
  */
 export const googleAds = {
   get developerToken(): string | undefined {

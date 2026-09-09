@@ -70,7 +70,7 @@ version:
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
 | `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` | No | Official Google Ads API credentials for /admin spend today + MTD. Omit any and the tile is hidden; a failed call is unavailable, never $0.00. |
 | `GOOGLE_ADS_CUSTOMER_ID` | No (default `7544762158`) | Ads customer id, digits only. |
-| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | No | MCC login customer. Unset for a direct account (header omitted). |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Required when the developer token is on an MCC | Manager customer id, sent as `login-customer-id`. Developer tokens are issued on a manager account, so this is required for the usual MCC → client (`7544762158`) path. Unset omits the header (direct-account token only). |
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
 | `FAL_ADMIN_KEY` | No | Admin-scope fal key for the /admin credit balance. An API-scope `FAL_KEY` is shown as unavailable (needs Admin-scope key) instead of 0. |
 | `FAL_IMAGE_MODEL` | No (default `fal-ai/recraft/v3/text-to-image`) | fal.ai model id. Recraft V3's digital-illustration style is the default so the picture cannot read as a photo of this VIN. Recraft V4 on fal has no style lock. |
