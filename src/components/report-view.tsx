@@ -532,10 +532,12 @@ function EpisodeFacts({ group }: { group: ListingGroup }) {
   return (
     <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
       {facts.map((field, index) => (
-        <span key={`${field.label}-${index}`}>
+        <span key={`${field.label}-${index}`} className="min-w-0 break-words">
           {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
           <span className="text-slate-400">{field.label}: </span>
-          <span className="text-slate-700">{field.value}</span>
+          <span className="text-slate-700">
+            <FieldValue value={field.value} />
+          </span>
         </span>
       ))}
     </span>
