@@ -44,6 +44,7 @@ import {
   formatGeneratedAt,
   foundIssueChecks,
   hasOdometerRollback,
+  headerSpecifications,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -575,6 +576,7 @@ export function ReportDocument({
   const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
+  const specList = headerSpecifications(report);
   const contents = reportNavItems(report).map((item) => item.label);
   const odometerRollback = hasOdometerRollback(report.odometer);
 
@@ -596,11 +598,11 @@ export function ReportDocument({
         <Text style={styles.vehicle}>{title}</Text>
         <Text style={styles.vin}>{prettyVin(report.vin)}</Text>
         <Chips report={report} />
-        {report.specifications.length > 0 && (
+        {specList.length > 0 && (
           <View style={styles.headerSpecs} wrap={false}>
             <Text style={styles.metaLabel}>Specifications</Text>
             <View style={styles.specGrid}>
-              {report.specifications.map((spec, index) => (
+              {specList.map((spec, index) => (
                 <View key={`${spec.label}-${index}`} style={styles.spec}>
                   <Text style={styles.specLabel}>{spec.label}</Text>
                   <Text>{spec.value}</Text>

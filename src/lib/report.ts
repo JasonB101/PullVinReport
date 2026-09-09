@@ -1,3 +1,10 @@
+import {
+  colorFieldValues,
+  isPaintColorLabel,
+  PAINT_COLOR_LABEL,
+  pickColor,
+} from "@/lib/vehicle-color";
+
 /**
  * The normalized report model that every renderer in the app consumes.
  *
@@ -1371,6 +1378,7 @@ export function sectionLead(
 
 /** Specs worth stating on the vehicle card before anyone opens the rest. */
 const HEADER_SPEC_LABELS = [
+  "Color",
   "Style",
   "Engine",
   "Drive type",
@@ -1395,6 +1403,40 @@ function alreadyStated(picked: Field[], value: string): boolean {
   const needle = value.trim().toLowerCase();
   if (!needle) return true;
   return picked.some((field) => field.value.trim().toLowerCase().includes(needle));
+}
+
+/**
+ * Exterior paint on this report, or empty when none was recorded.
+ *
+ * Build-record specs win when they name a paint colour. Otherwise the listing
+ * rows are asked, with the same paint-vs-interior rules the hero uses. Nothing
+ * is invented: no colour in the records means no colour here.
+ */
+export function reportPaintColor(report: VehicleReport): string {
+  const fromSpecs = pickColor(colorFieldValues(report.specifications));
+  if (fromSpecs) return fromSpecs;
+
+  const listingFields = report.sections
+    .filter((section) => section.layout === "listings" || section.key === "sales")
+    .flatMap((section) => sectionListings(section))
+    .flatMap((listing) => [...listing.summary, ...listing.detail]);
+  return pickColor(colorFieldValues(listingFields));
+}
+
+export function reportPaintColorField(report: VehicleReport): Field | null {
+  const value = reportPaintColor(report);
+  return value ? { label: PAINT_COLOR_LABEL, value } : null;
+}
+
+/**
+ * Specs shown on the vehicle card, with paint colour lifted to a single Color
+ * row when the records have one. Listing-only paint still appears here so it
+ * is not trapped behind a closed sales chapter.
+ */
+export function headerSpecifications(report: VehicleReport): Field[] {
+  const color = reportPaintColorField(report);
+  const rest = report.specifications.filter((field) => !isPaintColorLabel(field.label));
+  return color ? [color, ...rest] : rest;
 }
 
 export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {

@@ -63,6 +63,16 @@ describe("report view layout", () => {
     assert.match(source, /hidden overflow-x-auto[\s\S]*sm:block print:block/);
   });
 
+  it("builds the header spec line and Vehicle specifications from headerSpecifications", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /headerSpecifications\(report\)/);
+    assert.match(source, /headerSpecSummary\(specList\)/);
+    assert.match(source, /<HeaderSpecs specifications=\{specList\} \/>/);
+  });
+
   it("promotes the summary under the vehicle title when findings exist", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),

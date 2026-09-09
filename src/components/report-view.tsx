@@ -22,6 +22,7 @@ import {
   formatGeneratedAt,
   foundIssueChecks,
   hasOdometerRollback,
+  headerSpecifications,
   headerSpecSummary,
   reportChips,
   reportNavItems,
@@ -722,7 +723,7 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
       }
     >
       <p className="mt-3 text-xs text-slate-500">
-        Decoded from the VIN and the manufacturer&apos;s build record.
+        From the VIN build record and listing fields on this report.
       </p>
       <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
         {specifications.map((spec, index) => (
@@ -791,7 +792,8 @@ export function ReportView({
 }) {
   const report = withResolvedDispositions(incoming);
   const chips = reportChips(report);
-  const specs = headerSpecSummary(report.specifications);
+  const specList = headerSpecifications(report);
+  const specs = headerSpecSummary(specList);
   const facts = heroFacts(report);
   const illustrationAlt = facts
     ? heroAlt(facts)
@@ -860,7 +862,7 @@ export function ReportView({
           </div>
         )}
 
-        <HeaderSpecs specifications={report.specifications} />
+        <HeaderSpecs specifications={specList} />
       </header>
 
       <JumpNav report={report} />

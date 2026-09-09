@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { sectionListingGroups } from "../src/lib/report.ts";
+import { headerSpecifications, sectionListingGroups } from "../src/lib/report.ts";
 import {
   buildSampleModelExtras,
   buildSampleReport,
@@ -40,6 +40,15 @@ describe("sample report", () => {
     assert.ok((extras.complaints?.total ?? 0) > 0);
     assert.equal(extras.mpg?.city, 24);
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
+  });
+
+  it("surfaces Super White from the listing rows on the vehicle card", () => {
+    const specs = headerSpecifications(buildSampleReport());
+    assert.deepEqual(specs[0], { label: "Color", value: "Super White" });
+    assert.equal(
+      specs.some((field) => field.label === "Interior colour" || /ivory|ash/i.test(field.value)),
+      false,
+    );
   });
 
   it("folds sister rooftops into listing chapters so the sample shows that layout", () => {

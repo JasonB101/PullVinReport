@@ -4,6 +4,7 @@ import { describe, it } from "node:test";
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
 import {
   currentEvent,
+  headerSpecifications,
   headerSpecSummary,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
@@ -17,6 +18,7 @@ import {
   preferResolvedDisposition,
   recordCalendarDay,
   reportChips,
+  reportPaintColor,
   reportNavItems,
   searchedAndEmpty,
   sectionClosedTitle,
@@ -782,6 +784,113 @@ describe("the specs on the vehicle card", () => {
         { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
         { label: "Fuel type", value: "Gasoline" },
       ],
+    );
+  });
+
+  it("puts a build-record paint colour first on the header line", () => {
+    const specs = headerSpecifications(
+      report({
+        specifications: [
+          { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+          { label: "Exterior color", value: "Crystal White Pearl" },
+          { label: "Engine", value: "2.4L H4" },
+          { label: "Fuel type", value: "Gasoline" },
+        ],
+        sections: [
+          section({
+            key: "sales",
+            layout: "listings",
+            records: [
+              [
+                { label: "Date", value: "May 12, 2024" },
+                { label: "Vehicle color", value: "Magnetite Gray" },
+              ],
+            ],
+          }),
+        ],
+      }),
+    );
+    assert.deepEqual(specs[0], { label: "Color", value: "Crystal White Pearl" });
+    assert.equal(
+      specs.some((field) => /magnetite/i.test(field.value) || /exterior/i.test(field.label)),
+      false,
+    );
+    assert.deepEqual(headerSpecSummary(specs).map((field) => field.value), [
+      "Crystal White Pearl",
+      "Limited Sedan AWD CVT 2.4L H4",
+      "Gasoline",
+    ]);
+  });
+
+  it("uses listing Vehicle color when the build record has none", () => {
+    const paid = report({
+      specifications: [
+        { label: "Style", value: "Limited Sedan AWD CVT 2.4L H4" },
+        { label: "Engine", value: "2.4L H4" },
+      ],
+      sections: [
+        section({
+          key: "sales",
+          layout: "listings",
+          records: [
+            [
+              { label: "Date", value: "May 12, 2024" },
+              { label: "Vehicle color", value: "Magnetite Gray" },
+              { label: "Interior color", value: "Ivory" },
+            ],
+            [
+              { label: "Date", value: "May 13, 2024" },
+              { label: "Vehicle color", value: "Gray" },
+            ],
+            [
+              { label: "Date", value: "May 14, 2024" },
+              { label: "Exterior color", value: "Magnetite Gray" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(reportPaintColor(paid), "Magnetite Gray");
+    const specs = headerSpecifications(paid);
+    assert.deepEqual(specs[0], { label: "Color", value: "Magnetite Gray" });
+    assert.match(headerSpecSummary(specs).map((field) => field.value).join(" · "), /Magnetite Gray/);
+  });
+
+  it("omits colour when the report has none", () => {
+    const bare = report({
+      specifications: [
+        { label: "Style", value: "4 Door Sedan" },
+        { label: "Engine", value: "2.5L L4" },
+      ],
+    });
+    assert.equal(reportPaintColor(bare), "");
+    assert.equal(
+      headerSpecifications(bare).some((field) => field.label === "Color"),
+      false,
+    );
+  });
+
+  it("does not prefer an interior colour over exterior paint", () => {
+    const interiorOnly = report({
+      specifications: [{ label: "Interior color", value: "Ivory" }],
+      sections: [
+        section({
+          key: "sales",
+          layout: "listings",
+          records: [
+            [
+              { label: "Date", value: "May 12, 2024" },
+              { label: "Interior color", value: "Ivory" },
+              { label: "Interior colour", value: "Ivory leather" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(reportPaintColor(interiorOnly), "");
+    assert.equal(
+      headerSpecifications(interiorOnly).some((field) => field.label === "Color"),
+      false,
     );
   });
 });

@@ -9,7 +9,7 @@
  */
 import { fal, isFalConfigured } from "@/lib/config";
 import type { Field, VehicleReport } from "@/lib/report";
-import { sectionListings } from "@/lib/report";
+import { reportPaintColor, sectionListings } from "@/lib/report";
 import type { VehicleHeroRecord } from "@/lib/store";
 
 export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.svg";
@@ -43,32 +43,6 @@ function fieldValues(fields: Field[], labels: string[]): string[] {
     .map((field) => normalizePart(field.value));
 }
 
-function isInteriorColorLabel(label: string): boolean {
-  return /\binterior\b/.test(label.toLowerCase());
-}
-
-/** Exterior / vehicle paint — includes `Vehicle color`, not just `Exterior color`. */
-function isPaintColorLabel(label: string): boolean {
-  const lower = label.toLowerCase();
-  if (isInteriorColorLabel(lower)) return false;
-  return /\bcolou?r\b/.test(lower) || /\bpaint\b/.test(lower);
-}
-
-function isPreferredPaintLabel(label: string): boolean {
-  const lower = label.toLowerCase();
-  return /\bvehicle\b|\bexterior\b|\bext\b|\bpaint\b|\bbody\b/.test(lower);
-}
-
-function colorFieldValues(fields: Field[]): string[] {
-  const paint = fields.filter(
-    (field) => isPaintColorLabel(field.label) && field.value.trim(),
-  );
-  const preferred = paint.filter((field) => isPreferredPaintLabel(field.label));
-  return (preferred.length > 0 ? preferred : paint).map((field) =>
-    normalizePart(field.value),
-  );
-}
-
 function pickRicher(base: string, candidates: string[]): string {
   const cleaned = [base, ...candidates]
     .map(normalizePart)
@@ -87,25 +61,10 @@ function pickRicher(base: string, candidates: string[]): string {
   return cleaned.sort((a, b) => b.length - a.length)[0] ?? "";
 }
 
-function pickColor(candidates: string[]): string {
-  const counts = new Map<string, { value: string; count: number }>();
-  for (const raw of candidates) {
-    const value = normalizePart(raw);
-    if (!value) continue;
-    const key = value.toLowerCase();
-    const existing = counts.get(key);
-    if (existing) existing.count += 1;
-    else counts.set(key, { value, count: 1 });
-  }
-  return [...counts.values()].sort(
-    (a, b) => b.count - a.count || b.value.length - a.value.length,
-  )[0]?.value ?? "";
-}
-
 /**
  * The facts an illustration may use — year, make, model, a richer listing
- * trim when one exists, an exterior colour from the listings, body style.
- * The VIN is never part of this.
+ * trim when one exists, an exterior colour from the build record or listings,
+ * body style. The VIN is never part of this.
  */
 export function heroFacts(report: VehicleReport): HeroFacts | null {
   const year = normalizePart(report.vehicle.year ?? "");
@@ -123,7 +82,7 @@ export function heroFacts(report: VehicleReport): HeroFacts | null {
   const allFields = [...listingFields, ...recordFields, ...specFields];
 
   const trim = pickRicher(report.vehicle.trim ?? "", fieldValues(allFields, TRIM_LABELS));
-  const color = pickColor(colorFieldValues(allFields));
+  const color = reportPaintColor(report);
   const bodyStyle = normalizePart(report.vehicle.bodyStyle ?? "");
   const engine = normalizePart(report.vehicle.engine ?? "");
 
