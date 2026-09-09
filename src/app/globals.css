@@ -114,3 +114,70 @@ details[open] .when-closed {
 details[open] > summary .disclosure-chevron {
   transform: rotate(180deg);
 }
+
+/* Drafting vehicle hero — sketch lines, not a spinner. */
+@keyframes hero-draft-dash {
+  to {
+    stroke-dashoffset: -64;
+  }
+}
+
+@keyframes hero-draft-shimmer {
+  0% {
+    transform: translateX(-70%);
+    opacity: 0;
+  }
+  28% {
+    opacity: 0.55;
+  }
+  100% {
+    transform: translateX(140%);
+    opacity: 0;
+  }
+}
+
+@keyframes hero-draft-pencil {
+  0%,
+  100% {
+    transform: translate(0, 0);
+  }
+  50% {
+    transform: translate(-10px, 6px);
+  }
+}
+
+@keyframes hero-draft-breathe {
+  0%,
+  100% {
+    opacity: 0.22;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.hero-draft-stroke {
+  stroke-dasharray: 7 9;
+  animation: hero-draft-dash 3s linear infinite;
+}
+
+.hero-draft-guide {
+  animation: hero-draft-breathe 2.8s ease-in-out infinite;
+}
+
+.hero-draft-shimmer {
+  animation: hero-draft-shimmer 2.6s ease-in-out infinite;
+}
+
+.hero-draft-pencil {
+  animation: hero-draft-pencil 2.2s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-draft-stroke,
+  .hero-draft-guide,
+  .hero-draft-shimmer,
+  .hero-draft-pencil {
+    animation: none;
+  }
+}
