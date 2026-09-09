@@ -19,18 +19,28 @@ describe("report view layout", () => {
       extras > sections,
       "the model card must follow the VIN history sections, not sit under What to know",
     );
-    assert.match(source, /border-t-2 border-dashed border-amber-300/);
-    assert.match(source, /MODEL_ZONE_TITLE/);
     assert.match(source, /THIS_VIN_CHIP/);
+    assert.match(source, /modelExtras=\{hasModelExtras\(modelExtras\)\}/);
+    assert.doesNotMatch(
+      source,
+      /hasModelExtras\(modelExtras\) \|\|/,
+      "do not reserve a model-zone slot just because a token exists",
+    );
 
     const card = await readFile(
       fileURLToPath(new URL("../src/components/model-extras.tsx", import.meta.url)),
       "utf8",
     );
+    assert.match(card, /MODEL_ZONE_TITLE/);
+    assert.match(card, /border-t-2 border-dashed border-amber-300/);
     assert.match(card, /id="model-extras"/);
     assert.match(card, /NOT_THIS_VIN_CHIP/);
     assert.match(card, /border-dashed border-amber-300/);
     assert.match(card, /Also for this model/);
+    assert.match(card, /if \(!hasModelExtras\(extras\)\) return null/);
+    assert.doesNotMatch(card, /Checking public records/);
+    assert.doesNotMatch(card, /failed to load/i);
+    assert.doesNotMatch(card, /aria-busy/);
     assert.doesNotMatch(
       card,
       /campaigns\.map\(\(row\) => row\.title\)\.join\(/,
@@ -165,7 +175,14 @@ describe("sample and paid extras parity", () => {
     assert.match(paidPage, /modelExtras=\{modelExtras\}/);
     assert.match(paidPage, /extrasToken=\{token\}/);
     assert.match(view, /<ModelExtrasCard extras=\{modelExtras\} token=\{extrasToken\} \/>/);
-    assert.match(view, /MODEL_ZONE_TITLE/);
+    assert.match(view, /modelExtras=\{hasModelExtras\(modelExtras\)\}/);
+
+    const card = await readFile(
+      fileURLToPath(new URL("../src/components/model-extras.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(card, /MODEL_ZONE_TITLE/);
+    assert.match(card, /if \(!hasModelExtras\(extras\)\) return null/);
 
     const extrasAfter = view.indexOf("<ModelExtrasCard");
     const sections = view.indexOf("{sections.map((section) =>");

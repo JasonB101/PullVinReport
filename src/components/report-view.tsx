@@ -6,7 +6,7 @@ import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
-import { MODEL_ZONE_TITLE, THIS_VIN_CHIP } from "@/lib/report-zones";
+import { THIS_VIN_CHIP } from "@/lib/report-zones";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -875,7 +875,7 @@ export function ReportView({
 
       <JumpNav
         report={report}
-        modelExtras={hasModelExtras(modelExtras) || Boolean(extrasToken)}
+        modelExtras={hasModelExtras(modelExtras)}
       />
 
       <WhatToKnow
@@ -896,20 +896,7 @@ export function ReportView({
         />
       ))}
 
-      {(hasModelExtras(modelExtras) || extrasToken) && (
-        <section
-          aria-labelledby="model-zone-heading"
-          className="border-t-2 border-dashed border-amber-300 pt-6"
-        >
-          <p
-            id="model-zone-heading"
-            className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900"
-          >
-            {MODEL_ZONE_TITLE}
-          </p>
-          <ModelExtrasCard extras={modelExtras} token={extrasToken} />
-        </section>
-      )}
+      <ModelExtrasCard extras={modelExtras} token={extrasToken} />
 
       <p className="px-1 text-xs leading-relaxed text-slate-500">
         {report.isSample

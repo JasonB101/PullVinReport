@@ -121,6 +121,29 @@ describe("report PDF", () => {
     assert.match(source, /complaintSamples\(extras\.complaints\)/);
     assert.match(source, /clipPdf\(sample\.summary\)/);
     assert.match(source, /owner write-ups[\s\S]*not this VIN/);
+    assert.match(source, /if \(!hasModelExtras\(extras\)\) return null/);
+    assert.doesNotMatch(source, /failed to load/i);
+  });
+
+  it("omits the model zone from the PDF when extras are missing", async () => {
+    const withExtras = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      buildSampleModelExtras(),
+    );
+    const without = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      null,
+    );
+    assert.ok(
+      withExtras.byteLength > without.byteLength,
+      "empty extras must not leave a placeholder card in the PDF",
+    );
+    const haystack = (pdf: Buffer) => pdf.toString("latin1");
+    assert.match(haystack(withExtras), /About this model/);
+    assert.doesNotMatch(haystack(without), /About this model/);
+    assert.doesNotMatch(haystack(without), /failed to load/i);
   });
 
   it("attaches model extras to the receipt PDF so the email copy matches the page", async () => {

@@ -11,14 +11,19 @@ import {
   engineDisplacementHint,
   extrasForReport,
   hasModelExtras,
+  isRetryableHttpStatus,
   matchingEpaOptions,
+  MODEL_EXTRAS_FETCH_ATTEMPTS,
   modelExtrasSummaryLine,
   parseComplaintsPayload,
   parseEpaOptions,
   parseEpaVehicle,
   parseRecallsPayload,
   pickMpg,
+  requestPaidModelExtras,
   resetModelExtrasCacheForTests,
+  resetModelExtrasRetryForTests,
+  setModelExtrasRetryDelaysForTests,
   ymmCacheKey,
   ymmFromVehicle,
 } from "@/lib/model-extras";
@@ -250,6 +255,27 @@ describe("model extras parsers", () => {
     assert.ok(ymm);
     assert.equal(composeModelExtras(ymm, {}), null);
     assert.equal(hasModelExtras(null), false);
+    assert.equal(
+      hasModelExtras({
+        year: "2012",
+        make: "Toyota",
+        model: "Camry",
+        ymmLabel: "2012 Toyota Camry",
+      }),
+      false,
+    );
+  });
+});
+
+describe("model extras retry policy", () => {
+  it("retries transient HTTP failures three times and not 404s", () => {
+    assert.equal(MODEL_EXTRAS_FETCH_ATTEMPTS, 3);
+    assert.equal(isRetryableHttpStatus(500), true);
+    assert.equal(isRetryableHttpStatus(503), true);
+    assert.equal(isRetryableHttpStatus(429), true);
+    assert.equal(isRetryableHttpStatus(408), true);
+    assert.equal(isRetryableHttpStatus(404), false);
+    assert.equal(isRetryableHttpStatus(400), false);
   });
 });
 
@@ -292,6 +318,7 @@ describe("model extras fetch and cache", () => {
   let calls = 0;
 
   before(() => {
+    setModelExtrasRetryDelaysForTests([0, 0]);
     globalThis.fetch = (async (input: RequestInfo | URL) => {
       calls += 1;
       const href = String(input);
@@ -317,6 +344,7 @@ describe("model extras fetch and cache", () => {
   after(() => {
     globalThis.fetch = realFetch;
     resetModelExtrasCacheForTests();
+    resetModelExtrasRetryForTests();
   });
 
   it("fetches once per YMM and reuses that for another order of the same car", async () => {
@@ -396,5 +424,137 @@ describe("model extras fetch and cache", () => {
     });
     assert.equal(extras, null);
     assert.equal(calls, before);
+  });
+
+  it("retries a 5xx then returns the slice that recovered", async () => {
+    resetModelExtrasCacheForTests();
+    let recallTries = 0;
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("recallsByVehicle")) {
+        recallTries += 1;
+        if (recallTries < MODEL_EXTRAS_FETCH_ATTEMPTS) {
+          return new Response("down", { status: 503 });
+        }
+      }
+      return previous(input);
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.ok(extras);
+      assert.equal(extras.recalls?.total, 2);
+      assert.equal(recallTries, MODEL_EXTRAS_FETCH_ATTEMPTS);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("retries a timeout then keeps the recovered slice", async () => {
+    resetModelExtrasCacheForTests();
+    let complaintTries = 0;
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("complaintsByVehicle")) {
+        complaintTries += 1;
+        if (complaintTries < 2) throw new Error("timeout");
+      }
+      return previous(input);
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.ok(extras);
+      assert.ok(extras.complaints);
+      assert.equal(complaintTries, 2);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("does not retry a 404 and omits extras when every slice stays empty", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const seen: Record<string, number> = {};
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      const key = href.includes("recalls")
+        ? "recalls"
+        : href.includes("complaints")
+          ? "complaints"
+          : href.includes("menu/options")
+            ? "epa"
+            : "other";
+      seen[key] = (seen[key] ?? 0) + 1;
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.equal(extras, null);
+      assert.equal(seen.recalls, 1);
+      assert.equal(seen.complaints, 1);
+      assert.equal(seen.epa, 1);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("gives up after three 5xx attempts and omits the empty model zone", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const seen: Record<string, number> = {};
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      const key = href.includes("recalls")
+        ? "recalls"
+        : href.includes("complaints")
+          ? "complaints"
+          : href.includes("menu/options")
+            ? "epa"
+            : "other";
+      seen[key] = (seen[key] ?? 0) + 1;
+      return new Response("down", { status: 503 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport(buildSampleReport());
+      assert.equal(extras, null);
+      assert.equal(seen.recalls, MODEL_EXTRAS_FETCH_ATTEMPTS);
+      assert.equal(seen.complaints, MODEL_EXTRAS_FETCH_ATTEMPTS);
+      assert.equal(seen.epa, MODEL_EXTRAS_FETCH_ATTEMPTS);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+});
+
+describe("paid extras client request", () => {
+  it("retries 5xx then returns extras, and stops on a clean unavailable", async () => {
+    setModelExtrasRetryDelaysForTests([0, 0]);
+    try {
+      let tries = 0;
+      const recovered = await requestPaidModelExtras("tok", async () => {
+        tries += 1;
+        if (tries < 3) return new Response("down", { status: 503 });
+        return new Response(
+          JSON.stringify({ status: "ready", extras: buildSampleModelExtras() }),
+          { status: 200 },
+        );
+      });
+      assert.ok(recovered);
+      assert.equal(recovered.recalls?.total, 2);
+      assert.equal(tries, 3);
+
+      let unavailableTries = 0;
+      const empty = await requestPaidModelExtras("tok", async () => {
+        unavailableTries += 1;
+        return new Response(JSON.stringify({ status: "unavailable" }), {
+          status: 200,
+        });
+      });
+      assert.equal(empty, null);
+      assert.equal(unavailableTries, 1);
+    } finally {
+      resetModelExtrasRetryForTests();
+    }
   });
 });

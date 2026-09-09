@@ -4,8 +4,16 @@ import { useEffect, useState } from "react";
 
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import type { ModelComplaints, ModelExtras } from "@/lib/model-extras";
-import { complaintSamples, hasModelExtras } from "@/lib/model-extras";
-import { MODEL_ZONE_NOTE, NOT_THIS_VIN_CHIP } from "@/lib/report-zones";
+import {
+  complaintSamples,
+  hasModelExtras,
+  requestPaidModelExtras,
+} from "@/lib/model-extras";
+import {
+  MODEL_ZONE_NOTE,
+  MODEL_ZONE_TITLE,
+  NOT_THIS_VIN_CHIP,
+} from "@/lib/report-zones";
 
 type Props = {
   /** Already-summarised extras, from a cache hit or the sample fixture. */
@@ -168,39 +176,21 @@ function OwnerComplaints({
  *
  * Sits after every VIN history section, in a dashed/amber zone, so it cannot
  * be read as part of this car's records. Labelled as NHTSA/EPA data for the
- * model year — not this VIN. A failed or empty fetch leaves nothing here.
+ * model year — not this VIN. A failed, timed-out or empty fetch — after
+ * retries — omits this entire block. No loading stub, no "failed" card.
  */
 export function ModelExtrasCard({ extras: cached = null, token }: Props) {
   const [extras, setExtras] = useState<ModelExtras | null>(
     hasModelExtras(cached) ? cached : null,
   );
-  const [failed, setFailed] = useState(false);
-  const pending = !extras && !failed && Boolean(token) && !hasModelExtras(cached);
 
   useEffect(() => {
     if (hasModelExtras(cached) || !token) return;
     let live = true;
 
     (async () => {
-      try {
-        const response = await fetch("/api/model-extras", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ token }),
-        });
-        const payload = (await response.json()) as {
-          status?: string;
-          extras?: ModelExtras;
-        };
-        if (!live) return;
-        if (payload.status === "ready" && hasModelExtras(payload.extras)) {
-          setExtras(payload.extras);
-        } else {
-          setFailed(true);
-        }
-      } catch {
-        if (live) setFailed(true);
-      }
+      const loaded = await requestPaidModelExtras(token);
+      if (live && hasModelExtras(loaded)) setExtras(loaded);
     })();
 
     return () => {
@@ -208,24 +198,21 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
     };
   }, [cached, token]);
 
-  if (!extras) {
-    if (!pending) return null;
-    return (
-      <section
-        id="model-extras"
-        aria-busy="true"
-        className="rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 px-5 py-4 sm:px-6"
-      >
-        <p className="text-sm text-slate-500">
-          Checking public records for this model…
-        </p>
-      </section>
-    );
-  }
+  if (!hasModelExtras(extras)) return null;
 
   const ymm = extras.ymmLabel;
 
   return (
+    <section
+      aria-labelledby="model-zone-heading"
+      className="border-t-2 border-dashed border-amber-300 pt-6"
+    >
+      <p
+        id="model-zone-heading"
+        className="mb-3 text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-900"
+      >
+        {MODEL_ZONE_TITLE}
+      </p>
     <section
       id="model-extras"
       className="scroll-mt-32 rounded-2xl border border-dashed border-amber-300 bg-amber-50/50 p-5 sm:p-6"
@@ -351,6 +338,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
           </div>
         )}
       </dl>
+    </section>
     </section>
   );
 }

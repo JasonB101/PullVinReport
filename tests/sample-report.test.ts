@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
+import { hasModelExtras } from "../src/lib/model-extras.ts";
 import { headerSpecifications, sectionListingGroups } from "../src/lib/report.ts";
 import {
   buildSampleModelExtras,
@@ -35,6 +36,7 @@ describe("sample report", () => {
 
   it("ships a stable Also-for-this-model fixture that is not this VIN", () => {
     const extras = buildSampleModelExtras();
+    assert.equal(hasModelExtras(extras), true);
     assert.equal(extras.ymmLabel, "2012 Toyota Camry");
     assert.equal(extras.recalls?.total, 2);
     assert.ok((extras.complaints?.total ?? 0) > 0);
