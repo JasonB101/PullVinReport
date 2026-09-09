@@ -83,4 +83,40 @@ describe("admin console", () => {
     assert.doesNotMatch(footer, /VinAudit/);
     assert.doesNotMatch(home, /VinAudit/);
   });
+
+  it("loads live vendor credits on /admin and never hard-codes fake zeros", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const card = await readSrc("app/admin/api-credits.tsx");
+    assert.match(page, /fetchVendorCredits\(\)/);
+    assert.match(page, /<ApiCredits report=\{credits\} \/>/);
+    assert.match(card, /API credits/);
+    assert.match(card, /No credit APIs configured/);
+    assert.doesNotMatch(card, /\$0\.00/);
+    assert.doesNotMatch(page, /\$0\.00 available/);
+
+    const status = await readSrc("lib/status.ts");
+    const statusPage = await readSrc("app/status/page.tsx");
+    const statusApi = await readSrc("app/api/status/route.ts");
+    assert.doesNotMatch(status, /fetchVendorCredits|vendor-credits/);
+    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits/);
+    assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits/);
+  });
+
+  it("puts API credits under the stats cards, not in the orders table", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const statsIdx = page.indexOf("lg:grid-cols-6");
+    const creditsIdx = page.indexOf("<ApiCredits");
+    const tableIdx = page.indexOf("orders.length === 0");
+    assert.ok(statsIdx > 0 && creditsIdx > statsIdx && tableIdx > creditsIdx);
+
+    const actions = await readSrc("app/admin/order-actions.tsx");
+    assert.doesNotMatch(actions, /ApiCredits|fetchVendorCredits|API credits/);
+  });
+
+  it("isolates credit fetches so a vendor outage cannot take down /admin", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    assert.match(page, /fetchVendorCredits\(\)\.catch/);
+    assert.match(page, /emptyVendorCredits/);
+    assert.match(page, /retryFulfillmentAction|OrderActions/);
+  });
 });

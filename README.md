@@ -68,6 +68,7 @@ version:
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
+| `FAL_ADMIN_KEY` | No | Admin-scope fal key for the /admin credit balance. An API-scope `FAL_KEY` is omitted from that card instead of showing 0. |
 | `FAL_IMAGE_MODEL` | No (default `fal-ai/recraft/v3/text-to-image`) | fal.ai model id. Recraft V3's digital-illustration style is the default so the picture cannot read as a photo of this VIN. Recraft V4 on fal has no style lock. |
 | `FAL_IMAGE_STYLE` | No (default `digital_illustration`) | Recraft style preset. Do not set `realistic_image`. |
 | `FAL_REMBG_MODEL` | No (default `fal-ai/imageutils/rembg`) | Cuts the Recraft raster to a transparent PNG. Recraft itself does not return alpha. |
@@ -322,10 +323,13 @@ subscribed to:
 Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
-The console shows order counts, collected revenue, refunded totals, and the
-full order list with the provider error for anything that failed. Failed or
-stuck orders can be retried, a delivered report's email can be re-sent, and any
-charged order can be refunded in place — see [Refunds](#refunds).
+The console shows order counts, collected revenue, refunded totals, a compact
+API credits card (Stripe, fal, Resend when those APIs work), and the full
+order list with the provider error for anything that failed. Failed or stuck
+orders can be retried, a delivered report's email can be re-sent, and any
+charged order can be refunded in place — see [Refunds](#refunds). Credit
+numbers are admin-only, never linked from the customer footer, and omitted
+(never faked as zero) when a vendor has no usable API.
 
 This is the only surface that shows raw provider errors, so it is also the
 place to look when a customer reports the soft "we couldn't retrieve this
