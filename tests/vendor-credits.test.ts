@@ -5,8 +5,8 @@ import {
   CREDIT_FETCH_TIMEOUT_MS,
   VINAUDIT_ACCOUNT_URL,
   fetchVendorCredits,
-  parseAnthropicCostReport,
   parseFalCredits,
+  parseResendQuotaHeaders,
   parseResendUsage,
   parseStripeBalance,
   type FetchLike,
@@ -17,9 +17,8 @@ const ENV_KEYS = [
   "FAL_KEY",
   "FAL_ADMIN_KEY",
   "RESEND_API_KEY",
-  "ANTHROPIC_ADMIN_API_KEY",
   "ANTHROPIC_API_KEY",
-  "ANTHROPIC_API_BASE",
+  "ANTHROPIC_ADMIN_API_KEY",
   "VINAUDIT_API_KEY",
   "VINAUDIT_USER",
   "VINAUDIT_PASS",
@@ -43,10 +42,14 @@ function clearCreditEnv() {
   for (const key of ENV_KEYS) delete process.env[key];
 }
 
-function jsonResponse(status: number, body: unknown): Response {
+function jsonResponse(
+  status: number,
+  body: unknown,
+  headers: Record<string, string> = {},
+): Response {
   return new Response(JSON.stringify(body), {
     status,
-    headers: { "content-type": "application/json" },
+    headers: { "content-type": "application/json", ...headers },
   });
 }
 
@@ -59,7 +62,7 @@ function mockFetch(
   return async (input, init) => {
     const url = new URL(input);
     const handler = routes[`${url.origin}${url.pathname}`];
-    if (!handler) throw new Error(`unexpected fetch ${url.href}`);
+    if (!handler) return new Response("not found", { status: 404 });
     return handler(url, init);
   };
 }
@@ -126,25 +129,28 @@ describe("parseResendUsage", () => {
   });
 });
 
-describe("parseAnthropicCostReport", () => {
-  it("sums minor-unit amounts across buckets", () => {
-    const parsed = parseAnthropicCostReport({
-      data: [
-        { results: [{ amount: "123.45" }, { amount: "10" }] },
-        { results: [] },
-        { results: [{ amount: 6.55 }] },
-      ],
-    });
-    assert.ok(parsed);
-    assert.equal(Math.round(parsed.totalMinor), 140);
+describe("parseResendQuotaHeaders", () => {
+  it("prefers the monthly used-quota header", () => {
+    assert.deepEqual(
+      parseResendQuotaHeaders(
+        new Headers({
+          "x-resend-monthly-quota": "42",
+          "x-resend-daily-quota": "3",
+        }),
+      ),
+      { used: 42, period: "month" },
+    );
   });
 
-  it("treats an empty successful report as a real zero", () => {
-    assert.deepEqual(parseAnthropicCostReport({ data: [] }), { totalMinor: 0 });
+  it("falls back to the daily header", () => {
+    assert.deepEqual(
+      parseResendQuotaHeaders(new Headers({ "x-resend-daily-quota": "7" })),
+      { used: 7, period: "day" },
+    );
   });
 
-  it("rejects a payload that is not a cost report", () => {
-    assert.equal(parseAnthropicCostReport({ error: { type: "auth" } }), null);
+  it("does not invent a number from missing headers", () => {
+    assert.equal(parseResendQuotaHeaders(new Headers()), null);
   });
 });
 
@@ -160,12 +166,13 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.vinauditAccountUrl, undefined);
   });
 
-  it("includes Stripe and omits fal on 401, Resend on failure, Anthropic without an admin key", async () => {
+  it("includes Stripe and omits fal/Resend/Anthropic when those APIs fail", async () => {
     clearCreditEnv();
     process.env.STRIPE_SECRET_KEY = "sk_test_123";
     process.env.FAL_KEY = "fal_api_scope";
     process.env.RESEND_API_KEY = "re_test";
     process.env.ANTHROPIC_API_KEY = "sk-ant-regular";
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
     process.env.VINAUDIT_API_KEY = "va";
     process.env.VINAUDIT_USER = "user";
     process.env.VINAUDIT_PASS = "pass";
@@ -189,17 +196,40 @@ describe("fetchVendorCredits", () => {
     assert.match(report.items[0]?.value ?? "", /\$1\.00 pending/);
     assert.equal(report.vinauditAccountUrl, VINAUDIT_ACCOUNT_URL);
     assert.equal(
-      report.items.some((item) => item.key === "fal" || item.key === "resend" || item.key === "anthropic"),
+      report.items.some((item) => item.key === "fal" || item.key === "resend"),
+      false,
+    );
+    assert.equal(
+      report.items.some((item) => "key" in item && item.key === "anthropic"),
       false,
     );
   });
 
-  it("shows fal credits when the Admin-scope key works", async () => {
+  it("never calls Anthropic even when an admin key is set", async () => {
     clearCreditEnv();
+    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    const seen: string[] = [];
+    const report = await fetchVendorCredits({
+      fetch: async (input) => {
+        seen.push(input);
+        return jsonResponse(200, {});
+      },
+    });
+    assert.deepEqual(report.items, []);
+    assert.equal(
+      seen.some((url) => url.includes("anthropic.com")),
+      false,
+    );
+  });
+
+  it("shows fal credits when FAL_ADMIN_KEY works, preferring it over FAL_KEY", async () => {
+    clearCreditEnv();
+    process.env.FAL_KEY = "fal_api";
     process.env.FAL_ADMIN_KEY = "fal_admin";
     const fetchImpl = mockFetch({
-      "https://api.fal.ai/v1/account/billing": (url) => {
+      "https://api.fal.ai/v1/account/billing": (url, init) => {
         assert.equal(url.searchParams.get("expand"), "credits");
+        assert.equal(init?.headers && new Headers(init.headers).get("authorization"), "Key fal_admin");
         return jsonResponse(200, {
           username: "team",
           credits: { current_balance: 8, currency: "USD" },
@@ -210,6 +240,21 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items.length, 1);
     assert.equal(report.items[0]?.key, "fal");
     assert.equal(report.items[0]?.value, "$8.00");
+  });
+
+  it("falls back to FAL_KEY when FAL_ADMIN_KEY is unset", async () => {
+    clearCreditEnv();
+    process.env.FAL_KEY = "fal_api";
+    const fetchImpl = mockFetch({
+      "https://api.fal.ai/v1/account/billing": (_url, init) => {
+        assert.equal(init?.headers && new Headers(init.headers).get("authorization"), "Key fal_api");
+        return jsonResponse(200, {
+          credits: { current_balance: 3.5, currency: "USD" },
+        });
+      },
+    });
+    const report = await fetchVendorCredits({ fetch: fetchImpl });
+    assert.equal(report.items[0]?.value, "$3.50");
   });
 
   it("omits fal on 403 instead of showing 0", async () => {
@@ -223,12 +268,13 @@ describe("fetchVendorCredits", () => {
     assert.deepEqual(report.items, []);
   });
 
-  it("omits Resend when the usage API is unreadable, and never invents 0", async () => {
+  it("omits Resend when usage and quota headers are unreadable", async () => {
     clearCreditEnv();
     process.env.RESEND_API_KEY = "re_test";
     const report = await fetchVendorCredits({
       fetch: mockFetch({
         "https://api.resend.com/usage": () => jsonResponse(200, { object: "usage" }),
+        "https://api.resend.com/domains": () => jsonResponse(200, { data: [] }),
       }),
     });
     assert.deepEqual(report.items, []);
@@ -250,46 +296,43 @@ describe("fetchVendorCredits", () => {
     assert.equal(report.items[0]?.value, "42 / 3,000");
   });
 
-  it("includes Anthropic 7-day spend only with an admin key", async () => {
+  it("falls back to Resend quota headers when /usage is unavailable", async () => {
     clearCreditEnv();
-    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
-    const now = new Date("2026-09-09T15:00:00.000Z");
+    process.env.RESEND_API_KEY = "re_test";
     const report = await fetchVendorCredits({
-      now,
       fetch: mockFetch({
-        "https://api.anthropic.com/v1/organizations/cost_report": (url) => {
-          assert.equal(url.searchParams.get("starting_at"), "2026-09-03T00:00:00Z");
-          assert.equal(url.searchParams.get("ending_at"), "2026-09-10T00:00:00Z");
-          assert.equal(url.searchParams.get("bucket_width"), "1d");
-          return jsonResponse(200, {
-            data: [{ results: [{ amount: "250" }] }],
-          });
-        },
+        "https://api.resend.com/usage": () => jsonResponse(404, { name: "not_found" }),
+        "https://api.resend.com/domains": () =>
+          jsonResponse(200, { data: [] }, { "x-resend-monthly-quota": "18" }),
       }),
     });
-    assert.equal(report.items[0]?.key, "anthropic");
-    assert.equal(report.items[0]?.ok, true);
-    assert.equal(report.items[0]?.value, "$2.50");
+    assert.equal(report.items[0]?.key, "resend");
+    assert.equal(report.items[0]?.metric, "Emails this month");
+    assert.equal(report.items[0]?.value, "18 sent");
   });
 
-  it("surfaces Stripe and Anthropic errors without inventing zeros", async () => {
+  it("omits Stripe on failure instead of inventing $0.00", async () => {
     clearCreditEnv();
     process.env.STRIPE_SECRET_KEY = "sk_live_abc";
-    process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
     const report = await fetchVendorCredits({
       fetch: mockFetch({
         "https://api.stripe.com/v1/balance": () => jsonResponse(500, { error: {} }),
-        "https://api.anthropic.com/v1/organizations/cost_report": () =>
-          jsonResponse(401, { error: { type: "authentication_error" } }),
       }),
     });
-    assert.equal(report.items.length, 2);
-    assert.equal(report.items.find((item) => item.key === "stripe")?.ok, false);
-    assert.equal(report.items.find((item) => item.key === "anthropic")?.ok, false);
-    assert.doesNotMatch(
-      report.items.map((item) => item.value).join(" "),
-      /\$0\.00/,
-    );
+    assert.deepEqual(report.items, []);
+  });
+
+  it("never throws when a vendor fetch rejects", async () => {
+    clearCreditEnv();
+    process.env.STRIPE_SECRET_KEY = "sk_test_x";
+    process.env.FAL_KEY = "fal_x";
+    process.env.RESEND_API_KEY = "re_x";
+    const report = await fetchVendorCredits({
+      fetch: async () => {
+        throw new Error("boom");
+      },
+    });
+    assert.deepEqual(report.items, []);
   });
 
   it("does not put vendor keys in the outgoing URL", async () => {

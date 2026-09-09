@@ -3,15 +3,14 @@
  *
  * Server-only. Nothing here is imported by customer pages, public /status,
  * or anonymous /api/status. Each vendor is fetched independently with a
- * short timeout; a missing official API, a 401/403 on fal, or a failed
- * Resend usage call omits that vendor rather than inventing a zero.
+ * short timeout. A missing official API or any failed call omits that
+ * vendor rather than inventing a zero — Anthropic and Neon are skipped
+ * until an admin / management key exists.
  */
 import {
-  anthropic,
   emailConfig,
   fal,
   formatPrice,
-  isAnthropicAdminConfigured,
   isEmailConfigured,
   isFalBillingConfigured,
   isStripeConfigured,
@@ -28,7 +27,7 @@ const USER_AGENT = "PullVinReport/1.0 (+https://pullvinreport.com)";
 
 export type VendorCredit = {
   vendor: string;
-  key: "stripe" | "fal" | "resend" | "anthropic";
+  key: "stripe" | "fal" | "resend";
   ok: boolean;
   metric: string;
   value: string;
@@ -57,11 +56,19 @@ export type VendorCreditsOptions = {
 type VendorResult = VendorCredit | null;
 
 type JsonResult =
-  | { kind: "http"; status: number; body: unknown }
+  | { kind: "http"; status: number; body: unknown; headers: Headers }
   | { kind: "error"; status: number; error: string };
 
 function asOf(now: Date): string {
   return now.toISOString();
+}
+
+export function emptyVendorCredits(now: Date = new Date()): VendorCreditsReport {
+  return {
+    checkedAt: asOf(now),
+    items: [],
+    vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
+  };
 }
 
 function formatCount(value: number): string {
@@ -145,30 +152,20 @@ export function parseResendUsage(
   return { used: rec.used, limit: rec.limit };
 }
 
-export function parseAnthropicCostReport(
-  body: unknown,
-): { totalMinor: number } | null {
-  if (!body || typeof body !== "object") return null;
-  const data = (body as Record<string, unknown>).data;
-  if (!Array.isArray(data)) return null;
-  let totalMinor = 0;
-  for (const bucket of data) {
-    if (!bucket || typeof bucket !== "object") continue;
-    const results = (bucket as Record<string, unknown>).results;
-    if (!Array.isArray(results)) continue;
-    for (const item of results) {
-      if (!item || typeof item !== "object") continue;
-      const amount = (item as Record<string, unknown>).amount;
-      const parsed =
-        typeof amount === "number"
-          ? amount
-          : typeof amount === "string"
-            ? Number.parseFloat(amount)
-            : Number.NaN;
-      if (Number.isFinite(parsed)) totalMinor += parsed;
-    }
-  }
-  return { totalMinor };
+/**
+ * Resend attaches used-quota headers to authenticated responses.
+ * Daily is free-plan only; monthly is the one Jason can act on.
+ */
+export function parseResendQuotaHeaders(
+  headers: Headers,
+): { used: number; period: "month" | "day" } | null {
+  const monthly = headers.get("x-resend-monthly-quota");
+  const daily = headers.get("x-resend-daily-quota");
+  const monthN = monthly == null || monthly.trim() === "" ? Number.NaN : Number.parseInt(monthly, 10);
+  if (Number.isFinite(monthN)) return { used: monthN, period: "month" };
+  const dayN = daily == null || daily.trim() === "" ? Number.NaN : Number.parseInt(daily, 10);
+  if (Number.isFinite(dayN)) return { used: dayN, period: "day" };
+  return null;
 }
 
 async function getJson(
@@ -196,14 +193,10 @@ async function getJson(
       try {
         body = JSON.parse(text) as unknown;
       } catch {
-        return {
-          kind: "error",
-          status: response.status,
-          error: `HTTP ${response.status} (not JSON)`,
-        };
+        body = null;
       }
     }
-    return { kind: "http", status: response.status, body };
+    return { kind: "http", status: response.status, body, headers: response.headers };
   } catch (error) {
     const aborted =
       (error instanceof Error && error.name === "AbortError") ||
@@ -226,29 +219,17 @@ async function stripeCredits(
   const key = stripeConfig.secretKey;
   if (!key || !isStripeConfigured()) return null;
 
-  const vendor = key.startsWith("sk_test_") ? "Stripe (test)" : "Stripe";
-  const failed = (error: string): VendorCredit => ({
-    vendor,
-    key: "stripe",
-    ok: false,
-    metric: "USD balance",
-    value: "",
-    asOf: asOf(now),
-    error,
-  });
-
   const result = await getJson(
     "https://api.stripe.com/v1/balance",
     { authorization: `Bearer ${key}` },
     fetchImpl,
     timeoutMs,
   );
-  if (result.kind === "error") return failed(result.error);
-  if (result.status !== 200) return failed(`HTTP ${result.status}`);
-
+  if (result.kind === "error" || result.status !== 200) return null;
   const parsed = parseStripeBalance(result.body);
-  if (!parsed) return failed("Balance reply had no USD totals");
+  if (!parsed) return null;
 
+  const vendor = key.startsWith("sk_test_") ? "Stripe (test)" : "Stripe";
   return {
     vendor,
     key: "stripe",
@@ -273,45 +254,9 @@ async function falCredits(
     fetchImpl,
     timeoutMs,
   );
-  // API-scope keys (and any other unauthorized key) are omitted — never 0.
-  if (result.kind === "http" && (result.status === 401 || result.status === 403)) {
-    return null;
-  }
-  if (result.kind === "error") {
-    return {
-      vendor: "fal.ai",
-      key: "fal",
-      ok: false,
-      metric: "Credits",
-      value: "",
-      asOf: asOf(now),
-      error: result.error,
-    };
-  }
-  if (result.status !== 200) {
-    return {
-      vendor: "fal.ai",
-      key: "fal",
-      ok: false,
-      metric: "Credits",
-      value: "",
-      asOf: asOf(now),
-      error: `HTTP ${result.status}`,
-    };
-  }
-
+  if (result.kind === "error" || result.status !== 200) return null;
   const parsed = parseFalCredits(result.body);
-  if (!parsed) {
-    return {
-      vendor: "fal.ai",
-      key: "fal",
-      ok: false,
-      metric: "Credits",
-      value: "",
-      asOf: asOf(now),
-      error: "Billing reply had no credit balance",
-    };
-  }
+  if (!parsed) return null;
 
   return {
     vendor: "fal.ai",
@@ -319,6 +264,35 @@ async function falCredits(
     ok: true,
     metric: "Credits",
     value: formatUsdAmount(parsed.balance, parsed.currency),
+    asOf: asOf(now),
+  };
+}
+
+function resendFromUsage(parsed: { used: number; limit: number | null }, now: Date): VendorCredit {
+  const value =
+    parsed.limit === null
+      ? `${formatCount(parsed.used)} emails`
+      : `${formatCount(parsed.used)} / ${formatCount(parsed.limit)}`;
+  return {
+    vendor: "Resend",
+    key: "resend",
+    ok: true,
+    metric: "Emails this month",
+    value,
+    asOf: asOf(now),
+  };
+}
+
+function resendFromQuota(
+  quota: { used: number; period: "month" | "day" },
+  now: Date,
+): VendorCredit {
+  return {
+    vendor: "Resend",
+    key: "resend",
+    ok: true,
+    metric: quota.period === "month" ? "Emails this month" : "Emails today",
+    value: `${formatCount(quota.used)} sent`,
     asOf: asOf(now),
   };
 }
@@ -331,122 +305,75 @@ async function resendCredits(
   const key = emailConfig.apiKey;
   if (!key || !isEmailConfigured()) return null;
 
-  // Private-beta Usage API. Any failure is an omit — do not invent numbers.
-  const result = await getJson(
+  const auth = { authorization: `Bearer ${key}` };
+
+  // Private-beta Usage API first. Quota headers on any authenticated
+  // response are the fallback. Either failing means omit — never invent 0.
+  const usage = await getJson(
     "https://api.resend.com/usage",
-    { authorization: `Bearer ${key}` },
+    auth,
     fetchImpl,
     timeoutMs,
   );
-  if (result.kind === "error" || result.status !== 200) return null;
-  const parsed = parseResendUsage(result.body);
-  if (!parsed) return null;
+  if (usage.kind === "http") {
+    if (usage.status === 200) {
+      const parsed = parseResendUsage(usage.body);
+      if (parsed) return resendFromUsage(parsed, now);
+    }
+    const fromUsageHeaders = parseResendQuotaHeaders(usage.headers);
+    if (fromUsageHeaders) return resendFromQuota(fromUsageHeaders, now);
+  }
 
-  const value =
-    parsed.limit === null
-      ? `${formatCount(parsed.used)} emails`
-      : `${formatCount(parsed.used)} / ${formatCount(parsed.limit)}`;
-
-  return {
-    vendor: "Resend",
-    key: "resend",
-    ok: true,
-    metric: "Emails this month",
-    value,
-    asOf: asOf(now),
-  };
-}
-
-function costReportWindow(now: Date): { startingAt: string; endingAt: string } {
-  const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
-  const starting = new Date(today - 6 * 24 * 60 * 60 * 1000);
-  const ending = new Date(today + 24 * 60 * 60 * 1000);
-  return {
-    startingAt: starting.toISOString().replace(/\.\d{3}Z$/, "Z"),
-    endingAt: ending.toISOString().replace(/\.\d{3}Z$/, "Z"),
-  };
-}
-
-async function anthropicCredits(
-  now: Date,
-  fetchImpl: FetchLike,
-  timeoutMs: number,
-): Promise<VendorResult> {
-  const key = anthropic.adminApiKey;
-  if (!key || !isAnthropicAdminConfigured()) return null;
-
-  const failed = (error: string): VendorCredit => ({
-    vendor: "Anthropic",
-    key: "anthropic",
-    ok: false,
-    metric: "Spend · last 7 days",
-    value: "",
-    asOf: asOf(now),
-    error,
-  });
-
-  const { startingAt, endingAt } = costReportWindow(now);
-  const url = new URL(`${anthropic.baseUrl.replace(/\/+$/, "")}/v1/organizations/cost_report`);
-  url.searchParams.set("starting_at", startingAt);
-  url.searchParams.set("ending_at", endingAt);
-  url.searchParams.set("bucket_width", "1d");
-  url.searchParams.set("limit", "7");
-
-  const result = await getJson(
-    url.toString(),
-    {
-      "x-api-key": key,
-      "anthropic-version": "2023-06-01",
-    },
+  const probe = await getJson(
+    "https://api.resend.com/domains",
+    auth,
     fetchImpl,
     timeoutMs,
   );
-  if (result.kind === "error") return failed(result.error);
-  if (result.status !== 200) return failed(`HTTP ${result.status}`);
+  if (probe.kind === "http") {
+    const fromProbe = parseResendQuotaHeaders(probe.headers);
+    if (fromProbe) return resendFromQuota(fromProbe, now);
+  }
 
-  const parsed = parseAnthropicCostReport(result.body);
-  if (!parsed) return failed("Cost report reply was not readable");
+  return null;
+}
 
-  return {
-    vendor: "Anthropic",
-    key: "anthropic",
-    ok: true,
-    metric: "Spend · last 7 days",
-    value: formatPrice(Math.round(parsed.totalMinor), "usd"),
-    asOf: asOf(now),
-  };
+async function safeVendor(load: () => Promise<VendorResult>): Promise<VendorResult> {
+  try {
+    return await load();
+  } catch {
+    return null;
+  }
 }
 
 /**
  * Fetches every vendor that has a usable official API, in parallel.
  *
- * Neon is omitted: `DATABASE_URL` is not a management key.
- * VinAudit is omitted as a number: report keys have no balance endpoint.
+ * Anthropic and Neon are skipped: those numbers need admin / management
+ * keys we do not have. VinAudit is a refill link only.
+ *
+ * Never throws — a vendor outage must not take down /admin.
  */
 export async function fetchVendorCredits(
   options: VendorCreditsOptions = {},
 ): Promise<VendorCreditsReport> {
   const now = options.now ?? new Date();
-  const timeoutMs = options.timeoutMs ?? CREDIT_FETCH_TIMEOUT_MS;
-  const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
+  try {
+    const timeoutMs = options.timeoutMs ?? CREDIT_FETCH_TIMEOUT_MS;
+    const fetchImpl = options.fetch ?? ((input, init) => fetch(input, init));
 
-  const settled = await Promise.allSettled([
-    stripeCredits(now, fetchImpl, timeoutMs),
-    falCredits(now, fetchImpl, timeoutMs),
-    resendCredits(now, fetchImpl, timeoutMs),
-    anthropicCredits(now, fetchImpl, timeoutMs),
-  ]);
+    const settled = await Promise.all([
+      safeVendor(() => stripeCredits(now, fetchImpl, timeoutMs)),
+      safeVendor(() => falCredits(now, fetchImpl, timeoutMs)),
+      safeVendor(() => resendCredits(now, fetchImpl, timeoutMs)),
+    ]);
 
-  const items: VendorCredit[] = [];
-  for (const result of settled) {
-    if (result.status === "fulfilled" && result.value) {
-      items.push(result.value);
-    }
+    return {
+      checkedAt: asOf(now),
+      items: settled.filter((item): item is VendorCredit => item !== null),
+      vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
+    };
+  } catch {
+    return emptyVendorCredits(now);
   }
-
-  return {
-    checkedAt: asOf(now),
-    items,
-    vinauditAccountUrl: isVinAuditConfigured() ? VINAUDIT_ACCOUNT_URL : undefined,
-  };
 }

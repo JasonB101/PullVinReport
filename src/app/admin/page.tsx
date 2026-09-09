@@ -12,7 +12,7 @@ import { formatPrice, isVinAuditConfigured } from "@/lib/config";
 import { formatGeneratedAt } from "@/lib/report";
 import { getStore } from "@/lib/store";
 import type { OrderStatus } from "@/lib/store";
-import { fetchVendorCredits } from "@/lib/vendor-credits";
+import { emptyVendorCredits, fetchVendorCredits } from "@/lib/vendor-credits";
 
 export const dynamic = "force-dynamic";
 
@@ -37,7 +37,7 @@ export default async function AdminPage() {
   const [orders, stats, credits] = await Promise.all([
     store.list(200),
     store.stats(),
-    fetchVendorCredits(),
+    fetchVendorCredits().catch(() => emptyVendorCredits()),
   ]);
 
   const goal = firstSalesGoal(stats.revenueCents);

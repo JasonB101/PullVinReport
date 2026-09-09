@@ -101,4 +101,22 @@ describe("admin console", () => {
     assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits/);
     assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits/);
   });
+
+  it("puts API credits under the stats cards, not in the orders table", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const statsIdx = page.indexOf("lg:grid-cols-6");
+    const creditsIdx = page.indexOf("<ApiCredits");
+    const tableIdx = page.indexOf("orders.length === 0");
+    assert.ok(statsIdx > 0 && creditsIdx > statsIdx && tableIdx > creditsIdx);
+
+    const actions = await readSrc("app/admin/order-actions.tsx");
+    assert.doesNotMatch(actions, /ApiCredits|fetchVendorCredits|API credits/);
+  });
+
+  it("isolates credit fetches so a vendor outage cannot take down /admin", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    assert.match(page, /fetchVendorCredits\(\)\.catch/);
+    assert.match(page, /emptyVendorCredits/);
+    assert.match(page, /retryFulfillmentAction|OrderActions/);
+  });
 });

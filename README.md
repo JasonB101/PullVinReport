@@ -65,7 +65,6 @@ version:
 | `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
 | `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
 | `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
-| `ANTHROPIC_ADMIN_API_KEY` | No | Admin API key for the /admin spend card. Regular `ANTHROPIC_API_KEY` cannot call the Cost Report; unset means Anthropic is omitted, not shown as $0. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
@@ -324,13 +323,13 @@ subscribed to:
 Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
-The console shows order counts, collected revenue, refunded totals, live
-vendor credit/balance/usage where an official API exists, and the full order
-list with the provider error for anything that failed. Failed or stuck orders
-can be retried, a delivered report's email can be re-sent, and any charged
-order can be refunded in place — see [Refunds](#refunds). Credit numbers are
-admin-only and are omitted (never faked as zero) when a vendor has no usable
-API.
+The console shows order counts, collected revenue, refunded totals, a compact
+API credits card (Stripe, fal, Resend when those APIs work), and the full
+order list with the provider error for anything that failed. Failed or stuck
+orders can be retried, a delivered report's email can be re-sent, and any
+charged order can be refunded in place — see [Refunds](#refunds). Credit
+numbers are admin-only, never linked from the customer footer, and omitted
+(never faked as zero) when a vendor has no usable API.
 
 This is the only surface that shows raw provider errors, so it is also the
 place to look when a customer reports the soft "we couldn't retrieve this

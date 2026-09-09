@@ -125,21 +125,10 @@ export const anthropic = {
   get timeoutMs(): number {
     return intEnv("ANTHROPIC_TIMEOUT_MS", 45_000);
   },
-  /**
-   * Admin API key (`sk-ant-admin…`). The regular Messages key cannot call
-   * the Cost Report, so /admin omits Anthropic spend unless this is set.
-   */
-  get adminApiKey(): string | undefined {
-    return env("ANTHROPIC_ADMIN_API_KEY");
-  },
 };
 
 export function isAnthropicConfigured(): boolean {
   return Boolean(anthropic.apiKey);
-}
-
-export function isAnthropicAdminConfigured(): boolean {
-  return Boolean(anthropic.adminApiKey);
 }
 
 /**

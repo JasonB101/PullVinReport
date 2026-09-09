@@ -8,7 +8,6 @@ import {
   emailConfig,
   fal,
   formatPrice,
-  isAnthropicAdminConfigured,
   isAnthropicConfigured,
   isFalBillingConfigured,
   isFalConfigured,
@@ -115,26 +114,6 @@ describe("the model that writes the brief", () => {
       assert.equal(anthropic.apiKey, undefined);
     } finally {
       if (before !== undefined) process.env.ANTHROPIC_API_KEY = before;
-    }
-  });
-
-  it("keeps Cost Report spend behind a separate admin key", () => {
-    const regular = process.env.ANTHROPIC_API_KEY;
-    const admin = process.env.ANTHROPIC_ADMIN_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_ADMIN_API_KEY;
-    try {
-      process.env.ANTHROPIC_API_KEY = "sk-ant-regular";
-      assert.equal(isAnthropicAdminConfigured(), false);
-      assert.equal(anthropic.adminApiKey, undefined);
-      process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
-      assert.equal(isAnthropicAdminConfigured(), true);
-      assert.equal(anthropic.adminApiKey, "sk-ant-admin-test");
-    } finally {
-      if (regular === undefined) delete process.env.ANTHROPIC_API_KEY;
-      else process.env.ANTHROPIC_API_KEY = regular;
-      if (admin === undefined) delete process.env.ANTHROPIC_ADMIN_API_KEY;
-      else process.env.ANTHROPIC_ADMIN_API_KEY = admin;
     }
   });
 });
