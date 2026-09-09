@@ -138,6 +138,9 @@ describe("customer-facing surfaces", () => {
     assert.doesNotMatch(header, /\/status/);
     assert.doesNotMatch(checkout, /href=["']\/status["']/);
     assert.doesNotMatch(home, /href=["']\/status["']/);
+    assert.doesNotMatch(footer, /href=["']\/admin/);
+    assert.doesNotMatch(header, /href=["']\/admin/);
+    assert.doesNotMatch(home, /href=["']\/admin/);
   });
 
   it("gates /status behind the same admin session as /admin", async () => {

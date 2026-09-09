@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { logoutAction } from "@/app/admin/actions";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
+import { formatGeneratedAt } from "@/lib/report";
 import { buildStatusReport, type CheckState } from "@/lib/status";
 
 export const dynamic = "force-dynamic";
@@ -194,7 +195,7 @@ export default async function StatusPage() {
               Checked
             </dt>
             <dd className="mt-1 text-sm text-slate-800">
-              {new Date(report.checkedAt).toISOString().replace("T", " ").slice(0, 19)} UTC
+              {formatGeneratedAt(report.checkedAt)}
             </dd>
           </div>
         </dl>
