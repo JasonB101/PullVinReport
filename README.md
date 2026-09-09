@@ -274,7 +274,9 @@ you" on its own.
 | `/` | Landing page: what a report includes, how it works, pricing, FAQ. |
 | `/preview?vin=…` | VIN confirmation, labelled sample preview, checkout panel. |
 | `/sample` | Full sample report, marked SAMPLE throughout. |
+| `/api/sample/pdf` | Server-generated SAMPLE-labelled PDF of the demo report. |
 | `/report/[token]` | A purchased report, gated by an unguessable access token. |
+| `/api/report/[token]/pdf` | Server-generated PDF of that paid report. Same token as the page. |
 | `/lookup` | Re-open a report using the order reference plus the buyer's email. |
 | `/order/success` | Post-Stripe landing; finalises fulfillment and redirects. |
 | `/status` | Admin-only provider readiness (same session as `/admin`). Each check labelled *Checked live* or *Config only*. |

@@ -224,5 +224,8 @@ describe("paid report shell", () => {
     assert.doesNotMatch(source, /slice\(0, 16\)\} UTC/);
     assert.match(source, /Your report/);
     assert.match(source, /Keep this page/);
+    assert.match(source, /DownloadPdfButton/);
+    assert.match(source, /paidReportPdfPath\(token\)/);
+    assert.doesNotMatch(source, /PrintButton|window\.print/);
   });
 });
