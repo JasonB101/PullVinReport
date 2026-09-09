@@ -96,6 +96,16 @@ describe("customer-facing surfaces", () => {
     assert.match(privacy, /vehicle history[\s\S]*data providers/);
 
     const home = await readSrc("app/page.tsx");
+    assert.match(
+      home,
+      /We do not resell another retailer's report and we do not repackage the sample\./,
+    );
+    assert.doesNotMatch(home, /NMVTIS/);
+    assert.doesNotMatch(home, /pulled live at the moment you buy it/);
+
+    const layout = await readSrc("app/layout.tsx");
+    assert.doesNotMatch(layout, /NMVTIS/);
+
     const terms = await readSrc("app/terms/page.tsx");
     const disclaimer = await readSrc("app/disclaimer/page.tsx");
     const email = await readSrc("lib/email.ts");

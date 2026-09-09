@@ -85,7 +85,7 @@ const KEY_LABELS: Record<string, string> = {
   event: "Event",
   titlenumber: "Title number",
   standardclaim: "Standard claim",
-  nmvtisid: "NMVTIS ID",
+  nmvtisid: "Record ID",
   vehicleuse: "Vehicle use",
   reportlink: "Provider report",
   nhtsa: "NHTSA",
@@ -534,7 +534,7 @@ export function normalizeVinAuditReport(
         title: "Junk, salvage & insurance records",
         navLabel: "Junk & salvage",
         description:
-          "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
+          "Junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
         emptyLabel: "No junk, salvage or insurance-loss records came back.",
         columns: ["Date", "State", "City", "Reporting entity", "Obtained from"],
       },

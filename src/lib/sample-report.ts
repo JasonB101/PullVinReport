@@ -256,7 +256,7 @@ export function buildSampleReport(): VehicleReport {
         title: "Junk, salvage & insurance records",
         navLabel: "Junk & salvage",
         description:
-          "NMVTIS junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
+          "Junk, salvage and total-loss entries reported by insurers, recyclers and salvage yards.",
         emptyLabel: "No junk, salvage or insurance-loss records came back.",
         records: [],
       },

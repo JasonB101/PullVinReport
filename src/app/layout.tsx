@@ -25,7 +25,6 @@ export const metadata: Metadata = {
     "VIN check",
     "salvage title check",
     "odometer check",
-    "NMVTIS report",
   ],
   openGraph: {
     type: "website",
