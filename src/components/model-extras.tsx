@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
-import type { ModelExtras } from "@/lib/model-extras";
-import { hasModelExtras } from "@/lib/model-extras";
+import type { ModelComplaints, ModelExtras } from "@/lib/model-extras";
+import { complaintSamples, hasModelExtras } from "@/lib/model-extras";
 import { MODEL_ZONE_NOTE, NOT_THIS_VIN_CHIP } from "@/lib/report-zones";
 
 type Props = {
@@ -32,6 +32,134 @@ function Chevron({ className = "" }: { className?: string }) {
     >
       <path d="M6 9l6 6 6-6" />
     </svg>
+  );
+}
+
+function OwnerComplaints({
+  ymm,
+  complaints,
+}: {
+  ymm: string;
+  complaints: ModelComplaints;
+}) {
+  const samples = complaintSamples(complaints);
+  const themes = complaints.themes ?? [];
+
+  return (
+    <div>
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        Owner complaints
+      </dt>
+      <dd className="mt-0.5">
+        {themes.length > 0 || samples.length > 0 ? (
+          <ScrollOpenDetails
+            className="scroll-mt-32"
+            summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
+            summary={
+              <>
+                <div className="flex items-start justify-between gap-2">
+                  <p className="text-sm text-slate-800">
+                    {formatCount(complaints.total)} owner{" "}
+                    {complaints.total === 1 ? "complaint" : "complaints"} filed
+                    for the {ymm}
+                    <span className="text-slate-500"> — not this VIN</span>
+                  </p>
+                  <Chevron className="disclosure-chevron mt-0.5 text-slate-400" />
+                </div>
+                {themes.length > 0 && (
+                  <p className="when-closed mt-1.5 text-sm text-slate-600">
+                    Most-named:{" "}
+                    {themes
+                      .slice(0, 2)
+                      .map((theme) => theme.component)
+                      .join(", ")}
+                    {themes.length > 2 ? "…" : ""}
+                  </p>
+                )}
+                <span className="when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600">
+                  Show {samples.length > 0 ? samples.length : themes.length}{" "}
+                  {samples.length > 0
+                    ? samples.length === 1
+                      ? "complaint"
+                      : "complaints"
+                    : themes.length === 1
+                      ? "theme"
+                      : "themes"}
+                  <Chevron />
+                </span>
+              </>
+            }
+          >
+            {themes.length > 0 && (
+              <ul className="mt-3 space-y-2 border-t border-amber-200/70 pt-3">
+                {themes.map((theme) => (
+                  <li
+                    key={theme.component}
+                    className="flex items-baseline justify-between gap-3 text-sm"
+                  >
+                    <span className="text-slate-800">{theme.component}</span>
+                    <span className="shrink-0 tabular-nums text-slate-500">
+                      {formatCount(theme.count)}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {samples.length > 0 && (
+              <div className="mt-4 space-y-3">
+                <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+                  Owner write-ups
+                </p>
+                <p className="text-xs text-slate-500">
+                  Showing {formatCount(samples.length)} of{" "}
+                  {formatCount(complaints.total)} for this model year — not this
+                  VIN.
+                </p>
+                <ul className="space-y-3">
+                  {samples.map((sample, index) => (
+                    <li
+                      key={sample.odiNumber ?? `${sample.summary}-${index}`}
+                      className="rounded-xl border border-amber-200/80 bg-white/70 px-3 py-3 sm:px-4"
+                    >
+                      <p className="text-xs text-slate-500">
+                        {[sample.date, sample.components]
+                          .filter(Boolean)
+                          .join(" · ")}
+                      </p>
+                      {(sample.crash || sample.fire) && (
+                        <p className="mt-1 text-xs font-medium text-amber-800">
+                          {[
+                            sample.crash ? "Crash reported" : null,
+                            sample.fire ? "Fire reported" : null,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ")}
+                        </p>
+                      )}
+                      <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
+                        {sample.summary}
+                      </p>
+                      {sample.odiNumber && (
+                        <p className="mt-1.5 font-mono text-[11px] text-slate-400">
+                          NHTSA ODI {sample.odiNumber}
+                        </p>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+          </ScrollOpenDetails>
+        ) : (
+          <p className="text-sm text-slate-800">
+            {formatCount(complaints.total)} owner{" "}
+            {complaints.total === 1 ? "complaint" : "complaints"} filed for the{" "}
+            {ymm}
+            <span className="text-slate-500"> — not this VIN</span>
+          </p>
+        )}
+      </dd>
+    </div>
   );
 }
 
@@ -203,126 +331,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
         )}
 
         {extras.complaints && (
-          <div>
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              Owner complaints
-            </dt>
-            <dd className="mt-0.5">
-              {extras.complaints.themes.length > 0 ||
-              extras.complaints.samples.length > 0 ? (
-                <ScrollOpenDetails
-                  className="scroll-mt-32"
-                  summaryClassName="cursor-pointer list-none [&::-webkit-details-marker]:hidden"
-                  summary={
-                    <>
-                      <div className="flex items-start justify-between gap-2">
-                        <p className="text-sm text-slate-800">
-                          {formatCount(extras.complaints.total)} owner{" "}
-                          {extras.complaints.total === 1
-                            ? "complaint"
-                            : "complaints"}{" "}
-                          filed for the {ymm}
-                          <span className="text-slate-500"> — not this VIN</span>
-                        </p>
-                        <Chevron className="disclosure-chevron mt-0.5 text-slate-400" />
-                      </div>
-                      {extras.complaints.themes.length > 0 && (
-                        <p className="when-closed mt-1.5 text-sm text-slate-600">
-                          Most-named:{" "}
-                          {extras.complaints.themes
-                            .slice(0, 2)
-                            .map((theme) => theme.component)
-                            .join(", ")}
-                          {extras.complaints.themes.length > 2 ? "…" : ""}
-                        </p>
-                      )}
-                      <span className="when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600">
-                        Show{" "}
-                        {extras.complaints.samples.length > 0
-                          ? extras.complaints.samples.length
-                          : extras.complaints.themes.length}{" "}
-                        {extras.complaints.samples.length > 0
-                          ? extras.complaints.samples.length === 1
-                            ? "complaint"
-                            : "complaints"
-                          : extras.complaints.themes.length === 1
-                            ? "theme"
-                            : "themes"}
-                        <Chevron />
-                      </span>
-                    </>
-                  }
-                >
-                  {extras.complaints.themes.length > 0 && (
-                    <ul className="mt-3 space-y-2 border-t border-amber-200/70 pt-3">
-                      {extras.complaints.themes.map((theme) => (
-                        <li
-                          key={theme.component}
-                          className="flex items-baseline justify-between gap-3 text-sm"
-                        >
-                          <span className="text-slate-800">{theme.component}</span>
-                          <span className="shrink-0 tabular-nums text-slate-500">
-                            {formatCount(theme.count)}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  {extras.complaints.samples.length > 0 && (
-                    <div className="mt-4 space-y-3">
-                      <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-                        Owner write-ups
-                      </p>
-                      <p className="text-xs text-slate-500">
-                        Showing {formatCount(extras.complaints.samples.length)} of{" "}
-                        {formatCount(extras.complaints.total)} for this model
-                        year — not this VIN.
-                      </p>
-                      <ul className="space-y-3">
-                        {extras.complaints.samples.map((sample, index) => (
-                          <li
-                            key={sample.odiNumber ?? `${sample.summary}-${index}`}
-                            className="rounded-xl border border-amber-200/80 bg-white/70 px-3 py-3 sm:px-4"
-                          >
-                            <p className="text-xs text-slate-500">
-                              {[sample.date, sample.components]
-                                .filter(Boolean)
-                                .join(" · ")}
-                            </p>
-                            {(sample.crash || sample.fire) && (
-                              <p className="mt-1 text-xs font-medium text-amber-800">
-                                {[
-                                  sample.crash ? "Crash reported" : null,
-                                  sample.fire ? "Fire reported" : null,
-                                ]
-                                  .filter(Boolean)
-                                  .join(" · ")}
-                              </p>
-                            )}
-                            <p className="mt-1.5 text-sm leading-relaxed text-slate-700">
-                              {sample.summary}
-                            </p>
-                            {sample.odiNumber && (
-                              <p className="mt-1.5 font-mono text-[11px] text-slate-400">
-                                NHTSA ODI {sample.odiNumber}
-                              </p>
-                            )}
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-                </ScrollOpenDetails>
-              ) : (
-                <p className="text-sm text-slate-800">
-                  {formatCount(extras.complaints.total)} owner{" "}
-                  {extras.complaints.total === 1 ? "complaint" : "complaints"}{" "}
-                  filed for the {ymm}
-                  <span className="text-slate-500"> — not this VIN</span>
-                </p>
-              )}
-            </dd>
-          </div>
+          <OwnerComplaints ymm={ymm} complaints={extras.complaints} />
         )}
 
         {extras.mpg && (

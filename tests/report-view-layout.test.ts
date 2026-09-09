@@ -38,9 +38,11 @@ describe("report view layout", () => {
     );
     assert.match(card, /Campaign \{index \+ 1\}/);
     assert.match(card, /Show details/);
-    assert.match(card, /Show \{extras\.complaints\.themes\.length\}|Show[\s\S]*complaints\.samples\.length/);
-    assert.match(card, /extras\.complaints\.samples\.map/);
-    assert.match(card, /Showing \{formatCount\(extras\.complaints\.samples\.length\)\}/);
+    assert.match(card, /complaintSamples\(complaints\)/);
+    assert.match(card, /samples\.map/);
+    assert.match(card, /Showing \{formatCount\(samples\.length\)\}/);
+    assert.match(card, /Owner write-ups/);
+    assert.match(card, /for this model year — not this[\s\S]*VIN/);
     assert.match(card, /ScrollOpenDetails/);
     assert.match(card, /when-closed mt-2 flex items-center gap-1 text-sm font-medium text-brand-600/);
     assert.ok(

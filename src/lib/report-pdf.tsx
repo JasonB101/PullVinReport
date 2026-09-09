@@ -27,6 +27,7 @@ import type { VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import type { ModelExtras } from "@/lib/model-extras";
 import {
+  complaintSamples,
   hasModelExtras,
   modelExtrasSummaryLine,
 } from "@/lib/model-extras";
@@ -560,8 +561,15 @@ function Section({
   );
 }
 
+function clipPdf(value: string, max = 160): string {
+  const text = value.replace(/\s+/g, " ").trim();
+  if (text.length <= max) return text;
+  return `${text.slice(0, max - 1).trimEnd()}…`;
+}
+
 function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
   if (!hasModelExtras(extras)) return null;
+  const samples = complaintSamples(extras.complaints).slice(0, 3);
   return (
     <View style={styles.section} wrap={false}>
       <Text style={styles.sectionTitle}>{MODEL_ZONE_TITLE}</Text>
@@ -574,9 +582,16 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
           Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
         </Text>
       ))}
-      {extras.complaints?.samples.slice(0, 3).map((sample, index) => (
+      {samples.length > 0 && extras.complaints && (
+        <Text style={styles.sectionNote}>
+          Showing {samples.length} of {extras.complaints.total} owner write-ups
+          for this model year — not this VIN.
+        </Text>
+      )}
+      {samples.map((sample, index) => (
         <Text key={sample.odiNumber ?? `${index}`} style={styles.bullet}>
-          Complaint{sample.date ? ` ${sample.date}` : ""}: {sample.summary}
+          {sample.date ? `${sample.date} · ` : ""}
+          {sample.components}: {clipPdf(sample.summary)}
         </Text>
       ))}
     </View>

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   composeModelExtras,
@@ -153,6 +154,24 @@ describe("model extras parsers", () => {
     }
   });
 
+  it("clips huge NHTSA summaries so the card stays readable", () => {
+    const complaints = parseComplaintsPayload({
+      count: 1,
+      results: [
+        {
+          odiNumber: 9,
+          components: "ENGINE",
+          summary: "x".repeat(800),
+          dateComplaintFiled: "01/02/2024",
+        },
+      ],
+    });
+    assert.ok(complaints);
+    assert.equal(complaints.samples.length, 1);
+    assert.ok(complaints.samples[0]!.summary.length <= 480);
+    assert.match(complaints.samples[0]!.summary, /…$/);
+  });
+
   it("skips the UNKNOWN OR OTHER complaint bucket", () => {
     const complaints = parseComplaintsPayload(COMPLAINTS);
     assert.ok(complaints);
@@ -251,7 +270,20 @@ describe("model extras copy", () => {
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
     assert.equal(extras.recalls?.total, 2);
     assert.equal(extras.complaints?.total, 644);
+    assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
+    assert.match(extras.complaints?.samples[0]?.summary ?? "", /transmission shudder/i);
     assert.equal(extras.mpg?.combined, 28);
+  });
+});
+
+describe("model extras cache key", () => {
+  it("versions the cache so a theme-only extras blob cannot stick", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/model-extras.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /EXTRAS_CACHE_VERSION = "v2"/);
+    assert.match(source, /\$\{EXTRAS_CACHE_VERSION\}\|\$\{ymmCacheKey/);
   });
 });
 
@@ -295,6 +327,8 @@ describe("model extras fetch and cache", () => {
     assert.ok(first);
     assert.equal(first.recalls?.total, 2);
     assert.equal(first.complaints?.total, 10);
+    assert.ok((first.complaints?.samples.length ?? 0) >= 3);
+    assert.equal(first.complaints?.samples[0]?.crash, true);
     assert.deepEqual(first.mpg, {
       city: 24,
       highway: 34,

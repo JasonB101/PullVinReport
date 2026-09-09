@@ -2,10 +2,11 @@ import { Resend } from "resend";
 
 import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from "@/lib/config";
 import { REPORT_DISCLAIMER_SHORT } from "@/lib/customer-copy";
+import { extrasForReport, type ModelExtras } from "@/lib/model-extras";
 import { vehicleTitle } from "@/lib/report";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
-import type { Order } from "@/lib/store";
+import { getStore, type Order } from "@/lib/store";
 
 function escapeHtml(value: string): string {
   return value
@@ -128,14 +129,26 @@ type ReportAttachment = {
  * operator and dropped rather than costing the customer their receipt. The PDF
  * contains no link or token — a forwarded copy must not hand over access.
  */
+async function loadModelExtras(order: Order): Promise<ModelExtras | null> {
+  if (!order.report) return null;
+  try {
+    return await extrasForReport(order.report, getStore());
+  } catch (error) {
+    console.error(`[email] model extras failed for order ${order.id}`, error);
+    return null;
+  }
+}
+
 async function reportAttachment(
   order: Order,
+  modelExtras: ModelExtras | null,
 ): Promise<{ attachment?: ReportAttachment; detail: string }> {
   if (!order.report) return { detail: "no report to attach" };
   try {
     const content = await renderReportPdf(
       withCurrentLayout(order.report),
       order.aiBrief,
+      modelExtras,
     );
     return {
       attachment: {
@@ -156,7 +169,10 @@ async function reportAttachment(
  * must never block or reverse a successful fulfillment, so this returns a
  * result instead of throwing.
  */
-export async function sendReportEmail(order: Order): Promise<EmailResult> {
+export async function sendReportEmail(
+  order: Order,
+  modelExtras?: ModelExtras | null,
+): Promise<EmailResult> {
   const reportUrl = absoluteUrl(`/report/${order.accessToken}`);
 
   if (!isEmailConfigured()) {
@@ -166,7 +182,9 @@ export async function sendReportEmail(order: Order): Promise<EmailResult> {
     return { sent: false, detail: "No customer email on the order" };
   }
 
-  const pdf = await reportAttachment(order);
+  const extras =
+    modelExtras !== undefined ? modelExtras : await loadModelExtras(order);
+  const pdf = await reportAttachment(order, extras);
 
   try {
     const resend = new Resend(emailConfig.apiKey);

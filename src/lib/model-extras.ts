@@ -425,9 +425,21 @@ export function composeModelExtras(
     ymmLabel: ymm.ymmLabel,
   };
   if (slices.recalls) extras.recalls = slices.recalls;
-  if (slices.complaints) extras.complaints = slices.complaints;
+  if (slices.complaints) {
+    extras.complaints = {
+      ...slices.complaints,
+      samples: slices.complaints.samples ?? [],
+    };
+  }
   if (slices.mpg) extras.mpg = slices.mpg;
   return hasModelExtras(extras) ? extras : null;
+}
+
+/** Theme-only cache leftovers still render; a missing field is an empty list. */
+export function complaintSamples(
+  complaints: ModelComplaints | null | undefined,
+): ModelComplaintSample[] {
+  return complaints?.samples ?? [];
 }
 
 /** One printed line for the PDF — still names the model, not the VIN. */
