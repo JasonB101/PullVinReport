@@ -142,6 +142,58 @@ export function isAnthropicAdminConfigured(): boolean {
   return Boolean(anthropic.adminApiKey);
 }
 
+/** PullVinReport Google Ads customer — digits only, no dashes. */
+export const DEFAULT_GOOGLE_ADS_CUSTOMER_ID = "7544762158";
+
+export const GOOGLE_ADS_OAUTH_SCOPE = "https://www.googleapis.com/auth/adwords";
+
+function digitsEnv(key: string): string | undefined {
+  const raw = env(key);
+  if (!raw) return undefined;
+  const digits = raw.replace(/\D/g, "");
+  return digits.length > 0 ? digits : undefined;
+}
+
+/**
+ * Official Google Ads API credentials for /admin spend today + MTD.
+ *
+ * All four auth values must be present or the tile is omitted — never
+ * shown as $0.00. `GOOGLE_ADS_CUSTOMER_ID` defaults to the PullVinReport
+ * account. Developer tokens are issued on a manager (MCC) account, so
+ * `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is required on that path and is sent as
+ * `login-customer-id`. Leave it unset only for a direct-account token;
+ * the header is then omitted.
+ */
+export const googleAds = {
+  get developerToken(): string | undefined {
+    return env("GOOGLE_ADS_DEVELOPER_TOKEN");
+  },
+  get clientId(): string | undefined {
+    return env("GOOGLE_ADS_CLIENT_ID");
+  },
+  get clientSecret(): string | undefined {
+    return env("GOOGLE_ADS_CLIENT_SECRET");
+  },
+  get refreshToken(): string | undefined {
+    return env("GOOGLE_ADS_REFRESH_TOKEN");
+  },
+  get customerId(): string {
+    return digitsEnv("GOOGLE_ADS_CUSTOMER_ID") ?? DEFAULT_GOOGLE_ADS_CUSTOMER_ID;
+  },
+  get loginCustomerId(): string | undefined {
+    return digitsEnv("GOOGLE_ADS_LOGIN_CUSTOMER_ID");
+  },
+};
+
+export function isGoogleAdsConfigured(): boolean {
+  return Boolean(
+    googleAds.developerToken &&
+      googleAds.clientId &&
+      googleAds.clientSecret &&
+      googleAds.refreshToken,
+  );
+}
+
 /**
  * Illustrated vehicle hero on the paid report.
  *

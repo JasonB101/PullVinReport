@@ -114,7 +114,21 @@ describe("admin console", () => {
     assert.match(credits, /console\.anthropic\.com\/settings\/billing/);
     assert.doesNotMatch(credits, /organizations\/balance/);
     assert.doesNotMatch(credits, /document\.cookie|sessionStorage|localStorage/);
+    assert.match(credits, /googleads\.googleapis\.com/);
+    assert.match(credits, /oauth2\/v3\/token/);
+    assert.match(credits, /metrics\.cost_micros/);
+    assert.match(credits, /DURING \$\{range\}/);
+    assert.match(credits, /"TODAY"/);
+    assert.match(credits, /"THIS_MONTH"/);
+    assert.match(credits, /login-customer-id/);
+    const envExample = await readFile(
+      fileURLToPath(new URL("../.env.example", import.meta.url)),
+      "utf8",
+    );
+    assert.match(envExample, /GOOGLE_ADS_LOGIN_CUSTOMER_ID/);
+    assert.match(envExample, /manager \(MCC\)|MCC \/ manager/i);
     assert.doesNotMatch(credits, /api\.stripe\.com\/v1\/balance/);
+    assert.doesNotMatch(credits, /from ["']@\/lib\/google-ads["']/);
     const stripe = await readSrc("lib/stripe.ts");
     assert.match(stripe, /export async function retrieveStripeBalance/);
     assert.match(stripe, /getStripe\(\)\.balance\.retrieve\(/);
@@ -129,9 +143,9 @@ describe("admin console", () => {
     const status = await readSrc("lib/status.ts");
     const statusPage = await readSrc("app/status/page.tsx");
     const statusApi = await readSrc("app/api/status/route.ts");
-    assert.doesNotMatch(status, /fetchVendorCredits|vendor-credits/);
-    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits|Console Billing/);
-    assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits/);
+    assert.doesNotMatch(status, /fetchVendorCredits|vendor-credits|Ads spend|google-ads/);
+    assert.doesNotMatch(statusPage, /fetchVendorCredits|API credits|Console Billing|Ads spend/);
+    assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits|Ads spend/);
   });
 
   it("puts API credits under the stats cards, not in the orders table", async () => {

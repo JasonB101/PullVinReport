@@ -8,7 +8,8 @@ import {
 /**
  * Compact operator card. Numbers come from official vendor APIs only —
  * never rendered as invented zeros. “No credit APIs configured” is only
- * for a literal absence of Stripe / fal / Resend / Anthropic-admin keys.
+ * for a literal absence of Stripe / fal / Resend / Anthropic-admin /
+ * Google Ads keys.
  */
 export function ApiCredits({ report }: { report: VendorCreditsReport }) {
   const noneConfigured = report.items.length === 0 && !hasAnyCreditApiConfigured();

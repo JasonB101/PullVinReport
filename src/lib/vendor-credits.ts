@@ -5,17 +5,21 @@
  * or anonymous /api/status. Each vendor is fetched independently with a
  * short timeout. A missing official API or any failed call marks that
  * vendor unavailable rather than inventing a zero. Anthropic appears only
- * when ANTHROPIC_ADMIN_API_KEY is set. Neon is skipped until a management
- * key exists.
+ * when ANTHROPIC_ADMIN_API_KEY is set. Google Ads appears only when the
+ * four OAuth/developer-token vars are set. Neon is skipped until a
+ * management key exists.
  */
 import {
   anthropic,
   emailConfig,
   fal,
   formatPrice,
+  googleAds,
+  GOOGLE_ADS_OAUTH_SCOPE,
   isAnthropicAdminConfigured,
   isEmailConfigured,
   isFalBillingConfigured,
+  isGoogleAdsConfigured,
   isStripeConfigured,
   isVinAuditConfigured,
   stripeConfig,
@@ -42,13 +46,19 @@ const USER_AGENT = "PullVinReport/1.0 (+https://pullvinreport.com)";
 
 export type VendorCredit = {
   vendor: string;
-  key: "stripe" | "fal" | "resend" | "anthropic";
+  key: "stripe" | "fal" | "resend" | "anthropic" | "google-ads";
   ok: boolean;
   metric: string;
   value: string;
   asOf: string;
   error?: string;
 };
+
+/** Current Google Ads API version (REST Search / SearchStream). */
+export const GOOGLE_ADS_API_VERSION = "v25";
+
+/** Official user-auth token URL from Google Ads REST auth docs. */
+export const GOOGLE_ADS_TOKEN_URL = "https://www.googleapis.com/oauth2/v3/token";
 
 export type VendorCreditsReport = {
   checkedAt: string;
@@ -124,12 +134,17 @@ function unavailableAnthropic(now: Date, error = BILLING_UNAVAILABLE): VendorCre
   return unavailableCredit("Anthropic", "anthropic", "USD spend MTD", now, error);
 }
 
+function unavailableGoogleAds(now: Date, error = BILLING_UNAVAILABLE): VendorCredit {
+  return unavailableCredit("Google Ads", "google-ads", "Ads spend", now, error);
+}
+
 export function hasAnyCreditApiConfigured(): boolean {
   return (
     isStripeConfigured() ||
     isFalBillingConfigured() ||
     isEmailConfigured() ||
-    isAnthropicAdminConfigured()
+    isAnthropicAdminConfigured() ||
+    isGoogleAdsConfigured()
   );
 }
 
@@ -140,6 +155,7 @@ export function configuredUnavailableCredits(now: Date = new Date()): VendorCred
   if (isFalBillingConfigured()) items.push(unavailableFal(now, BILLING_UNAVAILABLE));
   if (isEmailConfigured()) items.push(unavailableResend(now));
   if (isAnthropicAdminConfigured()) items.push(unavailableAnthropic(now));
+  if (isGoogleAdsConfigured()) items.push(unavailableGoogleAds(now));
   return items;
 }
 
@@ -283,23 +299,28 @@ export function parseResendQuotaHeaders(
   return null;
 }
 
-async function getJson(
+async function requestJson(
   url: string,
-  headers: Record<string, string>,
   fetchImpl: FetchLike,
   timeoutMs: number,
+  init: {
+    method?: string;
+    headers?: Record<string, string>;
+    body?: string;
+  } = {},
 ): Promise<JsonResult> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
     const response = await fetchImpl(url, {
-      method: "GET",
+      method: init.method ?? "GET",
       cache: "no-store",
       signal: controller.signal,
+      body: init.body,
       headers: {
         accept: "application/json",
         "user-agent": USER_AGENT,
-        ...headers,
+        ...init.headers,
       },
     });
     const text = await response.text();
@@ -324,6 +345,15 @@ async function getJson(
   } finally {
     clearTimeout(timer);
   }
+}
+
+async function getJson(
+  url: string,
+  headers: Record<string, string>,
+  fetchImpl: FetchLike,
+  timeoutMs: number,
+): Promise<JsonResult> {
+  return requestJson(url, fetchImpl, timeoutMs, { method: "GET", headers });
 }
 
 function falFailureReason(status: number): string {
@@ -562,6 +592,150 @@ async function anthropicCredits(
   };
 }
 
+export function googleAdsSearchQuery(range: "TODAY" | "THIS_MONTH"): string {
+  return `SELECT metrics.cost_micros FROM customer WHERE segments.date DURING ${range}`;
+}
+
+export function googleAdsSearchUrl(customerId: string): string {
+  return `https://googleads.googleapis.com/${GOOGLE_ADS_API_VERSION}/customers/${customerId}/googleAds:search`;
+}
+
+export function costMicrosToUsd(micros: number): number {
+  return micros / 1_000_000;
+}
+
+export function parseGoogleAdsAccessToken(body: unknown): string | null {
+  if (!body || typeof body !== "object") return null;
+  const token = (body as Record<string, unknown>).access_token;
+  return typeof token === "string" && token.trim() ? token.trim() : null;
+}
+
+function googleAdsResultRows(body: unknown): unknown[] | null {
+  if (Array.isArray(body)) {
+    const rows: unknown[] = [];
+    let sawResults = false;
+    for (const batch of body) {
+      if (!batch || typeof batch !== "object") continue;
+      const results = (batch as Record<string, unknown>).results;
+      if (!Array.isArray(results)) continue;
+      sawResults = true;
+      rows.push(...results);
+    }
+    if (sawResults) return rows;
+    return body.length === 0 ? [] : null;
+  }
+  if (!body || typeof body !== "object") return null;
+  if (!("results" in body)) return null;
+  const results = (body as Record<string, unknown>).results;
+  return Array.isArray(results) ? results : null;
+}
+
+function costMicrosFromRow(row: unknown): number | null {
+  if (!row || typeof row !== "object") return null;
+  const metrics = (row as Record<string, unknown>).metrics;
+  if (!metrics || typeof metrics !== "object") return null;
+  const rec = metrics as Record<string, unknown>;
+  return parseFiniteNumber(rec.costMicros ?? rec.cost_micros);
+}
+
+/**
+ * Account-level `metrics.cost_micros` from Search or SearchStream.
+ * Empty `results` is a real $0 period. A payload with rows but no
+ * readable cost is unusable — return null, never invent 0.
+ */
+export function parseGoogleAdsCostMicros(body: unknown): number | null {
+  const rows = googleAdsResultRows(body);
+  if (rows === null) return null;
+  if (rows.length === 0) return 0;
+
+  let total = 0;
+  let found = false;
+  for (const row of rows) {
+    const micros = costMicrosFromRow(row);
+    if (micros === null) continue;
+    total += micros;
+    found = true;
+  }
+  return found ? total : null;
+}
+
+async function googleAdsCredits(
+  now: Date,
+  fetchImpl: FetchLike,
+  timeoutMs: number,
+): Promise<VendorResult> {
+  if (!isGoogleAdsConfigured()) return null;
+
+  const developerToken = googleAds.developerToken;
+  const clientId = googleAds.clientId;
+  const clientSecret = googleAds.clientSecret;
+  const refreshToken = googleAds.refreshToken;
+  if (!developerToken || !clientId || !clientSecret || !refreshToken) return null;
+
+  const tokenResult = await requestJson(GOOGLE_ADS_TOKEN_URL, fetchImpl, timeoutMs, {
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "refresh_token",
+      client_id: clientId,
+      client_secret: clientSecret,
+      refresh_token: refreshToken,
+      scope: GOOGLE_ADS_OAUTH_SCOPE,
+    }).toString(),
+  });
+  if (tokenResult.kind === "error" || tokenResult.status !== 200) {
+    return unavailableGoogleAds(now);
+  }
+  const accessToken = parseGoogleAdsAccessToken(tokenResult.body);
+  if (!accessToken) return unavailableGoogleAds(now);
+
+  const headers: Record<string, string> = {
+    authorization: `Bearer ${accessToken}`,
+    "developer-token": developerToken,
+    "content-type": "application/json",
+  };
+  const loginCustomerId = googleAds.loginCustomerId;
+  if (loginCustomerId) headers["login-customer-id"] = loginCustomerId;
+
+  const searchUrl = googleAdsSearchUrl(googleAds.customerId);
+  const [today, month] = await Promise.all([
+    requestJson(searchUrl, fetchImpl, timeoutMs, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: googleAdsSearchQuery("TODAY") }),
+    }),
+    requestJson(searchUrl, fetchImpl, timeoutMs, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ query: googleAdsSearchQuery("THIS_MONTH") }),
+    }),
+  ]);
+
+  if (
+    today.kind !== "http" ||
+    today.status !== 200 ||
+    month.kind !== "http" ||
+    month.status !== 200
+  ) {
+    return unavailableGoogleAds(now);
+  }
+
+  const todayMicros = parseGoogleAdsCostMicros(today.body);
+  const monthMicros = parseGoogleAdsCostMicros(month.body);
+  if (todayMicros === null || monthMicros === null) {
+    return unavailableGoogleAds(now);
+  }
+
+  return {
+    vendor: "Google Ads",
+    key: "google-ads",
+    ok: true,
+    metric: "Ads spend",
+    value: `${formatUsdAmount(costMicrosToUsd(todayMicros), "USD")} today · ${formatUsdAmount(costMicrosToUsd(monthMicros), "USD")} MTD`,
+    asOf: asOf(now),
+  };
+}
+
 async function safeVendor(
   load: () => Promise<VendorResult>,
   onThrow: () => VendorResult,
@@ -578,8 +752,10 @@ async function safeVendor(
  *
  * Anthropic is included only with ANTHROPIC_ADMIN_API_KEY (MTD spend plus
  * a Console Billing link — remaining prepaid credits are not API-available).
- * Neon is skipped until a management key exists. VinAudit is a refill link
- * only.
+ * Google Ads is included only when the four official Ads API env vars are
+ * set. `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is sent as login-customer-id when set
+ * (required for the usual MCC developer-token path). Neon is skipped
+ * until a management key exists. VinAudit is a refill link only.
  *
  * Never throws — a vendor outage must not take down /admin. Configured
  * vendors that fail are returned as unavailable, not omitted.
@@ -608,6 +784,10 @@ export async function fetchVendorCredits(
       safeVendor(
         () => anthropicCredits(now, fetchImpl, timeoutMs),
         () => (isAnthropicAdminConfigured() ? unavailableAnthropic(now) : null),
+      ),
+      safeVendor(
+        () => googleAdsCredits(now, fetchImpl, timeoutMs),
+        () => (isGoogleAdsConfigured() ? unavailableGoogleAds(now) : null),
       ),
     ]);
 

@@ -6,20 +6,31 @@ import {
   BILLING_UNAVAILABLE,
   CREDIT_FETCH_TIMEOUT_MS,
   FAL_NEEDS_ADMIN_KEY,
+  GOOGLE_ADS_API_VERSION,
+  GOOGLE_ADS_TOKEN_URL,
   VINAUDIT_ACCOUNT_URL,
+  costMicrosToUsd,
   emptyVendorCredits,
   falAuthorizationHeader,
   fetchVendorCredits,
+  googleAdsSearchQuery,
+  googleAdsSearchUrl,
   hasAnyCreditApiConfigured,
   parseAnthropicCostReport,
   parseFalCredits,
   parseFiniteNumber,
+  parseGoogleAdsAccessToken,
+  parseGoogleAdsCostMicros,
   parseResendQuotaHeaders,
   parseResendUsage,
   parseStripeBalance,
   utcMonthToDateBounds,
   type FetchLike,
 } from "@/lib/vendor-credits";
+import {
+  DEFAULT_GOOGLE_ADS_CUSTOMER_ID,
+  GOOGLE_ADS_OAUTH_SCOPE,
+} from "@/lib/config";
 
 const ENV_KEYS = [
   "STRIPE_SECRET_KEY",
@@ -28,6 +39,12 @@ const ENV_KEYS = [
   "RESEND_API_KEY",
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_ADMIN_API_KEY",
+  "GOOGLE_ADS_DEVELOPER_TOKEN",
+  "GOOGLE_ADS_CLIENT_ID",
+  "GOOGLE_ADS_CLIENT_SECRET",
+  "GOOGLE_ADS_REFRESH_TOKEN",
+  "GOOGLE_ADS_CUSTOMER_ID",
+  "GOOGLE_ADS_LOGIN_CUSTOMER_ID",
   "VINAUDIT_API_KEY",
   "VINAUDIT_USER",
   "VINAUDIT_PASS",
@@ -191,6 +208,53 @@ describe("parseAnthropicCostReport", () => {
       }),
       null,
     );
+  });
+});
+
+describe("Google Ads spend parsers", () => {
+  it("uses TODAY / THIS_MONTH macros on the current Ads API search URL", () => {
+    assert.equal(GOOGLE_ADS_API_VERSION, "v25");
+    assert.match(googleAdsSearchQuery("TODAY"), /DURING TODAY/);
+    assert.match(googleAdsSearchQuery("THIS_MONTH"), /DURING THIS_MONTH/);
+    assert.match(googleAdsSearchQuery("TODAY"), /metrics\.cost_micros/);
+    assert.equal(
+      googleAdsSearchUrl(DEFAULT_GOOGLE_ADS_CUSTOMER_ID),
+      `https://googleads.googleapis.com/v25/customers/${DEFAULT_GOOGLE_ADS_CUSTOMER_ID}/googleAds:search`,
+    );
+    assert.equal(costMicrosToUsd(1_250_000), 1.25);
+  });
+
+  it("reads cost_micros from Search and SearchStream payloads", () => {
+    assert.equal(
+      parseGoogleAdsCostMicros({
+        results: [{ metrics: { costMicros: "2500000" } }],
+      }),
+      2_500_000,
+    );
+    assert.equal(
+      parseGoogleAdsCostMicros([
+        { results: [{ metrics: { cost_micros: 100 } }] },
+        { results: [{ metrics: { costMicros: "50" } }] },
+      ]),
+      150,
+    );
+  });
+
+  it("treats an empty successful period as 0, not an unreadable payload", () => {
+    assert.equal(parseGoogleAdsCostMicros({ results: [] }), 0);
+    assert.equal(parseGoogleAdsCostMicros([]), 0);
+  });
+
+  it("does not invent 0 from a missing or unreadable report", () => {
+    assert.equal(parseGoogleAdsCostMicros({}), null);
+    assert.equal(parseGoogleAdsCostMicros({ results: [{ metrics: {} }] }), null);
+    assert.equal(
+      parseGoogleAdsCostMicros({ results: [{ metrics: { costMicros: "n/a" } }] }),
+      null,
+    );
+    assert.equal(parseGoogleAdsAccessToken({}), null);
+    assert.equal(parseGoogleAdsAccessToken({ access_token: "  " }), null);
+    assert.equal(parseGoogleAdsAccessToken({ access_token: "ya29.token" }), "ya29.token");
   });
 });
 
@@ -567,6 +631,10 @@ describe("fetchVendorCredits", () => {
     process.env.FAL_KEY = "fal_x";
     process.env.RESEND_API_KEY = "re_x";
     process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-x";
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev";
+    process.env.GOOGLE_ADS_CLIENT_ID = "client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "refresh";
     const report = await fetchVendorCredits({
       fetch: async () => {
         throw new Error("boom");
@@ -575,7 +643,7 @@ describe("fetchVendorCredits", () => {
         throw new Error("boom");
       },
     });
-    assert.equal(report.items.length, 4);
+    assert.equal(report.items.length, 5);
     assert.ok(report.items.every((item) => item.ok === false));
     assert.ok(report.items.every((item) => item.value === ""));
     assert.equal(
@@ -584,6 +652,10 @@ describe("fetchVendorCredits", () => {
     );
     assert.equal(
       report.items.find((item) => item.key === "anthropic")?.error,
+      BILLING_UNAVAILABLE,
+    );
+    assert.equal(
+      report.items.find((item) => item.key === "google-ads")?.error,
       BILLING_UNAVAILABLE,
     );
   });
@@ -617,13 +689,18 @@ describe("fetchVendorCredits", () => {
     process.env.FAL_KEY = "fal_x";
     process.env.RESEND_API_KEY = "re_x";
     process.env.ANTHROPIC_ADMIN_API_KEY = "sk-ant-admin-test";
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev";
+    process.env.GOOGLE_ADS_CLIENT_ID = "client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "refresh";
     const report = emptyVendorCredits();
-    assert.equal(report.items.length, 4);
+    assert.equal(report.items.length, 5);
     assert.ok(report.items.every((item) => item.ok === false));
     assert.ok(report.items.every((item) => item.error === BILLING_UNAVAILABLE));
     assert.ok(report.items.every((item) => !/\$0\.00|\b0\b/.test(item.value)));
     assert.ok(report.items.some((item) => item.key === "anthropic"));
     assert.equal(report.anthropicBillingUrl, ANTHROPIC_CONSOLE_BILLING_URL);
+    assert.ok(report.items.some((item) => item.key === "google-ads"));
   });
 
   it("does not put vendor keys in the outgoing URL", async () => {
@@ -690,5 +767,167 @@ describe("fetchVendorCredits", () => {
 
   it("uses a short per-vendor timeout", () => {
     assert.equal(CREDIT_FETCH_TIMEOUT_MS, 8_000);
+  });
+
+  it("omits Google Ads when any required Ads API env var is missing", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev";
+    process.env.GOOGLE_ADS_CLIENT_ID = "client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "secret";
+    const seen: string[] = [];
+    const report = await fetchVendorCredits({
+      fetch: async (input) => {
+        seen.push(String(input));
+        return jsonResponse(200, {});
+      },
+    });
+    assert.deepEqual(report.items, []);
+    assert.equal(seen.length, 0);
+    assert.equal(hasAnyCreditApiConfigured(), false);
+  });
+
+  it("shows Google Ads spend today and MTD after a mocked token refresh", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev-token";
+    process.env.GOOGLE_ADS_CLIENT_ID = "ads-client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "ads-secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "ads-refresh";
+    const searchUrl = googleAdsSearchUrl(DEFAULT_GOOGLE_ADS_CUSTOMER_ID);
+    let tokenCalls = 0;
+    const queries: string[] = [];
+    const fetchImpl = mockFetch({
+      "https://www.googleapis.com/oauth2/v3/token": (_url, init) => {
+        tokenCalls += 1;
+        assert.equal(init?.method, "POST");
+        const body = String(init?.body ?? "");
+        const params = new URLSearchParams(body);
+        assert.equal(params.get("grant_type"), "refresh_token");
+        assert.equal(params.get("client_id"), "ads-client");
+        assert.equal(params.get("client_secret"), "ads-secret");
+        assert.equal(params.get("refresh_token"), "ads-refresh");
+        assert.equal(params.get("scope"), GOOGLE_ADS_OAUTH_SCOPE);
+        assert.equal(GOOGLE_ADS_TOKEN_URL, "https://www.googleapis.com/oauth2/v3/token");
+        return jsonResponse(200, { access_token: "ya29.access", token_type: "Bearer" });
+      },
+      [`https://googleads.googleapis.com/v25/customers/${DEFAULT_GOOGLE_ADS_CUSTOMER_ID}/googleAds:search`]:
+        (_url, init) => {
+          const headers = new Headers(init?.headers);
+          assert.equal(headers.get("authorization"), "Bearer ya29.access");
+          assert.equal(headers.get("developer-token"), "dev-token");
+          assert.equal(headers.get("login-customer-id"), null);
+          const payload = JSON.parse(String(init?.body ?? "{}")) as { query?: string };
+          queries.push(payload.query ?? "");
+          const today = payload.query?.includes("TODAY");
+          return jsonResponse(200, {
+            results: [{ metrics: { costMicros: today ? "1230000" : "4560000" } }],
+          });
+        },
+    });
+    const report = await fetchVendorCredits({ fetch: fetchImpl });
+    assert.equal(tokenCalls, 1);
+    assert.equal(queries.length, 2);
+    assert.ok(queries.some((query) => query.includes("DURING TODAY")));
+    assert.ok(queries.some((query) => query.includes("DURING THIS_MONTH")));
+    assert.equal(report.items.length, 1);
+    assert.equal(report.items[0]?.key, "google-ads");
+    assert.equal(report.items[0]?.ok, true);
+    assert.equal(report.items[0]?.metric, "Ads spend");
+    assert.equal(report.items[0]?.value, "$1.23 today · $4.56 MTD");
+    assert.equal(searchUrl.includes("754-476-2158"), false);
+  });
+
+  it("sends login-customer-id only when the MCC id is set, and strips dashes", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev-token";
+    process.env.GOOGLE_ADS_CLIENT_ID = "ads-client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "ads-secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "ads-refresh";
+    process.env.GOOGLE_ADS_CUSTOMER_ID = "754-476-2158";
+    process.env.GOOGLE_ADS_LOGIN_CUSTOMER_ID = "111-222-3333";
+    const seen: { url: string; login: string | null }[] = [];
+    const fetchImpl = mockFetch({
+      "https://www.googleapis.com/oauth2/v3/token": () =>
+        jsonResponse(200, { access_token: "ya29.access" }),
+      "https://googleads.googleapis.com/v25/customers/7544762158/googleAds:search": (_url, init) => {
+        seen.push({
+          url: _url.href,
+          login: new Headers(init?.headers).get("login-customer-id"),
+        });
+        return jsonResponse(200, { results: [] });
+      },
+    });
+    const report = await fetchVendorCredits({ fetch: fetchImpl });
+    assert.equal(report.items[0]?.ok, true);
+    assert.equal(report.items[0]?.value, "$0.00 today · $0.00 MTD");
+    assert.ok(seen.length >= 2);
+    assert.ok(seen.every((call) => call.login === "1112223333"));
+    assert.ok(seen.every((call) => !call.url.includes("-")));
+  });
+
+  it("marks Google Ads unavailable when token refresh fails instead of showing $0", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev-token";
+    process.env.GOOGLE_ADS_CLIENT_ID = "ads-client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "ads-secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "ads-refresh";
+    const report = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://www.googleapis.com/oauth2/v3/token": () =>
+          jsonResponse(400, { error: "invalid_grant" }),
+      }),
+    });
+    assert.equal(report.items[0]?.key, "google-ads");
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.equal(report.items[0]?.value, "");
+    assert.doesNotMatch(report.items[0]?.value ?? "x", /0/);
+  });
+
+  it("marks Google Ads unavailable when either date-range search fails", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev-token";
+    process.env.GOOGLE_ADS_CLIENT_ID = "ads-client";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "ads-secret";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "ads-refresh";
+    let searches = 0;
+    const report = await fetchVendorCredits({
+      fetch: mockFetch({
+        "https://www.googleapis.com/oauth2/v3/token": () =>
+          jsonResponse(200, { access_token: "ya29.access" }),
+        [`https://googleads.googleapis.com/v25/customers/${DEFAULT_GOOGLE_ADS_CUSTOMER_ID}/googleAds:search`]:
+          (_url, init) => {
+            searches += 1;
+            const query = String(init?.body ?? "");
+            if (query.includes("THIS_MONTH")) return jsonResponse(403, { error: "denied" });
+            return jsonResponse(200, {
+              results: [{ metrics: { costMicros: "1000000" } }],
+            });
+          },
+      }),
+    });
+    assert.ok(searches >= 1);
+    assert.equal(report.items[0]?.ok, false);
+    assert.equal(report.items[0]?.error, BILLING_UNAVAILABLE);
+    assert.equal(report.items[0]?.value, "");
+    assert.doesNotMatch(report.items[0]?.value ?? "x", /\$0\.00/);
+  });
+
+  it("does not put Google Ads secrets in the outgoing URL", async () => {
+    clearCreditEnv();
+    process.env.GOOGLE_ADS_DEVELOPER_TOKEN = "dev_secret_value";
+    process.env.GOOGLE_ADS_CLIENT_ID = "client_secret_value";
+    process.env.GOOGLE_ADS_CLIENT_SECRET = "ads_secret_value";
+    process.env.GOOGLE_ADS_REFRESH_TOKEN = "refresh_secret_value";
+    const seen: string[] = [];
+    await fetchVendorCredits({
+      fetch: async (input) => {
+        seen.push(String(input));
+        return jsonResponse(401, {});
+      },
+    });
+    assert.equal(
+      seen.some((url) => url.includes("secret_value")),
+      false,
+    );
   });
 });

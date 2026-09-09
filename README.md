@@ -68,6 +68,9 @@ version:
 | `ANTHROPIC_ADMIN_API_KEY` | No | Admin API key (`sk-ant-admin…`) for /admin USD spend MTD. Unset omits Anthropic from the credits card; a failed Cost Report is shown as unavailable, never as $0. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
 | `ANTHROPIC_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for a brief. Fulfillment uses a shorter budget of its own. |
+| `GOOGLE_ADS_DEVELOPER_TOKEN`, `GOOGLE_ADS_CLIENT_ID`, `GOOGLE_ADS_CLIENT_SECRET`, `GOOGLE_ADS_REFRESH_TOKEN` | No | Official Google Ads API credentials for /admin spend today + MTD. Omit any and the tile is hidden; a failed call is unavailable, never $0.00. |
+| `GOOGLE_ADS_CUSTOMER_ID` | No (default `7544762158`) | Ads customer id, digits only. |
+| `GOOGLE_ADS_LOGIN_CUSTOMER_ID` | Required when the developer token is on an MCC | Manager customer id, sent as `login-customer-id`. Developer tokens are issued on a manager account, so this is required for the usual MCC → client (`7544762158`) path. Unset omits the header (direct-account token only). |
 | `FAL_KEY` | No | Turns on a cartoon vehicle hero on the paid report card. Unset means no hero and no other change. |
 | `FAL_ADMIN_KEY` | No | Admin-scope fal key for the /admin credit balance. An API-scope `FAL_KEY` is shown as unavailable (needs Admin-scope key) instead of 0. |
 | `FAL_IMAGE_MODEL` | No (default `fal-ai/recraft/v3/text-to-image`) | fal.ai model id. Recraft V3's digital-illustration style is the default so the picture cannot read as a photo of this VIN. Recraft V4 on fal has no style lock. |
@@ -327,14 +330,15 @@ Set `ADMIN_PASSWORD` and sign in at `/admin/login`. The session cookie is an
 HMAC derived from the password, so rotating the password signs everyone out.
 
 The console shows order counts, collected revenue, refunded totals, a compact
-API credits card (Stripe, fal, Resend, and Anthropic when an admin key is
-set), and the full order list with the provider error for anything that
-failed. Failed or stuck orders can be retried, a delivered report's email
-can be re-sent, and any charged order can be refunded in place — see
-[Refunds](#refunds). Credit numbers are admin-only and never linked from
-the customer footer. A configured vendor whose official API fails is shown
-as unavailable (never faked as zero). “No credit APIs configured” appears
-only when Stripe, fal, Resend, and Anthropic admin keys are all absent.
+API credits card (Stripe, fal, Resend, Anthropic when an admin key is
+set, and Google Ads when the official Ads API env is complete), and the
+full order list with the provider error for anything that failed. Failed
+or stuck orders can be retried, a delivered report's email can be re-sent,
+and any charged order can be refunded in place — see [Refunds](#refunds).
+Credit numbers are admin-only and never linked from the customer footer.
+A configured vendor whose official API fails is shown as unavailable
+(never faked as zero). “No credit APIs configured” appears only when
+Stripe, fal, Resend, Anthropic admin, and Google Ads keys are all absent.
 Anthropic prepaid remaining credits are not in the official Admin API;
 the card keeps MTD USD spend and links to Console Billing instead of
 inventing a leftover balance.
