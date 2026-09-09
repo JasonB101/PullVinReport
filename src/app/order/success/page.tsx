@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
+import { GoogleAdsPurchase } from "@/components/google-ads-purchase";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
 import { emailConfig, formatPrice, isStripeConfigured } from "@/lib/config";
@@ -178,6 +179,7 @@ export default async function OrderSuccessPage({
 
   return (
     <Shell title="Your payment went through, but the report didn't">
+      {order ? <GoogleAdsPurchase orderId={order.id} /> : null}
       <p>
         We took the payment and then no report came back for your VIN. We will
         not show you sample data in its place.
