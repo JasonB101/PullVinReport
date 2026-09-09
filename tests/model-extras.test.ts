@@ -308,7 +308,7 @@ describe("model extras cache key", () => {
       fileURLToPath(new URL("../src/lib/model-extras.ts", import.meta.url)),
       "utf8",
     );
-    assert.match(source, /EXTRAS_CACHE_VERSION = "v2"/);
+    assert.match(source, /EXTRAS_CACHE_VERSION = "v3"/);
     assert.match(source, /\$\{EXTRAS_CACHE_VERSION\}\|\$\{ymmCacheKey/);
   });
 });

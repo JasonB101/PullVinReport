@@ -16,6 +16,7 @@
  * the same Camry do not re-hit the government on every page view.
  */
 import { exactYearMakeModel } from "@/lib/ai-brief";
+import { cleanCustomerLine } from "@/lib/customer-text";
 import { formatEventDate, isoDate, type Field, type VehicleReport, type VehicleSummary } from "@/lib/report";
 
 const RECALLS_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle";
@@ -37,7 +38,7 @@ const MAX_SUMMARY_CHARS = 480;
 const MAX_EPA_VEHICLES = 12;
 
 /** Bump when the stored extras shape changes so a theme-only cache cannot stick. */
-const EXTRAS_CACHE_VERSION = "v2";
+const EXTRAS_CACHE_VERSION = "v3";
 
 export type ModelRecall = {
   campaign: string;
@@ -206,7 +207,7 @@ export function displayComponent(raw: string): string {
 }
 
 function clip(value: string, max = 280): string {
-  const text = value.replace(/\s+/g, " ").trim();
+  const text = cleanCustomerLine(value);
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }

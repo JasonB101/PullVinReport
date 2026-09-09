@@ -38,7 +38,9 @@ export function ScrollOpenDetails({
         });
       }}
     >
-      <summary className={summaryClassName}>{summary}</summary>
+      <summary className="disclosure-summary">
+        <div className={summaryClassName}>{summary}</div>
+      </summary>
       {children}
     </details>
   );

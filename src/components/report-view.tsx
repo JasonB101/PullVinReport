@@ -4,6 +4,7 @@ import { ReportHealthCard } from "@/components/report-health";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
 import type { VehicleBrief } from "@/lib/ai-brief";
+import { cleanBrief, cleanModelExtras, cleanReport } from "@/lib/customer-text";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
 import { THIS_VIN_CHIP } from "@/lib/report-zones";
@@ -190,6 +191,11 @@ function WhatToKnow({
   );
 }
 
+/** Provider line breaks stay as breaks; leftover tags are already stripped. */
+function FieldValue({ value }: { value: string }) {
+  return <span className="whitespace-pre-line break-words">{value}</span>;
+}
+
 function FieldGrid({ fields }: { fields: Field[] }) {
   return (
     <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
@@ -199,7 +205,7 @@ function FieldGrid({ fields }: { fields: Field[] }) {
             {field.label}
           </dt>
           <dd className="mt-0.5 break-words text-sm text-slate-800">
-            {field.value}
+            <FieldValue value={field.value} />
           </dd>
         </div>
       ))}
@@ -255,11 +261,13 @@ function RecordCard({ fields }: { fields: Field[] }) {
 
   return (
     <details className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <summary className="cursor-pointer list-none p-4 [&::-webkit-details-marker]:hidden">
-        <FieldGrid fields={summary} />
-        <span className="mt-3 flex text-xs">
-          <MoreHint count={detail.length} />
-        </span>
+      <summary className="disclosure-summary">
+        <div className="p-4">
+          <FieldGrid fields={summary} />
+          <span className="mt-3 flex min-h-11 items-center text-xs">
+            <MoreHint count={detail.length} />
+          </span>
+        </div>
       </summary>
       <div className="border-t border-slate-100 px-4 py-4">
         <FieldGrid fields={detail} />
@@ -284,7 +292,7 @@ function Cell({ value, note }: { value: string; note?: string }) {
   if (value === "No") return <span className="text-slate-400">No</span>;
   return (
     <>
-      {value || "—"}
+      <FieldValue value={value || "—"} />
       {note && <span className="ml-1.5 text-xs font-normal text-slate-400">{note}</span>}
     </>
   );
@@ -301,7 +309,9 @@ function SharedFields({ fields, count }: { fields: Field[]; count: number }) {
         <span key={`${field.label}-${index}`}>
           {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
           <span className="text-slate-400">{field.label}: </span>
-          <span className="text-slate-600">{field.value}</span>
+          <span className="text-slate-600">
+            <FieldValue value={field.value} />
+          </span>
         </span>
       ))}
     </p>
@@ -313,14 +323,18 @@ function ExtraFields({ fields }: { fields: Field[] }) {
 
   return (
     <details>
-      <summary className="cursor-pointer list-none text-xs [&::-webkit-details-marker]:hidden">
-        <MoreHint count={fields.length} />
+      <summary className="disclosure-summary">
+        <span className="flex min-h-11 items-center text-xs">
+          <MoreHint count={fields.length} />
+        </span>
       </summary>
       <dl className="mt-2 grid gap-x-6 gap-y-2 text-xs sm:grid-cols-2">
         {fields.map((field, extraIndex) => (
           <div key={`${field.label}-${extraIndex}`} className="min-w-0">
             <dt className="inline text-slate-400">{field.label}: </dt>
-            <dd className="inline break-words text-slate-600">{field.value}</dd>
+            <dd className="inline break-words text-slate-600">
+              <FieldValue value={field.value} />
+            </dd>
           </div>
         ))}
       </dl>
@@ -342,20 +356,22 @@ function RecordRowCard({
   const stacked = stackedRecordRow(table, row);
 
   return (
-    <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <p className="text-sm font-semibold text-slate-900">{stacked.headline}</p>
+    <div className="min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+      <p className="text-sm font-semibold break-words text-slate-900">
+        <FieldValue value={stacked.headline} />
+      </p>
       {stacked.date && (
         <p className="mt-0.5 text-sm text-slate-600">{stacked.date}</p>
       )}
       {stacked.meta && (
-        <p className="mt-0.5 text-xs text-slate-500">{stacked.meta}</p>
+        <p className="mt-0.5 text-xs break-words text-slate-500">{stacked.meta}</p>
       )}
       {(stacked.brand || stacked.current || stacked.rest.length > 0) && (
         <p className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-slate-600">
           {stacked.brand && (
-            <span>
+            <span className="min-w-0 break-words">
               <span className="text-slate-400">Brand: </span>
-              {stacked.brand}
+              <FieldValue value={stacked.brand} />
             </span>
           )}
           {stacked.current && (
@@ -365,9 +381,9 @@ function RecordRowCard({
             </span>
           )}
           {stacked.rest.map((field) => (
-            <span key={field.label}>
+            <span key={field.label} className="min-w-0 break-words">
               <span className="text-slate-400">{field.label}: </span>
-              {field.value}
+              <FieldValue value={field.value} />
             </span>
           ))}
         </p>
@@ -463,33 +479,37 @@ function RecordTable({ table }: { table: SectionTable }) {
 function ListingCard({ listing }: { listing: Listing }) {
   return (
     <details className="rounded-xl border border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)] open:shadow-[0_2px_8px_rgba(15,23,42,0.06)]">
-      <summary className="flex cursor-pointer list-none flex-wrap items-baseline gap-x-3 gap-y-1 p-4 [&::-webkit-details-marker]:hidden">
-        <span className="text-sm font-semibold text-slate-900">
-          {listing.headline}
-        </span>
-        {listing.date && (
-          <span className="text-xs text-slate-500">{listing.date}</span>
-        )}
-        {listing.price && (
-          <span className="ml-auto text-base font-semibold tabular-nums text-slate-900">
-            {listing.price}
+      <summary className="disclosure-summary">
+        <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1 p-4">
+          <span className="min-w-0 text-sm font-semibold break-words text-slate-900">
+            {listing.headline}
           </span>
-        )}
-
-        <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
-          {listing.summary.map((field, index) => (
-            <span key={`${field.label}-${index}`}>
-              {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
-              <span className="text-slate-400">{field.label}: </span>
-              <span className="text-slate-700">{field.value}</span>
-            </span>
-          ))}
-          {listing.detail.length > 0 && (
-            <span className="ml-auto">
-              <MoreHint count={listing.detail.length} />
+          {listing.date && (
+            <span className="text-xs text-slate-500">{listing.date}</span>
+          )}
+          {listing.price && (
+            <span className="ml-auto text-base font-semibold tabular-nums text-slate-900">
+              {listing.price}
             </span>
           )}
-        </span>
+
+          <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
+            {listing.summary.map((field, index) => (
+              <span key={`${field.label}-${index}`} className="min-w-0 break-words">
+                {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
+                <span className="text-slate-400">{field.label}: </span>
+                <span className="text-slate-700">
+                  <FieldValue value={field.value} />
+                </span>
+              </span>
+            ))}
+            {listing.detail.length > 0 && (
+              <span className="ml-auto flex min-h-11 items-center">
+                <MoreHint count={listing.detail.length} />
+              </span>
+            )}
+          </span>
+        </div>
       </summary>
 
       {listing.detail.length > 0 && (
@@ -512,10 +532,12 @@ function EpisodeFacts({ group }: { group: ListingGroup }) {
   return (
     <span className="flex w-full flex-wrap items-center gap-x-1.5 gap-y-1 text-xs text-slate-500">
       {facts.map((field, index) => (
-        <span key={`${field.label}-${index}`}>
+        <span key={`${field.label}-${index}`} className="min-w-0 break-words">
           {index > 0 && <span className="pr-1.5 text-slate-300">·</span>}
           <span className="text-slate-400">{field.label}: </span>
-          <span className="text-slate-700">{field.value}</span>
+          <span className="text-slate-700">
+            <FieldValue value={field.value} />
+          </span>
         </span>
       ))}
     </span>
@@ -733,7 +755,9 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
             <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               {spec.label}
             </dt>
-            <dd className="mt-0.5 text-sm text-slate-800">{spec.value}</dd>
+            <dd className="mt-0.5 break-words text-sm text-slate-800">
+              <FieldValue value={spec.value} />
+            </dd>
           </div>
         ))}
       </dl>
@@ -757,9 +781,14 @@ function JumpNav({
       aria-label="Report sections"
       className="no-print sticky top-16 z-30 rounded-2xl border border-slate-200 bg-white/90 px-2 py-2 shadow-[0_1px_2px_rgba(15,23,42,0.04)] backdrop-blur"
     >
-      <ul className="flex items-center gap-1 overflow-x-auto whitespace-nowrap">
+      {/*
+        Flex items shrink by default, so a nowrap row on a 390px phone ate
+        "Accidents" down to "Accide" instead of wrapping or scrolling.
+        Wrap + shrink-0 keeps every label whole.
+      */}
+      <ul className="flex flex-wrap items-center gap-1">
         {items.map((item) => (
-          <li key={item.href}>
+          <li key={item.href} className="shrink-0">
             <a
               href={item.href}
               className="inline-flex rounded-full px-3 py-1.5 text-sm font-medium text-slate-600 transition hover:bg-slate-100 hover:text-slate-900"
@@ -777,11 +806,11 @@ function JumpNav({
 
 export function ReportView({
   report: incoming,
-  brief = null,
+  brief: incomingBrief = null,
   briefToken,
   heroSrc = null,
   heroToken,
-  modelExtras = null,
+  modelExtras: incomingExtras = null,
   extrasToken,
 }: {
   report: VehicleReport;
@@ -798,7 +827,11 @@ export function ReportView({
   /** Access token, given only when missing extras may be requested. */
   extrasToken?: string;
 }) {
-  const report = withResolvedDispositions(incoming);
+  const report = cleanReport(withResolvedDispositions(incoming));
+  const brief = incomingBrief ? cleanBrief(incomingBrief) : incomingBrief;
+  const modelExtras = incomingExtras
+    ? cleanModelExtras(incomingExtras)
+    : incomingExtras;
   const chips = reportChips(report);
   const specList = headerSpecifications(report);
   const specs = headerSpecSummary(specList);

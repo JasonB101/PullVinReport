@@ -33,6 +33,12 @@ import {
 } from "@/lib/model-extras";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import {
+  cleanBrief,
+  cleanCustomerLine,
+  cleanModelExtras,
+  cleanReport,
+} from "@/lib/customer-text";
+import {
   COMMON_FOR_MODEL,
   FROM_THIS_VIN,
   MODEL_ZONE_NOTE,
@@ -562,7 +568,7 @@ function Section({
 }
 
 function clipPdf(value: string, max = 160): string {
-  const text = value.replace(/\s+/g, " ").trim();
+  const text = cleanCustomerLine(value);
   if (text.length <= max) return text;
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
@@ -600,15 +606,19 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
 
 export function ReportDocument({
   report: incoming,
-  brief = null,
-  modelExtras = null,
+  brief: incomingBrief = null,
+  modelExtras: incomingExtras = null,
 }: {
   report: VehicleReport;
   brief?: VehicleBrief | null;
   modelExtras?: ModelExtras | null;
 }) {
-  const report = withResolvedDispositions(incoming);
+  const report = cleanReport(withResolvedDispositions(incoming));
   const title = vehicleTitle(report.vehicle);
+  const brief = incomingBrief ? cleanBrief(incomingBrief) : incomingBrief;
+  const modelExtras = incomingExtras
+    ? cleanModelExtras(incomingExtras)
+    : incomingExtras;
   const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
