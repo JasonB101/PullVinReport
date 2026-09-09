@@ -53,13 +53,19 @@ describe("download uses the server PDF, not window.print", () => {
     assert.match(button, /Download PDF/);
     assert.doesNotMatch(button, /window\.print/);
 
-    assert.match(paid, /DownloadPdfButton/);
+    assert.match(paid, /ReportActions/);
     assert.match(paid, /paidReportPdfPath\(token\)/);
-    assert.doesNotMatch(paid, /PrintButton|window\.print/);
+    assert.doesNotMatch(paid, /window\.print/);
 
-    assert.match(sample, /DownloadPdfButton/);
+    assert.match(sample, /ReportActions/);
     assert.match(sample, /SAMPLE_REPORT_PDF_PATH/);
-    assert.doesNotMatch(sample, /PrintButton|window\.print/);
+    assert.doesNotMatch(sample, /window\.print/);
+
+    const actions = await readFile(path.join(SRC, "components/report-actions.tsx"), "utf8");
+    const downloadAt = actions.indexOf("<DownloadPdfButton");
+    const printAt = actions.indexOf("<PrintPageButton");
+    assert.ok(downloadAt > 0 && printAt > downloadAt, "Download must be the primary control");
+    assert.match(actions, /DownloadPdfButton href=\{pdfHref\}/);
 
     assert.match(paidRoute, /pdfForPaidReport/);
     assert.match(sampleRoute, /pdfForSampleReport/);
@@ -67,24 +73,18 @@ describe("download uses the server PDF, not window.print", () => {
     assert.equal(paidReportPdfPath("tok_abc"), "/api/report/tok_abc/pdf");
   });
 
-  it("does not leave a print-button that still calls window.print", async () => {
-    const files = [
-      "components/print-button.tsx",
-      "components/download-pdf-button.tsx",
-      "app/report/[token]/page.tsx",
-      "app/sample/page.tsx",
-    ];
-    for (const file of files) {
-      try {
-        const source = await readFile(path.join(SRC, file), "utf8");
-        assert.doesNotMatch(source, /window\.print/, file);
-      } catch (error) {
-        if (file === "components/print-button.tsx" && (error as NodeJS.ErrnoException).code === "ENOENT") {
-          continue;
-        }
-        throw error;
-      }
-    }
+  it("keeps print as a secondary page control, not the PDF path", async () => {
+    const print = await readFile(path.join(SRC, "components/print-page-button.tsx"), "utf8");
+    assert.match(print, /window\.print/);
+    assert.match(print, /Print page/);
+    assert.doesNotMatch(print, /save as PDF/i);
+
+    const download = await readFile(
+      path.join(SRC, "components/download-pdf-button.tsx"),
+      "utf8",
+    );
+    assert.doesNotMatch(download, /window\.print/);
+    assert.match(download, /fetch\(href/);
   });
 });
 

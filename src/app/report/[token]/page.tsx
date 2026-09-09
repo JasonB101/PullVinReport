@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
-import { DownloadPdfButton } from "@/components/download-pdf-button";
 import { GoogleAdsPurchase } from "@/components/google-ads-purchase";
+import { ReportActions } from "@/components/report-actions";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -182,7 +182,7 @@ export default async function ReportPage({
                   Keep this page&apos;s link private.
                 </p>
               </div>
-              <DownloadPdfButton href={paidReportPdfPath(token)} />
+              <ReportActions pdfHref={paidReportPdfPath(token)} />
             </div>
           </div>
         </div>

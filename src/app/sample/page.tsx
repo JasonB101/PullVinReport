@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { DownloadPdfButton } from "@/components/download-pdf-button";
+import { ReportActions } from "@/components/report-actions";
 import { ReportView } from "@/components/report-view";
 import { SiteFooter } from "@/components/site-footer";
 import { SiteHeader } from "@/components/site-header";
@@ -43,7 +43,7 @@ export default function SamplePage() {
               <p className="text-3xl font-semibold tracking-tight text-slate-900 sm:text-4xl">
                 Sample report — {SAMPLE_VEHICLE_LABEL}
               </p>
-              <DownloadPdfButton href={SAMPLE_REPORT_PDF_PATH} />
+              <ReportActions pdfHref={SAMPLE_REPORT_PDF_PATH} />
             </div>
             <p className="mt-3 max-w-2xl text-base leading-relaxed text-slate-600">
               This is the exact layout of a purchased report, filled with
