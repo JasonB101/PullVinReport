@@ -89,7 +89,7 @@ const FAQ = [
   },
   {
     q: "What if there are no records for my VIN?",
-    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing. If we cannot deliver a report for your VIN, email support and we will refund you.",
+    a: "Some VINs — especially very new, very old, or non-US vehicles — return little or nothing.",
   },
   {
     q: "What is the written brief?",
@@ -333,10 +333,6 @@ export default function HomePage() {
                 <StartReportLink className="mt-7 block w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-glow transition hover:bg-brand-500">
                   Get a report · {price}
                 </StartReportLink>
-                <p className="mt-4 text-xs text-slate-400">
-                  If we can&apos;t return a report for your VIN, email us and we
-                  will refund you.
-                </p>
               </div>
             </div>
           </div>

@@ -180,10 +180,6 @@ export default async function PreviewPage({
                     onward. Imports and very new vehicles may return little.
                   </li>
                   <li>
-                    If no usable report comes back for your VIN, email support
-                    and we will refund you.
-                  </li>
-                  <li>
                     A report is informational only and is not a substitute for
                     an in-person inspection. See the{" "}
                     <Link href="/disclaimer" className="font-semibold text-brand-600 hover:underline">

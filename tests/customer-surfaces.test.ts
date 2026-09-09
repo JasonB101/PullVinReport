@@ -102,6 +102,13 @@ describe("customer-facing surfaces", () => {
     );
     assert.doesNotMatch(home, /NMVTIS/);
     assert.doesNotMatch(home, /pulled live at the moment you buy it/);
+    const advertisedRefund =
+      /email (us|support) and we will refund you|can.?t return a report for your VIN|for a refund/i;
+    assert.doesNotMatch(home, advertisedRefund);
+    const preview = await readSrc("app/preview/page.tsx");
+    const disclaimerCopy = await readSrc("app/disclaimer/page.tsx");
+    assert.doesNotMatch(preview, advertisedRefund);
+    assert.doesNotMatch(disclaimerCopy, advertisedRefund);
 
     const layout = await readSrc("app/layout.tsx");
     assert.doesNotMatch(layout, /NMVTIS/);
