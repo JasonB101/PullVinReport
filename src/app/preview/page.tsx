@@ -139,7 +139,7 @@ export default async function PreviewPage({
 
         <div className="container-page py-10 sm:py-14">
           <div className="grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:items-start">
-            <div className="order-2 space-y-6 lg:order-1">
+            <div className="order-1 space-y-6 lg:order-1">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
                   What your report will look like
@@ -185,7 +185,7 @@ export default async function PreviewPage({
               </div>
             </div>
 
-            <div className="order-1 lg:sticky lg:top-24 lg:order-2">
+            <div className="order-2 lg:sticky lg:top-24 lg:order-2">
               <CheckoutPanel
                 vin={result.vin}
                 priceLabel={formatPrice()}

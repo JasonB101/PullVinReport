@@ -59,6 +59,28 @@ describe("VIN-first checkout", () => {
     assert.match(decode, /prettyVin\(vin\)/);
   });
 
+  it("does not put the pay step above vehicle identity on mobile", async () => {
+    const preview = await readSrc("app/preview/page.tsx");
+    const checkoutWrap = preview.match(
+      /<div className="([^"]*)">\s*<CheckoutPanel/,
+    );
+    assert.ok(checkoutWrap, "checkout must sit in a classed wrapper");
+    const classes = checkoutWrap[1];
+
+    // Bare order-1 (not lg:order-1) paints pay first on small screens.
+    assert.doesNotMatch(classes, /(?<![\w:-])order-1(?!\d)/);
+    assert.match(classes, /(?<![\w:-])order-2(?!\d)/);
+    assert.match(classes, /lg:sticky/);
+    assert.match(classes, /lg:order-2/);
+
+    const identityWrap = preview.match(
+      /<div className="([^"]*order-1[^"]*)">\s*<div>/,
+    );
+    assert.ok(identityWrap, "the identity/sample column must be order-1 on mobile");
+    assert.match(identityWrap[1], /(?<![\w:-])order-1(?!\d)/);
+    assert.doesNotMatch(identityWrap[1], /(?<![\w:-])order-2(?!\d)/);
+  });
+
   it("does not generate a paid hero or colour before checkout", async () => {
     const decode = await readSrc("components/vin-decode-card.tsx");
     const preview = await readSrc("app/preview/page.tsx");
