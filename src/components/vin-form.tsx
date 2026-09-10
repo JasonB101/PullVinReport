@@ -107,7 +107,7 @@ export function VinForm({
             ? "Find it on the driver-side dashboard, the door jamb sticker, or your insurance card."
             : remaining > 0
               ? `${remaining} character${remaining === 1 ? "" : "s"} to go — no charge to check.`
-              : "Looks good. You'll see a preview before paying.")}
+              : "Looks good. We'll identify the vehicle next — then you can pay.")}
       </p>
     </form>
   );

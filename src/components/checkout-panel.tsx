@@ -52,7 +52,10 @@ export function CheckoutPanel({
   return (
     <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-card">
       <div className="border-b border-slate-100 px-5 py-5 sm:px-6">
-        <div className="flex items-baseline justify-between gap-3">
+        <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
+          Step 2 of 2 · Pay {priceLabel}
+        </p>
+        <div className="mt-2 flex items-baseline justify-between gap-3">
           <h2 className="text-lg font-semibold tracking-tight text-slate-900">
             Full history report
           </h2>

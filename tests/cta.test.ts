@@ -21,10 +21,11 @@ describe("priced CTAs", () => {
     assert.match(success, /cta="none"/);
   });
 
-  it("wires the header's priced button through the link that actually scrolls", async () => {
+  it("wires the header's VIN-start button through the link that actually scrolls", async () => {
     const header = await readFile(`${root}components/site-header.tsx`, "utf8");
     assert.match(header, /StartReportLink/);
-    assert.match(header, /Get a report/);
+    assert.match(header, /Check a VIN/);
     assert.match(header, /Buy another report/);
+    assert.doesNotMatch(header, /Get a report/);
   });
 });
