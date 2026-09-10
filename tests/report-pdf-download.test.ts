@@ -5,6 +5,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { BRAND } from "@/lib/config";
 import { renderReportPdf } from "@/lib/report-pdf";
 import {
   paidReportPdfPath,
@@ -111,7 +112,7 @@ describe("sample PDF download", () => {
   it("renders a SAMPLE-labelled PDF from the same fixtures as /sample", async () => {
     const { buffer, filename } = await pdfForSampleReport();
     assert.equal(buffer.subarray(0, 5).toString("latin1"), "%PDF-");
-    assert.equal(filename, `PullVinReport-SAMPLE-${VIN}.pdf`);
+    assert.equal(filename, `${BRAND.filePrefix}-SAMPLE-${VIN}.pdf`);
     assert.ok(buffer.byteLength > 4_000);
 
     const withoutHero = await renderReportPdf(
@@ -179,7 +180,7 @@ describe("paid PDF download", () => {
     assert.equal(result.ok, true);
     if (result.ok) {
       assert.equal(result.buffer.subarray(0, 5).toString("latin1"), "%PDF-");
-      assert.equal(result.filename, `PullVinReport-${VIN}.pdf`);
+      assert.equal(result.filename, `${BRAND.filePrefix}-${VIN}.pdf`);
       assert.doesNotMatch(result.filename, /SAMPLE/);
     }
   });
@@ -228,12 +229,12 @@ describe("paid PDF download", () => {
 describe("PDF file response", () => {
   it("serves the bytes as an attachment, not a printed page", async () => {
     const body = Buffer.from("%PDF-test");
-    const response = pdfFileResponse(body, "PullVinReport-SAMPLE.pdf");
+    const response = pdfFileResponse(body, `${BRAND.filePrefix}-SAMPLE.pdf`);
     assert.equal(response.status, 200);
     assert.equal(response.headers.get("Content-Type"), "application/pdf");
     assert.match(
       response.headers.get("Content-Disposition") ?? "",
-      /attachment; filename="PullVinReport-SAMPLE.pdf"/,
+      new RegExp(`attachment; filename="${BRAND.filePrefix}-SAMPLE.pdf"`),
     );
     assert.equal(await response.text(), "%PDF-test");
   });

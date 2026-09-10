@@ -736,7 +736,9 @@ export function ReportDocument({
 /** What the attachment is called once it lands in the buyer's inbox. */
 export function reportPdfFilename(vin: string, sample = false): string {
   const id = normalizeVin(vin).replace(/[^A-Z0-9]/g, "");
-  return sample ? `${BRAND.name}-SAMPLE-${id}.pdf` : `${BRAND.name}-${id}.pdf`;
+  return sample
+    ? `${BRAND.filePrefix}-SAMPLE-${id}.pdf`
+    : `${BRAND.filePrefix}-${id}.pdf`;
 }
 
 export async function renderReportPdf(

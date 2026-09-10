@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 
-import { stripeConfig } from "@/lib/config";
+import { BRAND, stripeConfig } from "@/lib/config";
 
 export class StripeNotConfiguredError extends Error {
   constructor() {
@@ -17,7 +17,7 @@ export function getStripe(): Stripe {
   if (!key) throw new StripeNotConfiguredError();
   if (!client || clientKey !== key) {
     client = new Stripe(key, {
-      appInfo: { name: "PullVinReport", url: "https://pullvinreport.com" },
+      appInfo: { name: BRAND.name, url: BRAND.url },
       // Pin Node HTTP so /admin balance.retrieve() is not a Next-patched
       // GET fetch. Checkout already uses this helper and works.
       httpClient: Stripe.createNodeHttpClient(),

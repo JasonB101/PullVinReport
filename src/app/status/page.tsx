@@ -13,7 +13,7 @@ export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Service status · Admin",
   description:
-    "Live readiness of the PullVinReport data provider, payments, storage and email.",
+    "Live readiness of the Vehicle History by VIN data provider, payments, storage and email.",
   robots: { index: false, follow: false },
 };
 

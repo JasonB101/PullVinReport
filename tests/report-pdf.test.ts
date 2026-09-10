@@ -3,6 +3,7 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { BRAND } from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
 import { renderStoredReportPdf } from "@/lib/report-pdf-serve";
@@ -60,11 +61,11 @@ function pageCount(pdf: Buffer): number {
 
 describe("report PDF", () => {
   it("names the file so a buyer can find it after forwarding", () => {
-    assert.equal(reportPdfFilename("4t1bf1fk8cu512345"), `PullVinReport-${VIN}.pdf`);
-    assert.equal(reportPdfFilename("4T1BF1FK8-CU512345"), `PullVinReport-${VIN}.pdf`);
+    assert.equal(reportPdfFilename("4t1bf1fk8cu512345"), `${BRAND.filePrefix}-${VIN}.pdf`);
+    assert.equal(reportPdfFilename("4T1BF1FK8-CU512345"), `${BRAND.filePrefix}-${VIN}.pdf`);
     assert.equal(
       reportPdfFilename("4t1bf1fk8cu512345", true),
-      `PullVinReport-SAMPLE-${VIN}.pdf`,
+      `${BRAND.filePrefix}-SAMPLE-${VIN}.pdf`,
     );
   });
 
