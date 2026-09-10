@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 
 import "./globals.css";
+import { GoogleAnalytics } from "@/components/google-analytics";
 import { BRAND, siteUrl } from "@/lib/config";
 
 const inter = Inter({
@@ -54,7 +55,10 @@ export default function RootLayout({
 }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="min-h-dvh bg-white font-sans">{children}</body>
+      <body className="min-h-dvh bg-white font-sans">
+        {children}
+        <GoogleAnalytics />
+      </body>
     </html>
   );
 }
