@@ -42,6 +42,9 @@ describe("admin console", () => {
     const page = await readSrc("app/admin/page.tsx");
     assert.match(page, /formatGeneratedAt\(order\.createdAt\)/);
     assert.match(page, /Created \(Denver\)/);
+    assert.match(page, /Times in Denver/);
+    assert.doesNotMatch(page, /Storage:/);
+    assert.doesNotMatch(page, /store\.description/);
     assert.doesNotMatch(page, /Created \(UTC\)/);
     assert.doesNotMatch(page, /toISOString\(\)\.replace\("T"/);
     assert.equal(formatGeneratedAt("2026-01-14T15:04:00.000Z"), "Jan 14, 2026, 8:04 AM MST");
