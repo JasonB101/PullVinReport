@@ -2,7 +2,7 @@
   "name": "pullvinreport",
   "version": "0.1.0",
   "private": true,
-  "description": "PullVinReport — consumer VIN history reports",
+  "description": "Vehicle History by VIN — consumer VIN history reports",
   "scripts": {
     "dev": "next dev",
     "build": "next build",

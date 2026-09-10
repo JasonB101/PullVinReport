@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { LoginForm } from "@/app/admin/login/login-form";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { isAdminConfigured } from "@/lib/config";
+import { BRAND, isAdminConfigured } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export default async function AdminLoginPage() {
             Admin console
           </h1>
           <p className="mt-1.5 text-sm text-slate-400">
-            Order history and fulfillment tools for PullVinReport.
+            Order history and fulfillment tools for {BRAND.name}.
           </p>
 
           {isAdminConfigured() ? (

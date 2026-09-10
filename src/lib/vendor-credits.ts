@@ -10,6 +10,7 @@
  * management key exists.
  */
 import {
+  BRAND,
   anthropic,
   emailConfig,
   fal,
@@ -42,7 +43,7 @@ export const ANTHROPIC_CONSOLE_BILLING_URL =
 export const BILLING_UNAVAILABLE = "billing API unavailable";
 export const FAL_NEEDS_ADMIN_KEY = "needs Admin-scope key";
 
-const USER_AGENT = "PullVinReport/1.0 (+https://pullvinreport.com)";
+const USER_AGENT = `${BRAND.filePrefix}/1.0 (+${BRAND.url})`;
 
 export type VendorCredit = {
   vendor: string;

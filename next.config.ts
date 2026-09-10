@@ -1,10 +1,17 @@
 import type { NextConfig } from "next";
 
+import { legacyDomainRedirects } from "./src/lib/config";
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   poweredByHeader: false,
   // Keep the Stripe SDK on Node's HTTP client, not a bundled web/fetch build.
   serverExternalPackages: ["stripe"],
+  // Host-level 301/308 from the retired domain. Cloudflare can do this too;
+  // keeping it here covers Vercel if DNS still points at this deployment.
+  async redirects() {
+    return legacyDomainRedirects();
+  },
   async headers() {
     return [
       {

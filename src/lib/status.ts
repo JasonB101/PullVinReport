@@ -1,4 +1,5 @@
 import {
+  BRAND,
   anthropic,
   emailConfig,
   fal,
@@ -162,7 +163,7 @@ export async function buildStatusReport(
     .every((check) => check.state === "ready" || check.state === "degraded");
 
   return {
-    brand: "PullVinReport",
+    brand: BRAND.name,
     checkedAt: new Date().toISOString(),
     ordersEnabled,
     price: formatPrice(),

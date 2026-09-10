@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, it } from "node:test";
+import { fileURLToPath } from "node:url";
 
 import {
   BRAND,
@@ -15,7 +17,9 @@ import {
   isFalBillingConfigured,
   isFalConfigured,
   isGoogleAdsConfigured,
+  legacyDomainRedirects,
   pricing,
+  siteUrl,
 } from "../src/lib/config.ts";
 
 const ENV_KEYS = [
@@ -32,39 +36,135 @@ afterEach(() => {
   for (const key of ENV_KEYS) delete process.env[key];
 });
 
+describe("brand identity", () => {
+  it("is Vehicle History by VIN on the canonical host", () => {
+    assert.equal(BRAND.name, "Vehicle History by VIN");
+    assert.equal(BRAND.shortName, "Vehicle History");
+    assert.equal(BRAND.domain, "vehiclehistorybyvin.com");
+    assert.equal(BRAND.url, "https://vehiclehistorybyvin.com");
+    assert.equal(BRAND.filePrefix, "VehicleHistoryByVIN");
+    assert.doesNotMatch(BRAND.name, /PullVinReport|Pull Vin Report/i);
+    assert.doesNotMatch(BRAND.domain, /pullvinreport/i);
+  });
+
+  it("308s the retired hosts onto the canonical URL", () => {
+    const redirects = legacyDomainRedirects();
+    assert.deepEqual(
+      redirects.map((rule) => rule.has[0]?.value),
+      ["pullvinreport.com", "www.pullvinreport.com"],
+    );
+    for (const rule of redirects) {
+      assert.equal(rule.permanent, true);
+      assert.equal(rule.destination, `${BRAND.url}/:path*`);
+    }
+  });
+
+  it("wires those redirects through next.config", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../next.config.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /legacyDomainRedirects/);
+  });
+
+  it("documents the new domain in .env.example", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../.env.example", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /EMAIL_FROM="Vehicle History by VIN <orders@vehiclehistorybyvin\.com>"/);
+    assert.match(source, /SUPPORT_EMAIL=support@vehiclehistorybyvin\.com/);
+    assert.match(source, /NEXT_PUBLIC_SITE_URL=https:\/\/vehiclehistorybyvin\.com/);
+    assert.doesNotMatch(source, /orders@pullvinreport\.com/);
+  });
+});
+
+describe("site URL", () => {
+  const KEYS = ["NEXT_PUBLIC_SITE_URL", "SITE_URL", "VERCEL_URL", "VERCEL_ENV"] as const;
+
+  function withEnv(values: Partial<Record<(typeof KEYS)[number], string | undefined>>, run: () => void) {
+    const saved = Object.fromEntries(KEYS.map((key) => [key, process.env[key]]));
+    for (const key of KEYS) {
+      const value = values[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+    try {
+      run();
+    } finally {
+      for (const key of KEYS) {
+        const value = saved[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    }
+  }
+
+  it("prefers NEXT_PUBLIC_SITE_URL, then SITE_URL, and strips a trailing slash", () => {
+    withEnv(
+      { NEXT_PUBLIC_SITE_URL: "https://vehiclehistorybyvin.com/", SITE_URL: "https://ignored.example" },
+      () => assert.equal(siteUrl(), BRAND.url),
+    );
+    withEnv(
+      { NEXT_PUBLIC_SITE_URL: undefined, SITE_URL: "https://vehiclehistorybyvin.com/" },
+      () => assert.equal(siteUrl(), BRAND.url),
+    );
+  });
+
+  it("uses the canonical host on Vercel production when no URL is set", () => {
+    withEnv(
+      { NEXT_PUBLIC_SITE_URL: undefined, SITE_URL: undefined, VERCEL_ENV: "production", VERCEL_URL: "preview.vercel.app" },
+      () => assert.equal(siteUrl(), BRAND.url),
+    );
+  });
+
+  it("keeps preview and local hosts off the production domain", () => {
+    withEnv(
+      { NEXT_PUBLIC_SITE_URL: undefined, SITE_URL: undefined, VERCEL_ENV: "preview", VERCEL_URL: "pr-1.vercel.app" },
+      () => assert.equal(siteUrl(), "https://pr-1.vercel.app"),
+    );
+    withEnv(
+      { NEXT_PUBLIC_SITE_URL: undefined, SITE_URL: undefined, VERCEL_ENV: undefined, VERCEL_URL: undefined },
+      () => assert.equal(siteUrl(), "http://localhost:3000"),
+    );
+  });
+});
+
 describe("outbound email identity", () => {
-  it("defaults the sender to PullVinReport on its own domain", () => {
-    assert.equal(emailConfig.from, `PullVinReport <orders@${BRAND.domain}>`);
+  it("defaults the sender to Vehicle History by VIN on its own domain", () => {
+    assert.equal(emailConfig.from, `${BRAND.name} <orders@${BRAND.domain}>`);
     assert.equal(emailConfig.supportEmail, `support@${BRAND.domain}`);
   });
 
   it("never defaults to another brand's domain", () => {
+    const own = new RegExp(`@${BRAND.domain.replaceAll(".", "\\.")}>?$`);
     for (const value of [emailConfig.from, emailConfig.supportEmail]) {
-      assert.match(value, /@pullvinreport\.com>?$/);
+      assert.match(value, own);
       assert.doesNotMatch(value, /whatisthecode/i);
+      assert.doesNotMatch(value, /pullvinreport/i);
     }
   });
 
   it("still honours an explicit override", () => {
-    process.env.EMAIL_FROM = "PullVinReport <hello@pullvinreport.com>";
-    process.env.SUPPORT_EMAIL = "help@pullvinreport.com";
-    assert.equal(emailConfig.from, "PullVinReport <hello@pullvinreport.com>");
-    assert.equal(emailConfig.supportEmail, "help@pullvinreport.com");
+    process.env.EMAIL_FROM = `${BRAND.name} <hello@${BRAND.domain}>`;
+    process.env.SUPPORT_EMAIL = `help@${BRAND.domain}`;
+    assert.equal(emailConfig.from, `${BRAND.name} <hello@${BRAND.domain}>`);
+    assert.equal(emailConfig.supportEmail, `help@${BRAND.domain}`);
   });
 
   it("survives a parser that keeps the quotes the display name needs", () => {
-    process.env.EMAIL_FROM = '"PullVinReport <orders@pullvinreport.com>"';
-    assert.equal(emailConfig.from, "PullVinReport <orders@pullvinreport.com>");
+    process.env.EMAIL_FROM = `"${BRAND.name} <orders@${BRAND.domain}>"`;
+    assert.equal(emailConfig.from, `${BRAND.name} <orders@${BRAND.domain}>`);
 
-    process.env.EMAIL_FROM = "'PullVinReport <orders@pullvinreport.com>'";
-    assert.equal(emailConfig.from, "PullVinReport <orders@pullvinreport.com>");
+    process.env.EMAIL_FROM = `'${BRAND.name} <orders@${BRAND.domain}>'`;
+    assert.equal(emailConfig.from, `${BRAND.name} <orders@${BRAND.domain}>`);
   });
 
   it("falls back to the brand default when a parser mangles the value", () => {
-    const fallback = `PullVinReport <orders@${BRAND.domain}>`;
+    const fallback = `${BRAND.name} <orders@${BRAND.domain}>`;
 
     // What an unquoted `Name <address>` can degrade into.
-    for (const mangled of ["PullVinReport", "PullVinReport <", '""', "   "]) {
+    for (const mangled of [BRAND.name, `${BRAND.name} <`, '""', "   "]) {
       process.env.EMAIL_FROM = mangled;
       assert.equal(emailConfig.from, fallback, `mangled input: ${mangled}`);
     }

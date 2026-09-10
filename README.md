@@ -1,6 +1,6 @@
-# PullVinReport
+# Vehicle History by VIN
 
-Consumer vehicle history reports for **pullvinreport.com**, powered by the
+Consumer vehicle history reports for **[vehiclehistorybyvin.com](https://vehiclehistorybyvin.com)**, powered by the
 [VinAudit](https://www.vinaudit.com/) Vehicle History API.
 
 One product, one price: a customer enters a VIN, previews a clearly labelled
@@ -62,8 +62,8 @@ version:
 | `REPORT_CURRENCY` | No (default `usd`) | Stripe currency code. |
 | `AUTO_REFUND_FAILED_ORDERS` | No (default `false`) | Refund a charge automatically when its report pull fails, instead of waiting for an operator. |
 | `RESEND_API_KEY` | No | Receipt, refund and report-link email. |
-| `EMAIL_FROM` | No (default `PullVinReport <orders@pullvinreport.com>`) | Outbound sender. **Quote it** — see below. Stays on the PullVinReport domain; this product never sends as another brand. |
-| `SUPPORT_EMAIL` | No (default `support@pullvinreport.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
+| `EMAIL_FROM` | No (default `Vehicle History by VIN <orders@vehiclehistorybyvin.com>`) | Outbound sender. **Quote it** — see below. Stays on the vehiclehistorybyvin.com domain; this product never sends as another brand. |
+| `SUPPORT_EMAIL` | No (default `support@vehiclehistorybyvin.com`) | Reply-to and the address shown to customers. Outbound only; nothing reads this inbox. |
 | `ANTHROPIC_API_KEY` | No | Turns on the written brief at the top of a paid report. Unset means no brief and no other change. |
 | `ANTHROPIC_ADMIN_API_KEY` | No | Admin API key (`sk-ant-admin…`) for /admin USD spend MTD. Unset omits Anthropic from the credits card; a failed Cost Report is shown as unavailable, never as $0. |
 | `ANTHROPIC_MODEL` | No (default `claude-sonnet-5`) | Any current Messages API model id. |
@@ -79,7 +79,8 @@ version:
 | `FAL_TIMEOUT_MS` | No (default `45000`) | How long a page view waits for an illustration. |
 | `DATABASE_URL` | No | Use Postgres instead of the JSON file store. |
 | `ADMIN_PASSWORD` | No | Unlocks `/admin`. Unset means the console is locked out. |
-| `NEXT_PUBLIC_SITE_URL` | Recommended | Base URL for Stripe redirects, emailed links and the sitemap. |
+| `NEXT_PUBLIC_SITE_URL` | Recommended | Public base URL for Stripe redirects, emailed links, OG and the sitemap. Local: `http://localhost:3000`. Production: `https://vehiclehistorybyvin.com`. |
+| `SITE_URL` | Optional alias | Same as `NEXT_PUBLIC_SITE_URL` when the public var is unset. Production fallback is the canonical host. |
 
 `EMAIL_FROM` uses the `Name <address>` display-name form, so it must be quoted
 in `.env.local`, in `.env.example` and in your host's environment UI. Unquoted
@@ -87,8 +88,8 @@ angle brackets are redirection syntax to a shell and several `.env` parsers
 strip or truncate them:
 
 ```bash
-EMAIL_FROM="PullVinReport <orders@pullvinreport.com>"
-SUPPORT_EMAIL=support@pullvinreport.com
+EMAIL_FROM="Vehicle History by VIN <orders@vehiclehistorybyvin.com>"
+SUPPORT_EMAIL=support@vehiclehistorybyvin.com
 ```
 
 If a parser hands the value back with its quotes still attached, or mangles it
@@ -315,7 +316,7 @@ stripe listen --forward-to localhost:3000/api/stripe/webhook
 
 Copy the printed `whsec_…` into `STRIPE_WEBHOOK_SECRET`.
 
-In production, add an endpoint at `https://pullvinreport.com/api/stripe/webhook`
+In production, add an endpoint at `https://vehiclehistorybyvin.com/api/stripe/webhook`
 subscribed to:
 
 - `checkout.session.completed`
@@ -379,7 +380,7 @@ status check and every uptime poll.
 
 Prove sending the only way that proves anything — send one. Fulfil a test order
 end to end, or use the **Re-send email** button in `/admin` on a delivered
-order, and confirm it arrives from `orders@pullvinreport.com`. A failed send is
+order, and confirm it arrives from `orders@vehiclehistorybyvin.com`. A failed send is
 reported honestly on the order (`emailSentAt` stays unset and the admin action
 returns the Resend error); it never blocks fulfillment, because the report is
 always delivered on screen regardless.
@@ -415,16 +416,32 @@ The app is a standard Next.js App Router project and deploys unchanged to
 Vercel or any Node host.
 
 1. Set the environment variables from `.env.example`, including
-   `NEXT_PUBLIC_SITE_URL`.
+   `NEXT_PUBLIC_SITE_URL=https://vehiclehistorybyvin.com` (and `SITE_URL` to
+   the same) on the Vercel Production environment.
 2. Point `DATABASE_URL` at a Postgres instance.
 3. Register the Stripe webhook endpoint and set `STRIPE_WEBHOOK_SECRET`.
-4. Verify the sending domain in Resend so receipts do not land in spam.
+4. Verify `vehiclehistorybyvin.com` in Resend and set `EMAIL_FROM` /
+   `SUPPORT_EMAIL` to `@vehiclehistorybyvin.com` so receipts do not land in spam.
 5. Load `/status` and confirm every required check is green before taking real
    payments.
 
+Vercel Production env vars to set or update on the brand cutover:
+
+| Variable | Production value |
+| --- | --- |
+| `NEXT_PUBLIC_SITE_URL` | `https://vehiclehistorybyvin.com` |
+| `SITE_URL` | `https://vehiclehistorybyvin.com` |
+| `EMAIL_FROM` | `"Vehicle History by VIN <orders@vehiclehistorybyvin.com>"` |
+| `SUPPORT_EMAIL` | `support@vehiclehistorybyvin.com` |
+| `NEXT_PUBLIC_GA_MEASUREMENT_ID` | `G-E2Z25ZEBVF` (already the live GA4 id) |
+
+Paid-path secrets (VinAudit, Stripe, Resend, fal, Ads) stay as they are. The
+app also 308s `pullvinreport.com` and `www.pullvinreport.com` to the new host;
+Cloudflare can do the same at the edge.
+
 ---
 
-PullVinReport is an independent service. It is not affiliated with, endorsed by,
+Vehicle History by VIN is an independent service. It is not affiliated with, endorsed by,
 or sponsored by any vehicle manufacturer, government agency, or other vehicle
 history reporting company. Reports are informational only and are not a
 substitute for an independent inspection.

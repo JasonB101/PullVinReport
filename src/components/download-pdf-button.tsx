@@ -2,6 +2,8 @@
 
 import { useState, type MouseEvent } from "react";
 
+import { BRAND } from "@/lib/config";
+
 type Status = "idle" | "loading" | "error";
 
 function filenameFromContentDisposition(header: string | null): string | null {
@@ -39,7 +41,7 @@ export function DownloadPdfButton({ href }: { href: string }) {
       const objectUrl = URL.createObjectURL(blob);
       const filename =
         filenameFromContentDisposition(response.headers.get("Content-Disposition")) ??
-        "PullVinReport.pdf";
+        `${BRAND.filePrefix}.pdf`;
       const link = document.createElement("a");
       link.href = objectUrl;
       link.download = filename;

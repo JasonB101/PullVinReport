@@ -92,7 +92,7 @@ export async function POST(request: Request) {
               currency: order.currency,
               unit_amount: order.amountCents,
               product_data: {
-                name: `${BRAND.name} vehicle history report`,
+                name: `${BRAND.name} report`,
                 description: `Full history report for VIN ${order.vin}`,
               },
             },

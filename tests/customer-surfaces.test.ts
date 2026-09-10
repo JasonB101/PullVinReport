@@ -163,6 +163,28 @@ describe("customer-facing surfaces", () => {
     assert.doesNotMatch(route, /VinAudit Vehicle History API/);
   });
 
+  it("does not show the retired PullVinReport brand to buyers", async () => {
+    const RETIRED = /PullVinReport|Pull Vin Report|pullvinreport\.com/i;
+    const files = [
+      "app/layout.tsx",
+      "app/page.tsx",
+      "app/privacy/page.tsx",
+      "app/terms/page.tsx",
+      "app/disclaimer/page.tsx",
+      "app/admin/login/page.tsx",
+      "components/logo.tsx",
+      "components/site-footer.tsx",
+      "components/download-pdf-button.tsx",
+      "lib/email.ts",
+      "lib/report-pdf.tsx",
+      "lib/stripe.ts",
+      "lib/status.ts",
+    ];
+    for (const file of files) {
+      assert.doesNotMatch(await readSrc(file), RETIRED, file);
+    }
+  });
+
   it("does not expose vendor credit balances on customer surfaces", async () => {
     const home = await readSrc("app/page.tsx");
     const footer = await readSrc("components/site-footer.tsx");

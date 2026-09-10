@@ -1,5 +1,7 @@
 import Link from "next/link";
 
+import { BRAND } from "@/lib/config";
+
 type Props = {
   /** Which background the logo sits on, so the wordmark stays readable. */
   variant?: "on-dark" | "on-light";
@@ -27,18 +29,27 @@ export function Logo({ variant = "on-light", href = "/" }: Props) {
         </svg>
       </span>
       <span
-        className={`text-[17px] font-semibold tracking-tight ${
+        className={`flex flex-col leading-tight ${
           variant === "on-dark" ? "text-white" : "text-slate-900"
         }`}
       >
-        Pull<span className="text-brand-500">Vin</span>Report
+        <span className="text-[15px] font-semibold tracking-tight">
+          {BRAND.shortName}
+        </span>
+        <span
+          className={`text-[11px] font-semibold tracking-wide ${
+            variant === "on-dark" ? "text-brand-300" : "text-brand-600"
+          }`}
+        >
+          by VIN
+        </span>
       </span>
     </span>
   );
 
   if (!href) return content;
   return (
-    <Link href={href} className="inline-flex" aria-label="PullVinReport home">
+    <Link href={href} className="inline-flex" aria-label={`${BRAND.name} home`}>
       {content}
     </Link>
   );

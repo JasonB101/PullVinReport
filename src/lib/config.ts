@@ -1,15 +1,20 @@
 /**
- * Central environment configuration for PullVinReport.
+ * Central environment configuration for Vehicle History by VIN.
  *
  * Every value that changes between environments is read here so the rest of the
  * app can ask simple questions like "is the provider configured?" instead of
  * poking at `process.env` in a dozen places.
  */
 
+/** Site name + canonical URL. Customer-facing copy and absolute links read this. */
 export const BRAND = {
-  name: "PullVinReport",
-  domain: "pullvinreport.com",
-  tagline: "Pull the full history before you pull out your wallet.",
+  name: "Vehicle History by VIN",
+  shortName: "Vehicle History",
+  domain: "vehiclehistorybyvin.com",
+  url: "https://vehiclehistorybyvin.com",
+  filePrefix: "VehicleHistoryByVIN",
+  tagline: "Read the records before you buy the car.",
+  legacyHosts: ["pullvinreport.com", "www.pullvinreport.com"],
 } as const;
 
 function env(key: string): string | undefined {
@@ -142,7 +147,7 @@ export function isAnthropicAdminConfigured(): boolean {
   return Boolean(anthropic.adminApiKey);
 }
 
-/** PullVinReport Google Ads customer — digits only, no dashes. */
+/** Google Ads customer for this product — digits only, no dashes. */
 export const DEFAULT_GOOGLE_ADS_CUSTOMER_ID = "7544762158";
 
 export const GOOGLE_ADS_OAUTH_SCOPE = "https://www.googleapis.com/auth/adwords";
@@ -158,7 +163,7 @@ function digitsEnv(key: string): string | undefined {
  * Official Google Ads API credentials for /admin spend today + MTD.
  *
  * All four auth values must be present or the tile is omitted — never
- * shown as $0.00. `GOOGLE_ADS_CUSTOMER_ID` defaults to the PullVinReport
+ * shown as $0.00. `GOOGLE_ADS_CUSTOMER_ID` defaults to this product's Ads
  * account. Developer tokens are issued on a manager (MCC) account, so
  * `GOOGLE_ADS_LOGIN_CUSTOMER_ID` is required on that path and is sent as
  * `login-customer-id`. Leave it unset only for a direct-account token;
@@ -299,7 +304,8 @@ export const emailConfig = {
   },
   /**
    * Outbound sender. Both defaults are derived from BRAND so an unset or
-   * broken environment can only ever send as PullVinReport on its own domain.
+   * broken environment can only ever send as Vehicle History by VIN on its
+   * own domain.
    */
   get from(): string {
     return emailEnv("EMAIL_FROM", `${BRAND.name} <orders@${BRAND.domain}>`);
@@ -332,9 +338,22 @@ export function isAdminConfigured(): boolean {
 export function siteUrl(): string {
   const explicit = env("NEXT_PUBLIC_SITE_URL") ?? env("SITE_URL");
   if (explicit) return explicit.replace(/\/+$/, "");
+  // Production on Vercel without an explicit URL still uses the canonical host
+  // so Stripe, emails, OG and the sitemap cannot silently emit *.vercel.app.
+  if (env("VERCEL_ENV") === "production") return BRAND.url;
   const vercel = env("VERCEL_URL");
   if (vercel) return `https://${vercel}`;
   return "http://localhost:3000";
+}
+
+/** Permanent host redirects from the retired pullvinreport.com names. */
+export function legacyDomainRedirects() {
+  return BRAND.legacyHosts.map((host) => ({
+    source: "/:path*",
+    has: [{ type: "host" as const, value: host }],
+    destination: `${BRAND.url}/:path*`,
+    permanent: true as const,
+  }));
 }
 
 export function absoluteUrl(path: string): string {
