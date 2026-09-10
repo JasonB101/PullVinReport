@@ -73,7 +73,7 @@ const STEPS = [
 const FAQ = [
   {
     q: "Where does the data come from?",
-    a: "We do not resell another retailer's report and we do not repackage the sample.",
+    a: "Every purchased report is pulled live at the moment you buy it, from national title and brand data reported to NMVTIS together with insurance, salvage, auction and listing records.",
   },
   {
     q: "How fast do I get it?",
