@@ -99,10 +99,11 @@ describe("customer-facing surfaces", () => {
     const home = await readSrc("app/page.tsx");
     assert.match(
       home,
-      /We do not resell another retailer's report and we do not repackage the sample\./,
+      /Every purchased report is pulled live at the moment you buy it, from national title and brand data reported to NMVTIS together with insurance, salvage, auction and listing records\./,
     );
-    assert.doesNotMatch(home, /NMVTIS/);
-    assert.doesNotMatch(home, /pulled live at the moment you buy it/);
+    const resellRepackage =
+      /We do not resell another retailer's report and we do not repackage the sample\./;
+    assert.doesNotMatch(home, resellRepackage);
     const advertisedRefund =
       /email (us|support) and we will refund you|can.?t return a report for your VIN|for a refund/i;
     assert.doesNotMatch(home, advertisedRefund);
@@ -127,6 +128,7 @@ describe("customer-facing surfaces", () => {
     ] as const) {
       assert.doesNotMatch(source, SUPPLIER, name);
       assert.doesNotMatch(source, JARGON, name);
+      assert.doesNotMatch(source, resellRepackage, name);
     }
   });
 
