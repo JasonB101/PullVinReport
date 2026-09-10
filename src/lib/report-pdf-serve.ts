@@ -5,7 +5,11 @@
  * Paid downloads are gated on the same unguessable access token as the
  * report page. The sample is public and always labelled SAMPLE.
  */
+import type { VehicleBrief } from "@/lib/ai-brief";
 import { extrasForReport } from "@/lib/model-extras";
+import type { ModelExtras } from "@/lib/model-extras";
+import type { VehicleReport } from "@/lib/report";
+import { heroSrcForPdf } from "@/lib/report-pdf-hero";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
 import {
@@ -14,7 +18,7 @@ import {
   buildSampleReport,
   SAMPLE_VIN,
 } from "@/lib/sample-report";
-import { getStore, type OrderStore } from "@/lib/store";
+import { getStore, type Order, type OrderStore } from "@/lib/store";
 
 export const SAMPLE_REPORT_PDF_PATH = "/api/sample/pdf";
 
@@ -25,6 +29,36 @@ export function paidReportPdfPath(token: string): string {
 export type PaidReportPdf =
   | { ok: true; buffer: Buffer; filename: string }
   | { ok: false; status: 404 };
+
+/**
+ * One renderer for the receipt attachment and both download endpoints.
+ *
+ * Looks up a cached hero (or the sample SVG) and soft-fails to no picture.
+ * Does not call fal — a PDF must not wait on a drawing that is still drafting.
+ */
+export async function renderStoredReportPdf(
+  report: VehicleReport,
+  brief: VehicleBrief | null = null,
+  extras: ModelExtras | null = null,
+  store?: OrderStore,
+): Promise<Buffer> {
+  const heroSrc = await heroSrcForPdf(report, store);
+  return renderReportPdf(report, brief, extras, heroSrc);
+}
+
+export async function renderOrderReportPdf(
+  order: Order,
+  extras: ModelExtras | null = null,
+  store: OrderStore = getStore(),
+): Promise<Buffer> {
+  if (!order.report) throw new Error("no report to render");
+  return renderStoredReportPdf(
+    withCurrentLayout(order.report),
+    order.aiBrief,
+    extras,
+    store,
+  );
+}
 
 /**
  * Renders the PDF a buyer with this report token is allowed to download.
@@ -49,11 +83,7 @@ export async function pdfForPaidReport(
     return null;
   });
 
-  const buffer = await renderReportPdf(
-    withCurrentLayout(order.report),
-    order.aiBrief,
-    extras,
-  );
+  const buffer = await renderOrderReportPdf(order, extras, store);
   return { ok: true, buffer, filename: reportPdfFilename(order.vin) };
 }
 
@@ -61,7 +91,7 @@ export async function pdfForSampleReport(): Promise<{
   buffer: Buffer;
   filename: string;
 }> {
-  const buffer = await renderReportPdf(
+  const buffer = await renderStoredReportPdf(
     buildSampleReport(),
     buildSampleBrief(),
     buildSampleModelExtras(),

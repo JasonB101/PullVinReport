@@ -5,6 +5,7 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
+import { renderReportPdf } from "@/lib/report-pdf";
 import {
   paidReportPdfPath,
   pdfFileResponse,
@@ -12,7 +13,13 @@ import {
   pdfForSampleReport,
   SAMPLE_REPORT_PDF_PATH,
 } from "@/lib/report-pdf-serve";
+import {
+  buildSampleBrief,
+  buildSampleModelExtras,
+  buildSampleReport,
+} from "@/lib/sample-report";
 import { FileOrderStore } from "@/lib/store/file-store";
+import { heroFacts } from "@/lib/vehicle-hero";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
 const VIN = "4T1BF1FK8CU512345";
@@ -71,6 +78,18 @@ describe("download uses the server PDF, not window.print", () => {
     assert.match(sampleRoute, /pdfForSampleReport/);
     assert.equal(SAMPLE_REPORT_PDF_PATH, "/api/sample/pdf");
     assert.equal(paidReportPdfPath("tok_abc"), "/api/report/tok_abc/pdf");
+
+    const serve = await readFile(
+      path.join(SRC, "lib/report-pdf-serve.ts"),
+      "utf8",
+    );
+    const email = await readFile(path.join(SRC, "lib/email.ts"), "utf8");
+    assert.match(serve, /heroSrcForPdf/);
+    assert.match(serve, /renderStoredReportPdf/);
+    assert.match(serve, /renderOrderReportPdf/);
+    assert.match(email, /renderOrderReportPdf\(order, modelExtras\)/);
+    assert.doesNotMatch(serve, /generateVehicleHero|heroForOrder/);
+    assert.doesNotMatch(email, /generateVehicleHero|heroForOrder/);
   });
 
   it("keeps print as a secondary page control, not the PDF path", async () => {
@@ -94,6 +113,16 @@ describe("sample PDF download", () => {
     assert.equal(buffer.subarray(0, 5).toString("latin1"), "%PDF-");
     assert.equal(filename, `PullVinReport-SAMPLE-${VIN}.pdf`);
     assert.ok(buffer.byteLength > 4_000);
+
+    const withoutHero = await renderReportPdf(
+      buildSampleReport(),
+      buildSampleBrief(),
+      buildSampleModelExtras(),
+    );
+    assert.ok(
+      buffer.byteLength > withoutHero.byteLength,
+      "the sample PDF must embed the same static hero the page shows",
+    );
   });
 });
 
@@ -152,6 +181,46 @@ describe("paid PDF download", () => {
       assert.equal(result.buffer.subarray(0, 5).toString("latin1"), "%PDF-");
       assert.equal(result.filename, `PullVinReport-${VIN}.pdf`);
       assert.doesNotMatch(result.filename, /SAMPLE/);
+    }
+  });
+
+  it("embeds a cached hero when one exists and still renders when none does", async () => {
+    const store = new FileOrderStore(dataDir);
+    await store.init();
+    const order = await store.create({
+      vin: VIN,
+      email: "buyer@example.com",
+      amountCents: 1499,
+      currency: "usd",
+    });
+    const report = paidReport();
+    await store.update(order.id, {
+      status: "fulfilled",
+      report,
+      fulfilledAt: new Date().toISOString(),
+    });
+
+    const without = await pdfForPaidReport(order.accessToken, store);
+    assert.equal(without.ok, true);
+
+    const facts = heroFacts(report);
+    assert.ok(facts);
+    await store.saveVehicleHero({
+      cacheKey: facts.cacheKey,
+      src: "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
+      contentType: "image/png",
+      model: "test",
+      createdAt: new Date().toISOString(),
+    });
+
+    const withHero = await pdfForPaidReport(order.accessToken, store);
+    assert.equal(withHero.ok, true);
+    if (withHero.ok && without.ok) {
+      assert.ok(
+        withHero.buffer.byteLength > without.buffer.byteLength,
+        "a cache hit must ride along with the download",
+      );
+      assert.match(withHero.buffer.toString("latin1"), /\/Subtype\s*\/Image/);
     }
   });
 });

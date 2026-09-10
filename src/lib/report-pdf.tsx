@@ -16,6 +16,7 @@
  */
 import {
   Document,
+  Image,
   Page,
   StyleSheet,
   Text,
@@ -70,6 +71,7 @@ import {
   withResolvedDispositions,
 } from "@/lib/report";
 import { reportHealth } from "@/lib/report-health";
+import { HERO_ILLUSTRATION_LABEL } from "@/lib/vehicle-hero";
 import { normalizeVin, prettyVin } from "@/lib/vin";
 
 const INK = "#0f172a";
@@ -101,8 +103,19 @@ const styles = StyleSheet.create({
     marginTop: 3,
     textTransform: "uppercase",
   },
-  vehicle: { fontFamily: "Helvetica-Bold", fontSize: 17, marginTop: 12 },
+  vehicleBlock: { marginTop: 12 },
+  vehicleBlockWithHero: { marginTop: 12, paddingRight: 148, minHeight: 72 },
+  vehicle: { fontFamily: "Helvetica-Bold", fontSize: 17 },
   vin: { fontFamily: "Courier", fontSize: 10, color: MUTED, marginTop: 3 },
+  hero: { position: "absolute", right: 0, top: 4, width: 136 },
+  heroFrame: { width: 136, overflow: "hidden" },
+  heroImage: { width: 136, height: 52, objectFit: "contain" },
+  heroLabel: {
+    fontSize: 6.5,
+    color: FAINT,
+    textAlign: "center",
+    marginTop: 1,
+  },
   chipRow: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 12 },
   chip: {
     borderWidth: 1,
@@ -604,14 +617,30 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
   );
 }
 
+function VehicleHeroPdf({ src }: { src: string }) {
+  return (
+    <View style={styles.hero}>
+      <View style={styles.heroFrame}>
+        {/* react-pdf Image has no alt; the caption under it is the print label. */}
+        {/* eslint-disable-next-line jsx-a11y/alt-text */}
+        <Image src={src} style={styles.heroImage} />
+      </View>
+      <Text style={styles.heroLabel}>{HERO_ILLUSTRATION_LABEL}</Text>
+    </View>
+  );
+}
+
 export function ReportDocument({
   report: incoming,
   brief: incomingBrief = null,
   modelExtras: incomingExtras = null,
+  heroSrc = null,
 }: {
   report: VehicleReport;
   brief?: VehicleBrief | null;
   modelExtras?: ModelExtras | null;
+  /** Cached (or sample) illustration. Absent when still drafting or missing. */
+  heroSrc?: string | null;
 }) {
   const report = cleanReport(withResolvedDispositions(incoming));
   const title = vehicleTitle(report.vehicle);
@@ -642,10 +671,16 @@ export function ReportDocument({
           </Text>
         </View>
 
-        {/* The vehicle and its VIN are stated here and nowhere else. */}
-        <Text style={styles.vehicle}>{title}</Text>
-        <Text style={styles.vin}>{prettyVin(report.vin)}</Text>
-        <Chips report={report} />
+        {/* The vehicle and its VIN are stated here and nowhere else.
+            The hero is absolutely placed so a missing picture and a
+            cached one share the same flow — a flex row wrapped the chips
+            onto extra lines and spilled the sample onto a fourth page. */}
+        <View style={heroSrc ? styles.vehicleBlockWithHero : styles.vehicleBlock}>
+          <Text style={styles.vehicle}>{title}</Text>
+          <Text style={styles.vin}>{prettyVin(report.vin)}</Text>
+          <Chips report={report} />
+          {heroSrc ? <VehicleHeroPdf src={heroSrc} /> : null}
+        </View>
         {specList.length > 0 && (
           <View style={styles.headerSpecs} wrap={false}>
             <Text style={styles.metaLabel}>Specifications</Text>
@@ -708,8 +743,22 @@ export async function renderReportPdf(
   report: VehicleReport,
   brief: VehicleBrief | null = null,
   modelExtras: ModelExtras | null = null,
+  heroSrc: string | null = null,
 ): Promise<Buffer> {
-  return renderToBuffer(
-    <ReportDocument report={report} brief={brief} modelExtras={modelExtras} />,
-  );
+  try {
+    return await renderToBuffer(
+      <ReportDocument
+        report={report}
+        brief={brief}
+        modelExtras={modelExtras}
+        heroSrc={heroSrc}
+      />,
+    );
+  } catch (error) {
+    if (!heroSrc) throw error;
+    console.error("[pdf] hero embed failed — rendering without it", error);
+    return renderToBuffer(
+      <ReportDocument report={report} brief={brief} modelExtras={modelExtras} />,
+    );
+  }
 }

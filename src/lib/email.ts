@@ -4,8 +4,8 @@ import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from 
 import { REPORT_DISCLAIMER_SHORT } from "@/lib/customer-copy";
 import { extrasForReport, type ModelExtras } from "@/lib/model-extras";
 import { vehicleTitle } from "@/lib/report";
-import { withCurrentLayout } from "@/lib/report-layout";
-import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
+import { renderOrderReportPdf } from "@/lib/report-pdf-serve";
+import { reportPdfFilename } from "@/lib/report-pdf";
 import { getStore, type Order } from "@/lib/store";
 
 function escapeHtml(value: string): string {
@@ -138,7 +138,8 @@ async function loadModelExtras(order: Order): Promise<ModelExtras | null> {
  * working link either way, so a PDF that fails to render is logged for the
  * operator and dropped rather than costing the customer their receipt. The PDF
  * contains no link or token — a forwarded copy must not hand over access.
- * Model extras ride along when we have them so the attachment matches the page.
+ * Model extras and a cached vehicle hero ride along when we have them so
+ * the attachment matches the page. A missing hero is skipped, not retried.
  */
 async function reportAttachment(
   order: Order,
@@ -146,11 +147,7 @@ async function reportAttachment(
 ): Promise<{ attachment?: ReportAttachment; detail: string }> {
   if (!order.report) return { detail: "no report to attach" };
   try {
-    const content = await renderReportPdf(
-      withCurrentLayout(order.report),
-      order.aiBrief,
-      modelExtras,
-    );
+    const content = await renderOrderReportPdf(order, modelExtras);
     return {
       attachment: {
         filename: reportPdfFilename(order.vin),

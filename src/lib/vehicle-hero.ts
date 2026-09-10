@@ -19,6 +19,13 @@ export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.svg";
  */
 export const HERO_CACHE_VERSION = "cutout-v1";
 
+/**
+ * Caption under the PDF hero. The on-page cutout has no on-image label
+ * (screen readers get `heroAlt`); a forwarded PDF is read by people who
+ * never saw the page, so the illustration must say so in print.
+ */
+export const HERO_ILLUSTRATION_LABEL = "Illustration — not this VIN";
+
 const TRIM_LABELS = ["Trim", "Trim level", "Series", "Package"];
 
 export type HeroFacts = {

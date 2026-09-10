@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 
 import { sendReportEmail } from "@/lib/email";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
+import { renderStoredReportPdf } from "@/lib/report-pdf-serve";
 import {
   buildSampleBrief,
   buildSampleModelExtras,
@@ -93,14 +94,14 @@ describe("report PDF", () => {
       .filter((line) => /lineHeight:/.test(line));
     assert.deepEqual(declarations, []);
 
-    const pdf = await renderReportPdf(
+    const pdf = await renderStoredReportPdf(
       buildSampleReport(),
       buildSampleBrief(),
       buildSampleModelExtras(),
     );
     assert.ok(
       pageCount(pdf) <= 3,
-      `the sample, brief and model extras should fit in 3 pages, got ${pageCount(pdf)}`,
+      `the sample, brief, model extras and hero should fit in 3 pages, got ${pageCount(pdf)}`,
     );
   });
 
@@ -153,7 +154,42 @@ describe("report PDF", () => {
       "utf8",
     );
     assert.match(source, /extrasForReport/);
-    assert.match(source, /renderReportPdf\(\s*withCurrentLayout\(order\.report\),\s*order\.aiBrief,\s*modelExtras,/);
+    assert.match(source, /renderOrderReportPdf\(order, modelExtras\)/);
+  });
+
+  it("embeds a cached hero beside the vehicle card and labels it an illustration", async () => {
+    const source = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(source, /HERO_ILLUSTRATION_LABEL/);
+    assert.match(source, /<VehicleHeroPdf src=\{heroSrc\}/);
+    assert.match(source, /heroSrc \? <VehicleHeroPdf/);
+    assert.match(source, /hero embed failed — rendering without it/);
+    assert.doesNotMatch(source, /photograph of this VIN/i);
+    assert.doesNotMatch(source, /generateVehicleHero/);
+
+    const pixel =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const withHero = await renderReportPdf(buildSampleReport(), null, null, pixel);
+    const without = await renderReportPdf(buildSampleReport());
+    assert.equal(withHero.subarray(0, 5).toString("latin1"), "%PDF-");
+    assert.ok(
+      withHero.byteLength > without.byteLength,
+      "a cached hero must add image bytes, not vanish",
+    );
+    assert.match(withHero.toString("latin1"), /\/Subtype\s*\/Image/);
+  });
+
+  it("still renders when the hero bytes are unreadable", async () => {
+    const pdf = await renderReportPdf(
+      buildSampleReport(),
+      null,
+      null,
+      "not-an-embeddable-image",
+    );
+    assert.equal(pdf.subarray(0, 5).toString("latin1"), "%PDF-");
+    assert.ok(pdf.byteLength > 4_000);
   });
 
   it("carries the written brief into the forwarded copy", async () => {
