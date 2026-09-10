@@ -39,7 +39,7 @@ describe("VIN-first checkout", () => {
     assert.match(footer, /formatPrice\(\)/);
     assert.match(footer, /then one \{formatPrice\(\)\} report/);
     assert.match(checkout, /Step 2 of 2 · Pay \{priceLabel\}/);
-    assert.match(checkout, /Get the report\} · \$\{priceLabel\}/);
+    assert.match(checkout, /Get the report"\} · \$\{priceLabel\}/);
     assert.match(preview, /priceLabel=\{formatPrice\(\)\}/);
   });
 
