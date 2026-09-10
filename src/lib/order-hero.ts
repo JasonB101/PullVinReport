@@ -1,12 +1,33 @@
 import { isFalConfigured } from "@/lib/config";
+import type { VehicleReport } from "@/lib/report";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
-import type { Order, VehicleHeroRecord } from "@/lib/store";
+import type { Order, OrderStore, VehicleHeroRecord } from "@/lib/store";
 import { generateVehicleHero, HERO_CACHE_VERSION, heroFacts } from "@/lib/vehicle-hero";
 
 export type HeroOutcome =
   | { status: "ready"; hero: VehicleHeroRecord; cached: boolean }
   | { status: "unavailable"; reason: string };
+
+/**
+ * A cached drawing only. Never starts a generate — PDF render and a first
+ * page view must not block on fal. Missing key, empty cache or a read
+ * error all become `null`.
+ */
+export async function cachedHeroForReport(
+  report: VehicleReport,
+  store: OrderStore = getStore(),
+): Promise<VehicleHeroRecord | null> {
+  const facts = heroFacts(withCurrentLayout(report));
+  if (!facts) return null;
+  try {
+    await store.init();
+    return await store.getVehicleHero(facts.cacheKey);
+  } catch (error) {
+    console.error(`[hero] could not read the cache for ${facts.cacheKey}`, error);
+    return null;
+  }
+}
 
 /**
  * The order's illustrated hero, generated once per year/make/model/trim/color.
@@ -34,12 +55,8 @@ export async function heroForOrder(order: Order): Promise<HeroOutcome> {
     console.error("[hero] could not drop stale cached drawings", error);
   }
 
-  try {
-    const cached = await store.getVehicleHero(facts.cacheKey);
-    if (cached) return { status: "ready", hero: cached, cached: true };
-  } catch (error) {
-    console.error(`[hero] could not read the cache for ${facts.cacheKey}`, error);
-  }
+  const cached = await cachedHeroForReport(report, store);
+  if (cached) return { status: "ready", hero: cached, cached: true };
 
   if (!isFalConfigured()) {
     return { status: "unavailable", reason: "FAL_KEY is not set" };

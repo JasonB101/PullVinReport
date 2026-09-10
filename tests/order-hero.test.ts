@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { heroForOrder } from "@/lib/order-hero";
+import { cachedHeroForReport, heroForOrder } from "@/lib/order-hero";
 import { buildSampleReport } from "@/lib/sample-report";
 import { FileOrderStore } from "@/lib/store/file-store";
 import type { Order } from "@/lib/store";
@@ -92,6 +92,25 @@ describe("the hero on an order", () => {
     assert.equal(second.status, "ready");
     assert.equal(second.status === "ready" && second.cached, true);
     assert.equal(calls, before + 2);
+  });
+
+  it("cachedHeroForReport returns a hit without drawing", async () => {
+    const order = await fulfilledOrder();
+    const before = calls;
+    const facts = heroFacts(buildSampleReport());
+    assert.ok(facts);
+    const store = new FileOrderStore(dataDir);
+    await store.saveVehicleHero({
+      cacheKey: facts.cacheKey,
+      src: "data:image/png;base64,ZmFrZQ==",
+      contentType: "image/png",
+      model: "test",
+      createdAt: new Date().toISOString(),
+    });
+    const cached = await cachedHeroForReport(order.report!, store);
+    assert.ok(cached);
+    assert.equal(cached.src, "data:image/png;base64,ZmFrZQ==");
+    assert.equal(calls, before);
   });
 
   it("does nothing without a key when the cache is empty", async () => {

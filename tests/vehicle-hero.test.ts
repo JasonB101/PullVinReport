@@ -12,6 +12,7 @@ import {
   heroPrompt,
   HERO_CACHE_VERSION,
   HERO_DRAFT_COPY,
+  HERO_ILLUSTRATION_LABEL,
 } from "../src/lib/vehicle-hero.ts";
 import { buildSampleReport } from "../src/lib/sample-report.ts";
 import { fal, isFalConfigured } from "../src/lib/config.ts";
@@ -137,6 +138,13 @@ describe("the drafting placeholder", () => {
   it("labels the wait as drafting an illustration, not a generic load", () => {
     assert.equal(HERO_DRAFT_COPY, "Drafting vehicle illustration…");
     assert.doesNotMatch(HERO_DRAFT_COPY, /loading|spinner|progress|vinaudit/i);
+  });
+
+  it("gives the PDF a print caption that is an illustration, not this VIN", () => {
+    assert.equal(HERO_ILLUSTRATION_LABEL, "Illustration — not this VIN");
+    assert.match(HERO_ILLUSTRATION_LABEL, /Illustration/);
+    assert.match(HERO_ILLUSTRATION_LABEL, /not this VIN/);
+    assert.doesNotMatch(HERO_ILLUSTRATION_LABEL, /photograph of this VIN/i);
   });
 
   it("holds the hero slot with a sketch until pixels arrive, then crossfades", async () => {
