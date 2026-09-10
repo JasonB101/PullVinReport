@@ -86,9 +86,7 @@ export default async function AdminPage() {
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
               Orders
             </h1>
-            <p className="mt-1 text-sm text-slate-500">
-              Storage: {store.description} · times in Denver
-            </p>
+            <p className="mt-1 text-sm text-slate-500">Times in Denver</p>
           </div>
           {!isVinAuditConfigured() && (
             <p className="rounded-xl border border-red-200 bg-red-50 px-4 py-2.5 text-sm font-medium text-red-700">
