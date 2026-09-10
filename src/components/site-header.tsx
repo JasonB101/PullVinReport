@@ -2,7 +2,6 @@ import Link from "next/link";
 
 import { Logo } from "@/components/logo";
 import { StartReportLink } from "@/components/start-report-link";
-import { formatPrice } from "@/lib/config";
 
 const NAV = [
   { href: "/#how-it-works", label: "How it works" },
@@ -19,9 +18,9 @@ type Props = {
   /**
    * What the header offers.
    *
-   * `buy` is the priced CTA. `another` is for someone who already paid —
-   * pitching $14.99 on the report they just bought reads as if they haven't.
-   * `none` hides it (print chrome, tight admin-adjacent pages).
+   * `buy` starts a VIN check — price lives on the pay step, FAQ and footer,
+   * not in this button. `another` is for someone who already paid. `none`
+   * hides it (print chrome, tight admin-adjacent pages).
    */
   cta?: HeaderCta;
 };
@@ -88,8 +87,7 @@ function HeaderCta({
 
   return (
     <StartReportLink className="inline-flex items-center gap-2 rounded-full bg-brand-600 px-4 py-2.5 text-sm font-semibold text-white shadow-[0_10px_30px_-12px_rgba(37,99,235,0.9)] transition hover:bg-brand-500 active:scale-[0.98]">
-      Get a report
-      <span className="hidden text-brand-100 sm:inline">{formatPrice()}</span>
+      Check a VIN
     </StartReportLink>
   );
 }

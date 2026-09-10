@@ -3,7 +3,7 @@
 import { usePathname } from "next/navigation";
 import { useEffect, type MouseEvent, type ReactNode } from "react";
 
-/** The homepage hero — the only place a priced CTA is allowed to land. */
+/** The homepage hero — the only place a start-a-report CTA is allowed to land. */
 export const START_HREF = "/#vin";
 
 export function scrollToVinLookup(): void {
@@ -16,9 +16,10 @@ export function scrollToVinLookup(): void {
  * A link that actually starts a report.
  *
  * Next.js client navigation to `/#vin` often lands at the top of the home
- * page and never scrolls, which is why the header's $14.99 button looked
- * dead. A plain hash link does a full load from other pages (the browser
- * honours the fragment); on the home page we scroll and focus ourselves.
+ * page and never scrolls, which is why the header's Check a VIN button
+ * looked dead. A plain hash link does a full load from other pages (the
+ * browser honours the fragment); on the home page we scroll and focus
+ * ourselves.
  */
 export function StartReportLink({
   className,

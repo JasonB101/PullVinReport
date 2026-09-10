@@ -53,7 +53,11 @@ export default function SamplePage() {
             </p>
 
             <div className="mt-8 max-w-2xl">
-              <VinForm submitLabel={`Get my report · ${formatPrice()}`} />
+              <VinForm />
+              <p className="mt-2 text-xs text-slate-500">
+                Reports {formatPrice()} · you&apos;ll see the vehicle before you
+                pay.
+              </p>
             </div>
           </div>
         </div>

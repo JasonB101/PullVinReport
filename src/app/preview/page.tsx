@@ -18,14 +18,14 @@ import {
   ORDERING_PAUSED_REASON,
   PAYMENT_CANCELED_MESSAGE,
 } from "@/lib/customer-copy";
-import { modelYearFromVin, prettyVin, validateVin } from "@/lib/vin";
+import { modelYearFromVin, validateVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
 
 export const metadata: Metadata = {
-  title: "Confirm your VIN",
+  title: "Your vehicle",
   description:
-    "Confirm your VIN and preview the report format before paying.",
+    "See the vehicle this VIN decodes to, then pull the full history report.",
   robots: { index: false, follow: false },
 };
 
@@ -94,22 +94,14 @@ export default async function PreviewPage({
                 Home
               </Link>
               <span className="mx-2 text-slate-300">/</span>
-              <span className="text-slate-900">Confirm VIN</span>
+              <span className="text-slate-900">Your vehicle</span>
             </nav>
 
-            <div className="mt-4 flex flex-wrap items-end justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.2em] text-brand-600">
-                  Step 1 of 2 · Confirm
-                </p>
-                <h1 className="mt-2 font-mono text-2xl tracking-[0.14em] text-slate-900 sm:text-3xl">
-                  {prettyVin(result.vin)}
-                </h1>
-                <p className="mt-2 text-sm text-slate-600">
-                  Valid 17-character VIN. We pull the records only after payment
-                  clears.
-                </p>
-              </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-slate-600">
+                Valid 17-character VIN. We pull the records only after payment
+                clears.
+              </p>
               <Link
                 href="/"
                 className="text-sm font-semibold text-brand-600 hover:text-brand-700"
@@ -119,9 +111,11 @@ export default async function PreviewPage({
             </div>
 
             {/* Streamed so a slow decode never delays the checkout panel. */}
-            <Suspense fallback={<VinDecodeSkeleton />}>
-              <VinDecodeCard vin={result.vin} fallbackYear={modelYear} />
-            </Suspense>
+            <div className="mt-6">
+              <Suspense fallback={<VinDecodeSkeleton />}>
+                <VinDecodeCard vin={result.vin} fallbackYear={modelYear} />
+              </Suspense>
+            </div>
 
             {canceled && (
               <div
@@ -145,7 +139,7 @@ export default async function PreviewPage({
 
         <div className="container-page py-10 sm:py-14">
           <div className="grid gap-10 lg:grid-cols-[1.35fr_1fr] lg:items-start">
-            <div className="space-y-6">
+            <div className="order-2 space-y-6 lg:order-1">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">
                   What your report will look like
@@ -191,7 +185,7 @@ export default async function PreviewPage({
               </div>
             </div>
 
-            <div className="lg:sticky lg:top-24">
+            <div className="order-1 lg:sticky lg:top-24 lg:order-2">
               <CheckoutPanel
                 vin={result.vin}
                 priceLabel={formatPrice()}

@@ -60,8 +60,8 @@ const STEPS = [
   },
   {
     step: "02",
-    title: "Look at the sample first",
-    body: "See a clearly labelled example report so you know exactly what a real report contains before you spend a cent.",
+    title: "See the vehicle",
+    body: "We decode year, make and model from the VIN itself so you know it's the right car — still free, still before you pay.",
   },
   {
     step: "03",
@@ -149,22 +149,23 @@ export default function HomePage() {
               </h1>
 
               <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-                One VIN. One {price} report. Title brands, salvage and junk
-                records, odometer history, accidents, liens, prior listings and
-                open recalls — pulled live and readable in under a minute.
+                Enter the VIN first. We identify the vehicle — then you can
+                pull the full history. Title brands, salvage and junk records,
+                odometer history, accidents, liens, prior listings and open
+                recalls, readable in under a minute.
               </p>
 
               <div className="mx-auto mt-9 max-w-2xl">
-                <VinForm
-                  variant="on-dark"
-                  autoFocus
-                  submitLabel={`Get my report · ${price}`}
-                />
+                <VinForm variant="on-dark" autoFocus />
+                <p className="mt-3 text-center text-xs text-slate-400">
+                  Reports {price} · one-time. You&apos;ll see the vehicle
+                  before you pay.
+                </p>
               </div>
 
               <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-xs text-slate-400">
                 {[
-                  "See a labelled sample before you pay",
+                  "See the year, make and model first",
                   "Written brief on every paid report",
                   "One-time payment, no subscription",
                 ].map((item) => (
@@ -331,7 +332,7 @@ export default function HomePage() {
                   required, no recurring charge, no upsell tiers.
                 </p>
                 <StartReportLink className="mt-7 block w-full rounded-xl bg-brand-600 px-6 py-4 text-base font-semibold text-white shadow-glow transition hover:bg-brand-500">
-                  Get a report · {price}
+                  Enter my VIN
                 </StartReportLink>
               </div>
             </div>
@@ -393,10 +394,10 @@ export default function HomePage() {
               {BRAND.tagline}
             </h2>
             <p className="mx-auto mt-4 max-w-xl text-base text-slate-600">
-              Spend {price} now instead of thousands later.
+              Enter a VIN to identify the car. Reports are {price}, one-time.
             </p>
             <div className="mx-auto mt-8 max-w-xl">
-              <VinForm variant="on-light" submitLabel="Get my report" />
+              <VinForm variant="on-light" />
             </div>
           </div>
         </section>

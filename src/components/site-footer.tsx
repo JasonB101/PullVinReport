@@ -2,13 +2,13 @@ import Link from "next/link";
 
 import { Logo } from "@/components/logo";
 import { StartReportLink } from "@/components/start-report-link";
-import { BRAND, emailConfig } from "@/lib/config";
+import { BRAND, emailConfig, formatPrice } from "@/lib/config";
 
 const COLUMNS = [
   {
     title: "Reports",
     links: [
-      { href: "/#vin", label: "Buy a VIN report" },
+      { href: "/#vin", label: "Check a VIN" },
       { href: "/sample", label: "See a sample report" },
       { href: "/lookup", label: "Find my report" },
     ],
@@ -39,8 +39,8 @@ export function SiteFooter() {
           <div className="space-y-4">
             <Logo variant="on-dark" />
             <p className="max-w-xs text-sm leading-relaxed">
-              Vehicle history reports for buyers, sellers and owners — one VIN,
-              one price, pulled live.
+              Vehicle history reports for buyers, sellers and owners — identify
+              the VIN first, then one {formatPrice()} report, pulled live.
             </p>
             <a
               href={`mailto:${emailConfig.supportEmail}`}
