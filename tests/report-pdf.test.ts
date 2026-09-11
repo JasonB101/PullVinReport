@@ -101,8 +101,8 @@ describe("report PDF", () => {
       buildSampleModelExtras(),
     );
     assert.ok(
-      pageCount(pdf) <= 3,
-      `the sample, brief, model extras and hero should fit in 3 pages, got ${pageCount(pdf)}`,
+      pageCount(pdf) <= 4,
+      `the sample, brief, model extras, MPG figures and hero should fit in 4 pages, got ${pageCount(pdf)}`,
     );
   });
 
@@ -135,6 +135,9 @@ describe("report PDF", () => {
     assert.match(source, /modelExtrasCountsLine/);
     assert.match(source, /VIN_SPECS_TITLE/);
     assert.match(source, /THIS_VIN_CHIP/);
+    assert.match(source, /partitionSpecMpg/);
+    assert.match(source, /function SpecMpgFigures/);
+    assert.match(source, /SPEC_MPG_TITLE/);
     assert.match(source, /function EpaMpgFigures/);
     assert.doesNotMatch(
       source,

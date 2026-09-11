@@ -63,12 +63,18 @@ describe("report view layout", () => {
     assert.match(card, /EPA_MPG_NOTE/);
     assert.match(card, /function EpaMpgFigures/);
     assert.match(card, /mpgFigureRows/);
-    assert.match(card, /grid grid-cols-3/);
+    assert.match(card, /<MpgFigures/);
     assert.doesNotMatch(
       card,
       /city \/ \{extras\.mpg\.highway\} hwy/,
       "EPA MPG must not stay a jammed city / hwy / combined line",
     );
+    const figures = await readFile(
+      fileURLToPath(new URL("../src/components/mpg-figures.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(figures, /grid-cols-3/);
+    assert.match(figures, /grid-cols-2/);
   });
 
   it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {
@@ -187,6 +193,11 @@ describe("report view layout", () => {
     assert.match(source, /headerSpecifications\(report\)/);
     assert.match(source, /headerSpecSummary\(specList\)/);
     assert.match(source, /<HeaderSpecs specifications=\{specList\} \/>/);
+    assert.match(source, /partitionSpecMpg/);
+    assert.match(source, /specMpgTeaser/);
+    assert.match(source, /<MpgFigures/);
+    assert.match(source, /SPEC_MPG_TITLE/);
+    assert.match(source, /SPEC_MPG_NOTE/);
     assert.match(source, /VIN_SPECS_TITLE/);
     assert.match(source, /VIN_SPECS_NOTE/);
     assert.match(

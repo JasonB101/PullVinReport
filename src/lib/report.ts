@@ -1455,3 +1455,129 @@ export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {
   }
   return picked.length > 0 ? picked : specifications.slice(0, limit);
 }
+
+export type SpecMpgKind = "city" | "highway" | "combined";
+
+export type SpecMpgFigure = {
+  key: SpecMpgKind;
+  label: string;
+  display: string;
+};
+
+export type SpecMpg = {
+  figures: SpecMpgFigure[];
+};
+
+const SPEC_MPG_LABEL: Record<SpecMpgKind, string> = {
+  city: "City",
+  highway: "Highway",
+  combined: "Combined",
+};
+
+function normalizeSpecLabel(label: string): string {
+  return label.trim().toLowerCase().replace(/[_-]+/g, " ").replace(/\s+/g, " ");
+}
+
+/**
+ * Which mileage row this spec is, if it is one.
+ *
+ * "Made In City" and a lone "City" are places, not MPG. VinAudit sends
+ * `CityMileage` / `Highway Mileage` / `city_mileage` as the fuel-economy pair.
+ */
+export function specMpgKind(label: string): SpecMpgKind | "jammed" | null {
+  const n = normalizeSpecLabel(label);
+  if (!n || /made in city/.test(n)) return null;
+  if (
+    n === "fuel economy" ||
+    n === "gas mileage" ||
+    n === "epa fuel economy"
+  ) {
+    return "jammed";
+  }
+  if (!/(mileage|mpg|economy)/.test(n)) return null;
+  if (/\bcombined\b/.test(n)) return "combined";
+  if (/\b(highway|hwy)\b/.test(n)) return "highway";
+  if (/\bcity\b/.test(n)) return "city";
+  return null;
+}
+
+/** Turns `21 miles/gallon` or `30 – 32 miles/gallon` into a short figure. */
+export function specMpgDisplay(value: string): string | null {
+  const cleaned = value.replace(/miles\s*\/\s*gallon|mpge?|gal/gi, " ").trim();
+  const nums = cleaned.match(/\d+(?:\.\d+)?/g);
+  if (!nums || nums.length === 0) return null;
+  if (nums.length === 1) return nums[0];
+  return `${nums[0]}–${nums[1]}`;
+}
+
+function figuresFromJammedMpg(value: string): SpecMpgFigure[] {
+  const figures: SpecMpgFigure[] = [];
+  const city = /(\d+(?:\.\d+)?(?:\s*[–-]\s*\d+(?:\.\d+)?)?)\s*city/i.exec(value);
+  const highway =
+    /(\d+(?:\.\d+)?(?:\s*[–-]\s*\d+(?:\.\d+)?)?)\s*(hwy|highway)/i.exec(value);
+  const combined =
+    /(\d+(?:\.\d+)?(?:\s*[–-]\s*\d+(?:\.\d+)?)?)\s*combined/i.exec(value);
+  const add = (key: SpecMpgKind, raw: string | undefined) => {
+    if (!raw) return;
+    const display = specMpgDisplay(raw);
+    if (display) figures.push({ key, label: SPEC_MPG_LABEL[key], display });
+  };
+  add("city", city?.[1]);
+  add("highway", highway?.[1]);
+  add("combined", combined?.[1]);
+  return figures;
+}
+
+/**
+ * Lifts city / highway / combined mileage out of the VIN spec list so they
+ * can print as figures instead of two more definition-list rows.
+ *
+ * No number is invented: a missing combined row stays missing, and a range
+ * stays a range.
+ */
+export function partitionSpecMpg(fields: Field[]): {
+  mpg: SpecMpg | null;
+  rest: Field[];
+} {
+  const found = new Map<SpecMpgKind, SpecMpgFigure>();
+  const rest: Field[] = [];
+
+  for (const field of fields) {
+    const kind = specMpgKind(field.label);
+    if (!kind) {
+      rest.push(field);
+      continue;
+    }
+    if (kind === "jammed") {
+      const jammed = figuresFromJammedMpg(field.value);
+      if (jammed.length === 0) {
+        rest.push(field);
+        continue;
+      }
+      for (const figure of jammed) {
+        if (!found.has(figure.key)) found.set(figure.key, figure);
+      }
+      continue;
+    }
+    const display = specMpgDisplay(field.value);
+    if (!display) {
+      rest.push(field);
+      continue;
+    }
+    if (!found.has(kind)) {
+      found.set(kind, { key: kind, label: SPEC_MPG_LABEL[kind], display });
+    }
+  }
+
+  const figures = (["city", "highway", "combined"] as const)
+    .map((key) => found.get(key))
+    .filter((row): row is SpecMpgFigure => Boolean(row));
+
+  return { mpg: figures.length > 0 ? { figures } : null, rest };
+}
+
+export function specMpgTeaser(mpg: SpecMpg): string {
+  return `${mpg.figures
+    .map((row) => `${row.display} ${row.label.toLowerCase()}`)
+    .join(" · ")} mpg`;
+}

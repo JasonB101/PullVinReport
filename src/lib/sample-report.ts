@@ -156,6 +156,8 @@ export function buildSampleReport(): VehicleReport {
       { label: "Transmission", value: "6-Speed Automatic" },
       { label: "Drive type", value: "Front Wheel Drive" },
       { label: "Fuel type", value: "Gasoline" },
+      { label: "City Mileage", value: "24 miles/gallon" },
+      { label: "Highway Mileage", value: "34 miles/gallon" },
       { label: "Standard seating", value: "5" },
       { label: "Made in", value: "Georgetown, Kentucky, United States" },
       { label: "Anti-brake system", value: "4-Wheel ABS" },

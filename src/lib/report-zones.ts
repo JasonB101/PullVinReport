@@ -21,6 +21,11 @@ export const VIN_SPECS_TITLE = "Vehicle specifications";
 export const VIN_SPECS_NOTE =
   "From the VIN build record and listing fields on this report.";
 
+/** City/highway estimates that arrived on the VIN build record. */
+export const SPEC_MPG_TITLE = "Gas mileage";
+export const SPEC_MPG_NOTE =
+  "City and highway estimates from the VIN build record on this report.";
+
 /** EPA MPG is a model-year listing, never a reading from this VIN. */
 export const EPA_MPG_TITLE = "EPA fuel economy";
 export const EPA_MPG_NOTE =

@@ -2,7 +2,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import { hasModelExtras } from "../src/lib/model-extras.ts";
-import { headerSpecifications, sectionListingGroups } from "../src/lib/report.ts";
+import {
+  headerSpecifications,
+  partitionSpecMpg,
+  sectionListingGroups,
+} from "../src/lib/report.ts";
 import {
   buildSampleModelExtras,
   buildSampleReport,
@@ -49,6 +53,8 @@ describe("sample report", () => {
   it("surfaces Super White from the listing rows on the vehicle card", () => {
     const specs = headerSpecifications(buildSampleReport());
     assert.deepEqual(specs[0], { label: "Color", value: "Super White" });
+    const { mpg } = partitionSpecMpg(specs);
+    assert.deepEqual(mpg?.figures.map((row) => row.display), ["24", "34"]);
     assert.equal(
       specs.some((field) => field.label === "Interior colour" || /ivory|ash/i.test(field.value)),
       false,

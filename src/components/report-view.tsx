@@ -1,5 +1,6 @@
 import { AiBrief } from "@/components/ai-brief";
 import { ModelExtrasCard } from "@/components/model-extras";
+import { MpgFigures } from "@/components/mpg-figures";
 import { ReportHealthCard } from "@/components/report-health";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
@@ -7,7 +8,13 @@ import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { cleanBrief, cleanModelExtras, cleanReport } from "@/lib/customer-text";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
-import { THIS_VIN_CHIP, VIN_SPECS_NOTE, VIN_SPECS_TITLE } from "@/lib/report-zones";
+import {
+  SPEC_MPG_NOTE,
+  SPEC_MPG_TITLE,
+  THIS_VIN_CHIP,
+  VIN_SPECS_NOTE,
+  VIN_SPECS_TITLE,
+} from "@/lib/report-zones";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -27,6 +34,8 @@ import {
   hasOdometerRollback,
   headerSpecifications,
   headerSpecSummary,
+  partitionSpecMpg,
+  specMpgTeaser,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -733,6 +742,7 @@ function SectionBlock({
  */
 function HeaderSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
+  const { mpg, rest } = partitionSpecMpg(specifications);
 
   return (
     <ScrollOpenDetails
@@ -740,8 +750,17 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
       summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 text-sm [&::-webkit-details-marker]:hidden"
       summary={
         <>
-          <span className="font-semibold text-slate-900">{VIN_SPECS_TITLE}</span>
-          <MoreHint count={specifications.length} />
+          <span className="min-w-0">
+            <span className="block font-semibold text-slate-900">
+              {VIN_SPECS_TITLE}
+            </span>
+            {mpg && (
+              <span className="when-closed mt-1 block text-sm text-slate-600">
+                {specMpgTeaser(mpg)}
+              </span>
+            )}
+          </span>
+          {rest.length > 0 && <MoreHint count={rest.length} />}
         </>
       }
     >
@@ -751,21 +770,35 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
         </span>
         <p className="text-xs text-slate-500">{VIN_SPECS_NOTE}</p>
       </div>
-      <dl className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-        {specifications.map((spec, index) => (
-          <div
-            key={`${spec.label}-${index}`}
-            className="rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3"
-          >
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              {spec.label}
-            </dt>
-            <dd className="mt-1 break-words text-sm font-medium leading-snug text-slate-900">
-              <FieldValue value={spec.value} />
-            </dd>
-          </div>
-        ))}
-      </dl>
+      {mpg && (
+        <div className="mt-4">
+          <MpgFigures
+            headingId="vin-spec-mpg-heading"
+            heading={SPEC_MPG_TITLE}
+            figures={mpg.figures}
+            note={SPEC_MPG_NOTE}
+            tone="slate"
+            emphasize="none"
+          />
+        </div>
+      )}
+      {rest.length > 0 && (
+        <dl className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+          {rest.map((spec, index) => (
+            <div
+              key={`${spec.label}-${index}`}
+              className="rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3"
+            >
+              <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+                {spec.label}
+              </dt>
+              <dd className="mt-1 break-words text-sm font-medium leading-snug text-slate-900">
+                <FieldValue value={spec.value} />
+              </dd>
+            </div>
+          ))}
+        </dl>
+      )}
     </ScrollOpenDetails>
   );
 }

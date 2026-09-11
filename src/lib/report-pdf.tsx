@@ -46,6 +46,7 @@ import {
   EPA_MPG_NOTE,
   EPA_MPG_TITLE,
   FROM_THIS_VIN,
+  SPEC_MPG_TITLE,
   MODEL_ZONE_NOTE,
   MODEL_ZONE_TITLE,
   QUESTIONS_HEADING,
@@ -66,6 +67,7 @@ import {
   foundIssueChecks,
   hasOdometerRollback,
   headerSpecifications,
+  partitionSpecMpg,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -249,6 +251,16 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#fde68a",
     backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    paddingVertical: 4,
+    paddingHorizontal: 3,
+    alignItems: "center",
+  },
+  specMpgCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: LINE,
+    backgroundColor: "#f8fafc",
     borderRadius: 3,
     paddingVertical: 4,
     paddingHorizontal: 3,
@@ -615,6 +627,26 @@ function clipPdf(value: string, max = 160): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+function SpecMpgFigures({
+  figures,
+}: {
+  figures: { key: string; label: string; display: string }[];
+}) {
+  return (
+    <View wrap={false}>
+      <Text style={styles.metaLabel}>{SPEC_MPG_TITLE}</Text>
+      <View style={styles.mpgRow}>
+        {figures.map((row) => (
+          <View key={row.key} style={styles.specMpgCard}>
+            <Text style={styles.mpgValue}>{row.display}</Text>
+            <Text style={styles.mpgLabel}>{row.label} mpg</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
   return (
     <View wrap={false}>
@@ -713,6 +745,7 @@ export function ReportDocument({
   const clear = searchedAndEmpty(report);
   const sections = sectionsWithRecords(report);
   const specList = headerSpecifications(report);
+  const { mpg: specMpg, rest: specRest } = partitionSpecMpg(specList);
   const contents = reportNavItems(report, {
     modelExtras: hasModelExtras(modelExtras),
   }).map((item) => item.label);
@@ -747,8 +780,9 @@ export function ReportDocument({
             <Text style={styles.metaLabel}>
               {VIN_SPECS_TITLE}  ·  {THIS_VIN_CHIP}
             </Text>
+            {specMpg ? <SpecMpgFigures figures={specMpg.figures} /> : null}
             <View style={styles.specGrid}>
-              {specList.map((spec, index) => (
+              {specRest.map((spec, index) => (
                 <View key={`${spec.label}-${index}`} style={styles.spec}>
                   <Text style={styles.specLabel}>{spec.label}</Text>
                   <Text style={styles.specValue}>{spec.value}</Text>
