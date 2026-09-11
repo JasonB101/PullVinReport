@@ -134,10 +134,23 @@ describe("report PDF", () => {
     assert.match(source, /EPA_MPG_NOTE/);
     assert.match(source, /modelExtrasCountsLine/);
     assert.match(source, /VIN_SPECS_TITLE/);
+    assert.match(source, /VIN_SPECS_NOTE/);
     assert.match(source, /THIS_VIN_CHIP/);
     assert.match(source, /partitionSpecMpg/);
+    assert.match(source, /groupSpecFields/);
+    assert.match(source, /specMeasureFigures/);
+    assert.match(source, /function SpecGroupPdf/);
+    assert.match(source, /function PdfSpecIcon/);
+    assert.match(source, /specIconPaths/);
+    assert.match(source, /<PdfSpecIcon name=\{group\.key\}/);
     assert.match(source, /function SpecMpgFigures/);
+    assert.doesNotMatch(
+      source,
+      /No data/,
+      "PDF must not print VinAudit No data placeholders",
+    );
     assert.match(source, /SPEC_MPG_TITLE/);
+    assert.match(source, /SPEC_MPG_NOTE/);
     assert.match(source, /function EpaMpgFigures/);
     assert.doesNotMatch(
       source,

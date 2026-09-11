@@ -18,7 +18,9 @@ import {
   Document,
   Image,
   Page,
+  Path,
   StyleSheet,
+  Svg,
   Text,
   View,
   renderToBuffer,
@@ -46,11 +48,13 @@ import {
   EPA_MPG_NOTE,
   EPA_MPG_TITLE,
   FROM_THIS_VIN,
+  SPEC_MPG_NOTE,
   SPEC_MPG_TITLE,
   MODEL_ZONE_NOTE,
   MODEL_ZONE_TITLE,
   QUESTIONS_HEADING,
   THIS_VIN_CHIP,
+  VIN_SPECS_NOTE,
   VIN_SPECS_TITLE,
 } from "@/lib/report-zones";
 import type {
@@ -66,8 +70,10 @@ import {
   formatGeneratedAt,
   foundIssueChecks,
   hasOdometerRollback,
+  groupSpecFields,
   headerSpecifications,
   partitionSpecMpg,
+  specMeasureFigures,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -78,6 +84,7 @@ import {
   withResolvedDispositions,
 } from "@/lib/report";
 import { reportHealth } from "@/lib/report-health";
+import { specIconPaths } from "@/lib/spec-icons";
 import { HERO_ILLUSTRATION_LABEL } from "@/lib/vehicle-hero";
 import { normalizeVin, prettyVin } from "@/lib/vin";
 
@@ -240,37 +247,105 @@ const styles = StyleSheet.create({
     borderTopColor: LINE,
   },
 
-  headerSpecs: { marginTop: 10 },
-  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
-  spec: { width: "33.3%", paddingRight: 10, marginBottom: 6 },
-  specLabel: { fontSize: 7, color: FAINT, textTransform: "uppercase", letterSpacing: 0.6 },
-  specValue: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 1 },
-  mpgRow: { flexDirection: "row", gap: 5, marginTop: 4 },
-  mpgCard: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "#fde68a",
-    backgroundColor: "#fffbeb",
-    borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 3,
-    alignItems: "center",
-  },
-  specMpgCard: {
-    flex: 1,
+  headerSpecs: {
+    marginTop: 12,
     borderWidth: 1,
     borderColor: LINE,
     backgroundColor: "#f8fafc",
+    borderRadius: 4,
+    padding: 8,
+  },
+  specHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 4,
+  },
+  specTitle: { fontFamily: "Helvetica-Bold", fontSize: 9 },
+  specChip: {
+    borderWidth: 1,
+    borderColor: LINE,
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    paddingVertical: 1,
+    paddingHorizontal: 5,
+    fontSize: 6.5,
+    color: MUTED,
+  },
+  specNote: { color: MUTED, fontSize: 7, marginBottom: 6 },
+  specMpgHeading: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 8,
+    color: INK,
+    marginBottom: 2,
+  },
+  specGroup: {
+    marginTop: 7,
+    borderWidth: 1,
+    borderColor: LINE,
+    backgroundColor: "#ffffff",
     borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 3,
+    overflow: "hidden",
+  },
+  specGroupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingTop: 5,
+    paddingBottom: 3,
+  },
+  specGroupTitle: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 8,
+    color: INK,
+  },
+  specMeasureRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 6,
+    paddingBottom: 5,
+  },
+  specMeasure: { minWidth: 56 },
+  specMeasureValue: { fontFamily: "Helvetica-Bold", fontSize: 9 },
+  specMeasureLabel: { fontSize: 7, color: MUTED, marginTop: 1 },
+  specRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingVertical: 3.5,
+    paddingHorizontal: 6,
+  },
+  specCell: { width: "50%", paddingRight: 8 },
+  specRowLabel: { fontSize: 7, color: MUTED },
+  specRowValue: { fontFamily: "Helvetica-Bold", fontSize: 8, marginTop: 1 },
+  mpgRow: { flexDirection: "row", gap: 6, marginTop: 4 },
+  mpgCard: {
+    width: 72,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    borderRadius: 4,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  specMpgCard: {
+    width: 78,
+    borderWidth: 1,
+    borderColor: "#cbd5e1",
+    backgroundColor: "#ffffff",
+    borderRadius: 4,
+    paddingVertical: 7,
+    paddingHorizontal: 4,
     alignItems: "center",
   },
   mpgCardCombined: {
     borderColor: "#f59e0b",
     backgroundColor: "#fffbeb",
   },
-  mpgValue: { fontFamily: "Helvetica-Bold", fontSize: 11 },
+  mpgValue: { fontFamily: "Helvetica-Bold", fontSize: 16 },
+  mpgUnit: { fontSize: 6.5, color: FAINT, marginTop: 1 },
   mpgLabel: {
     fontSize: 6.5,
     color: MUTED,
@@ -627,6 +702,78 @@ function clipPdf(value: string, max = 160): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+function chunkFields<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
+
+function PdfSpecIcon({
+  name,
+  size = 8,
+}: {
+  name: string;
+  size?: number;
+}) {
+  const paths = specIconPaths(name);
+  if (!paths) return null;
+  return (
+    <Svg viewBox="0 0 24 24" width={size} height={size}>
+      {paths.map((d) => (
+        <Path
+          key={d}
+          d={d}
+          stroke={MUTED}
+          strokeWidth={1.7}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </Svg>
+  );
+}
+
+function SpecGroupPdf({
+  group,
+}: {
+  group: { key: string; title: string; fields: Field[] };
+}) {
+  const { measures, rest } = specMeasureFigures(group.fields);
+  if (measures.length === 0 && rest.length === 0) return null;
+
+  return (
+    <View style={styles.specGroup} wrap={false}>
+      <View style={styles.specGroupHead}>
+        <PdfSpecIcon name={group.key} />
+        <Text style={styles.specGroupTitle}>{group.title}</Text>
+      </View>
+      {measures.length > 0 ? (
+        <View style={styles.specMeasureRow}>
+          {measures.map((row) => (
+            <View key={row.key} style={styles.specMeasure}>
+              <Text style={styles.specMeasureValue}>{row.display}</Text>
+              <Text style={styles.specMeasureLabel}>{row.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {chunkFields(rest, 2).map((pair, index) => (
+        <View key={index} style={styles.specRow}>
+          {pair.map((spec) => (
+            <View key={spec.label} style={styles.specCell}>
+              <Text style={styles.specRowLabel}>{spec.label}</Text>
+              <Text style={styles.specRowValue}>{spec.value}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SpecMpgFigures({
   figures,
 }: {
@@ -634,15 +781,18 @@ function SpecMpgFigures({
 }) {
   return (
     <View wrap={false}>
-      <Text style={styles.metaLabel}>{SPEC_MPG_TITLE}</Text>
+      <Text style={styles.specMpgHeading}>{SPEC_MPG_TITLE}</Text>
       <View style={styles.mpgRow}>
         {figures.map((row) => (
           <View key={row.key} style={styles.specMpgCard}>
+            <PdfSpecIcon name={row.key} size={7} />
             <Text style={styles.mpgValue}>{row.display}</Text>
-            <Text style={styles.mpgLabel}>{row.label} mpg</Text>
+            <Text style={styles.mpgLabel}>{row.label}</Text>
+            <Text style={styles.mpgUnit}>mpg</Text>
           </View>
         ))}
       </View>
+      <Text style={styles.caveat}>{SPEC_MPG_NOTE}</Text>
     </View>
   );
 }
@@ -776,19 +926,16 @@ export function ReportDocument({
           {heroSrc ? <VehicleHeroPdf src={heroSrc} /> : null}
         </View>
         {specList.length > 0 && (
-          <View style={styles.headerSpecs} wrap={false}>
-            <Text style={styles.metaLabel}>
-              {VIN_SPECS_TITLE}  ·  {THIS_VIN_CHIP}
-            </Text>
-            {specMpg ? <SpecMpgFigures figures={specMpg.figures} /> : null}
-            <View style={styles.specGrid}>
-              {specRest.map((spec, index) => (
-                <View key={`${spec.label}-${index}`} style={styles.spec}>
-                  <Text style={styles.specLabel}>{spec.label}</Text>
-                  <Text style={styles.specValue}>{spec.value}</Text>
-                </View>
-              ))}
+          <View style={styles.headerSpecs}>
+            <View style={styles.specHead} wrap={false} minPresenceAhead={72}>
+              <Text style={styles.specTitle}>{VIN_SPECS_TITLE}</Text>
+              <Text style={styles.specChip}>{THIS_VIN_CHIP}</Text>
             </View>
+            <Text style={styles.specNote}>{VIN_SPECS_NOTE}</Text>
+            {specMpg ? <SpecMpgFigures figures={specMpg.figures} /> : null}
+            {groupSpecFields(specRest).map((group) => (
+              <SpecGroupPdf key={group.key} group={group} />
+            ))}
           </View>
         )}
         <View style={styles.metaRow}>

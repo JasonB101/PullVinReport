@@ -2,14 +2,19 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
+import { SPEC_ICON_PATHS, specIconPaths } from "../src/lib/spec-icons.ts";
 import {
   currentEvent,
+  groupSpecFields,
   headerSpecifications,
   headerSpecSummary,
   partitionSpecMpg,
+  presentableSpecFields,
+  specMeasureFigures,
   specMpgDisplay,
   specMpgKind,
   specMpgTeaser,
+  specTeaserFacts,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
@@ -891,6 +896,134 @@ describe("the specs on the vehicle card", () => {
       ["Engine", "Made In City", "Fuel type"],
     );
     assert.equal(specMpgTeaser(mpg!), "21 city · 31 highway mpg");
+  });
+
+  it("groups remaining VIN specs without dropping or inventing any", () => {
+    const { rest } = partitionSpecMpg([
+      { label: "Engine", value: "1.5L I3" },
+      { label: "City Mileage", value: "21 miles/gallon" },
+      { label: "Highway Mileage", value: "31 miles/gallon" },
+      { label: "Transmission", value: "6-Speed Automatic" },
+      { label: "Drive type", value: "FWD" },
+      { label: "Style", value: "4 Door Wagon" },
+      { label: "Made In City", value: "Oxford" },
+      { label: "Standard seating", value: "5" },
+      { label: "Anti-brake system", value: "4-Wheel ABS" },
+      { label: "Steering type", value: "Rack and Pinion" },
+      { label: "Wheelbase", value: "105.1 in" },
+      { label: "MSRP", value: "$24,100" },
+      { label: "Invoice Price", value: "$22,400" },
+      { label: "Destination Charge", value: "$850" },
+    ]);
+    const groups = groupSpecFields(rest);
+    assert.deepEqual(
+      groups.map((group) => [group.key, group.title, group.fields.map((field) => field.label)]),
+      [
+        ["powertrain", "Powertrain", ["Engine", "Transmission", "Drive type"]],
+        ["body", "Body & dimensions", ["Style", "Made In City", "Standard seating", "Wheelbase"]],
+        ["features", "Equipment", ["Anti-brake system", "Steering type"]],
+        ["price", "Manufacturer pricing", ["MSRP", "Invoice Price", "Destination Charge"]],
+      ],
+    );
+    assert.equal(
+      groups.flatMap((group) => group.fields).length,
+      rest.length,
+    );
+  });
+
+  it("omits No data and blank spec values instead of printing them", () => {
+    const fields = [
+      { label: "Engine", value: "1.5L I3" },
+      { label: "Optional seating", value: "No data" },
+      { label: "Highway GVWR", value: "No data" },
+      { label: "Standard Towing", value: "N/A" },
+      { label: "Maximum Payload", value: "—" },
+      { label: "Turbo", value: "No" },
+      { label: "Standard seating", value: "5" },
+    ];
+    assert.deepEqual(
+      presentableSpecFields(fields).map((field) => field.label),
+      ["Engine", "Turbo", "Standard seating"],
+    );
+    const clubman = headerSpecifications(
+      report({
+        specifications: [
+          { label: "Style", value: "Cooper Hatchback" },
+          { label: "Optional seating", value: "No data" },
+          { label: "Maximum Towing", value: "No data" },
+        ],
+      }),
+    );
+    assert.deepEqual(
+      clubman.map((field) => field.label),
+      ["Style"],
+    );
+    assert.equal(
+      clubman.some((field) => /no data/i.test(field.value)),
+      false,
+    );
+  });
+
+  it("lifts length, height and seats into figures when two or more are present", () => {
+    const { measures, rest } = specMeasureFigures([
+      { label: "Style", value: "Cooper Hatchback" },
+      { label: "Overall Length", value: "168.3 inches" },
+      { label: "Overall Height", value: "56.7 inches" },
+      { label: "Standard seating", value: "5" },
+      { label: "Made In", value: "United Kingdom" },
+    ]);
+    assert.deepEqual(
+      measures.map((row) => [row.key, row.display]),
+      [
+        ["length", "168.3 inches"],
+        ["height", "56.7 inches"],
+        ["seats", "5"],
+      ],
+    );
+    assert.deepEqual(
+      rest.map((field) => field.label),
+      ["Style", "Made In"],
+    );
+    assert.deepEqual(
+      specMeasureFigures([{ label: "Standard seating", value: "5" }]).rest.map(
+        (field) => field.label,
+      ),
+      ["Standard seating"],
+    );
+  });
+
+  it("teases complementary specs instead of repeating the header line", () => {
+    const fields = [
+      { label: "Color", value: "Chili Red" },
+      { label: "Style", value: "Cooper S Clubman" },
+      { label: "Engine", value: "1.5L I3" },
+      { label: "Transmission", value: "6-Speed Automatic" },
+      { label: "Drive type", value: "FWD" },
+      { label: "Fuel type", value: "Gasoline" },
+    ];
+    const summary = headerSpecSummary(fields);
+    assert.deepEqual(
+      specTeaserFacts(fields, { exclude: summary, limit: 3 }).map((field) => field.label),
+      ["Transmission", "Drive type", "Fuel type"],
+    );
+  });
+
+  it("ships a stroke icon for every spec group and MPG tile", () => {
+    for (const name of [
+      "powertrain",
+      "body",
+      "features",
+      "price",
+      "more",
+      "city",
+      "highway",
+      "combined",
+    ] as const) {
+      const paths = specIconPaths(name);
+      assert.ok(paths && paths.length > 0, `${name} needs a path`);
+    }
+    assert.equal(specIconPaths("engine"), null);
+    assert.equal(Object.keys(SPEC_ICON_PATHS).length, 8);
   });
 
   it("keeps a mileage range instead of inventing one number", () => {
