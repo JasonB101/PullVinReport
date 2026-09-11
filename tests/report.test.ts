@@ -6,6 +6,10 @@ import {
   currentEvent,
   headerSpecifications,
   headerSpecSummary,
+  partitionSpecMpg,
+  specMpgDisplay,
+  specMpgKind,
+  specMpgTeaser,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
@@ -868,6 +872,36 @@ describe("the specs on the vehicle card", () => {
       headerSpecifications(bare).some((field) => field.label === "Color"),
       false,
     );
+  });
+
+  it("lifts VinAudit city and highway mileage out of the spec list", () => {
+    const { mpg, rest } = partitionSpecMpg([
+      { label: "Engine", value: "1.5L I3" },
+      { label: "City Mileage", value: "21 miles/gallon" },
+      { label: "Highway Mileage", value: "31 miles/gallon" },
+      { label: "Made In City", value: "Oxford" },
+      { label: "Fuel type", value: "Gasoline" },
+    ]);
+    assert.deepEqual(mpg?.figures, [
+      { key: "city", label: "City", display: "21" },
+      { key: "highway", label: "Highway", display: "31" },
+    ]);
+    assert.deepEqual(
+      rest.map((field) => field.label),
+      ["Engine", "Made In City", "Fuel type"],
+    );
+    assert.equal(specMpgTeaser(mpg!), "21 city · 31 highway mpg");
+  });
+
+  it("keeps a mileage range instead of inventing one number", () => {
+    assert.equal(specMpgDisplay("30 – 32 miles/gallon"), "30–32");
+    assert.equal(specMpgKind("city_mileage"), "city");
+    assert.equal(specMpgKind("Highway Mileage"), "highway");
+    assert.equal(specMpgKind("Made In City"), null);
+    const { mpg } = partitionSpecMpg([
+      { label: "Fuel Economy", value: "24 city / 34 hwy / 28 combined mpg" },
+    ]);
+    assert.deepEqual(mpg?.figures.map((row) => row.display), ["24", "34", "28"]);
   });
 
   it("does not prefer an interior colour over exterior paint", () => {

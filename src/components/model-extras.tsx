@@ -2,15 +2,19 @@
 
 import { useEffect, useState } from "react";
 
+import { MpgFigures } from "@/components/mpg-figures";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { cleanCustomerLine, cleanModelExtras } from "@/lib/customer-text";
-import type { ModelComplaints, ModelExtras } from "@/lib/model-extras";
+import type { ModelComplaints, ModelExtras, ModelMpg } from "@/lib/model-extras";
 import {
   complaintSamples,
   hasModelExtras,
+  mpgFigureRows,
   requestPaidModelExtras,
 } from "@/lib/model-extras";
 import {
+  EPA_MPG_NOTE,
+  EPA_MPG_TITLE,
   MODEL_ZONE_NOTE,
   MODEL_ZONE_TITLE,
   NOT_THIS_VIN_CHIP,
@@ -173,6 +177,26 @@ function OwnerComplaints({
 }
 
 /**
+ * City / highway / combined as figures, not a jammed "24 city / 34 hwy" line.
+ * Labelled as a model-year EPA listing — never a reading from this VIN.
+ */
+function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
+  return (
+    <div>
+      <MpgFigures
+        headingId="epa-mpg-heading"
+        heading={EPA_MPG_TITLE}
+        figures={mpgFigureRows(mpg)}
+        note={EPA_MPG_NOTE}
+        fuelType={mpg.fuelType}
+        tone="amber"
+        emphasize="combined"
+      />
+    </div>
+  );
+}
+
+/**
  * Compact public-records card for this year/make/model.
  *
  * Sits after every VIN history section, in a dashed/amber zone, so it cannot
@@ -322,22 +346,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
           <OwnerComplaints ymm={ymm} complaints={extras.complaints} />
         )}
 
-        {extras.mpg && (
-          <div>
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              EPA fuel economy
-            </dt>
-            <dd className="mt-0.5 text-sm text-slate-800">
-              {extras.mpg.city} city / {extras.mpg.highway} hwy /{" "}
-              {extras.mpg.combined} combined mpg
-              {extras.mpg.fuelType ? ` · ${extras.mpg.fuelType}` : ""}
-              <span className="text-slate-500">
-                {" "}
-                for this model year, when the EPA listing matches — not this VIN
-              </span>
-            </dd>
-          </div>
-        )}
+        {extras.mpg && <EpaMpgFigures mpg={extras.mpg} />}
       </dl>
     </section>
     </section>

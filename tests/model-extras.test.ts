@@ -14,7 +14,9 @@ import {
   isRetryableHttpStatus,
   matchingEpaOptions,
   MODEL_EXTRAS_FETCH_ATTEMPTS,
+  modelExtrasCountsLine,
   modelExtrasSummaryLine,
+  mpgFigureRows,
   nhtsaModelCandidates,
   parseComplaintsPayload,
   parseEpaOptions,
@@ -303,6 +305,17 @@ describe("model extras copy", () => {
     assert.match(line, /24 city \/ 34 hwy \/ 28 combined/);
     assert.doesNotMatch(line, new RegExp(SAMPLE_VIN, "i"));
     assert.doesNotMatch(JSON.stringify(extras), /this VIN has|on this VIN/i);
+  });
+
+  it("splits EPA MPG into city, highway and combined figures", () => {
+    const extras = buildSampleModelExtras();
+    assert.ok(extras.mpg);
+    assert.deepEqual(mpgFigureRows(extras.mpg), [
+      { key: "city", label: "City", value: 24 },
+      { key: "highway", label: "Highway", value: 34 },
+      { key: "combined", label: "Combined", value: 28 },
+    ]);
+    assert.doesNotMatch(modelExtrasCountsLine(extras), /mpg|city|highway/i);
   });
 
   it("keeps the sample fixture free of complaint VINs", () => {
