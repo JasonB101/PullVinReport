@@ -134,7 +134,7 @@ describe("report PDF", () => {
     assert.match(source, /EPA_MPG_NOTE/);
     assert.match(source, /modelExtrasCountsLine/);
     assert.match(source, /VIN_SPECS_TITLE/);
-    assert.match(source, /VIN_SPECS_NOTE/);
+    assert.match(source, /THIS_VIN_CHIP/);
     assert.match(source, /function EpaMpgFigures/);
     assert.doesNotMatch(
       source,

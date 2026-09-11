@@ -50,7 +50,6 @@ import {
   MODEL_ZONE_TITLE,
   QUESTIONS_HEADING,
   THIS_VIN_CHIP,
-  VIN_SPECS_NOTE,
   VIN_SPECS_TITLE,
 } from "@/lib/report-zones";
 import type {
@@ -240,39 +239,32 @@ const styles = StyleSheet.create({
   },
 
   headerSpecs: { marginTop: 10 },
-  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 6 },
-  spec: { width: "33.3%", paddingRight: 6, marginBottom: 6 },
-  specCard: {
-    borderWidth: 1,
-    borderColor: LINE,
-    borderRadius: 3,
-    padding: 6,
-    minHeight: 28,
-  },
+  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
+  spec: { width: "33.3%", paddingRight: 10, marginBottom: 6 },
   specLabel: { fontSize: 7, color: FAINT, textTransform: "uppercase", letterSpacing: 0.6 },
-  specValue: { fontFamily: "Helvetica-Bold", fontSize: 8.5, marginTop: 2 },
-  mpgRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  specValue: { fontFamily: "Helvetica-Bold", fontSize: 9, marginTop: 1 },
+  mpgRow: { flexDirection: "row", gap: 5, marginTop: 4 },
   mpgCard: {
     flex: 1,
     borderWidth: 1,
     borderColor: "#fde68a",
     backgroundColor: "#fffbeb",
     borderRadius: 3,
-    paddingVertical: 6,
-    paddingHorizontal: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 3,
     alignItems: "center",
   },
   mpgCardCombined: {
     borderColor: "#f59e0b",
     backgroundColor: "#fffbeb",
   },
-  mpgValue: { fontFamily: "Helvetica-Bold", fontSize: 14 },
+  mpgValue: { fontFamily: "Helvetica-Bold", fontSize: 11 },
   mpgLabel: {
     fontSize: 6.5,
     color: MUTED,
     letterSpacing: 0.6,
     textTransform: "uppercase",
-    marginTop: 2,
+    marginTop: 1,
   },
 
   footer: {
@@ -625,7 +617,7 @@ function clipPdf(value: string, max = 160): string {
 
 function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
   return (
-    <View>
+    <View wrap={false}>
       <Text style={styles.briefHeading}>{EPA_MPG_TITLE.toUpperCase()}</Text>
       <View style={styles.mpgRow}>
         {mpgFigureRows(mpg).map((row) => (
@@ -654,12 +646,14 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
   const samples = complaintSamples(extras.complaints).slice(0, 3);
   const counts = modelExtrasCountsLine(extras);
   return (
-    <View style={styles.section} wrap={false}>
-      <Text style={styles.sectionTitle}>{MODEL_ZONE_TITLE}</Text>
-      <Text style={styles.sectionNote}>
-        {MODEL_ZONE_NOTE} The {extras.ymmLabel} only.
-      </Text>
-      {counts ? <Text style={styles.bullet}>{counts}</Text> : null}
+    <View style={styles.section} wrap>
+      <View minPresenceAhead={96} wrap={false}>
+        <Text style={styles.sectionTitle}>{MODEL_ZONE_TITLE}</Text>
+        <Text style={styles.sectionNote}>
+          {MODEL_ZONE_NOTE} The {extras.ymmLabel} only.
+        </Text>
+        {counts ? <Text style={styles.bullet}>{counts}</Text> : null}
+      </View>
       {extras.recalls?.campaigns.map((campaign, index) => (
         <Text key={campaign.campaign} style={styles.bullet}>
           Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
@@ -750,17 +744,14 @@ export function ReportDocument({
         </View>
         {specList.length > 0 && (
           <View style={styles.headerSpecs} wrap={false}>
-            <Text style={styles.metaLabel}>{VIN_SPECS_TITLE}</Text>
-            <Text style={styles.caveat}>
-              {THIS_VIN_CHIP} — {VIN_SPECS_NOTE}
+            <Text style={styles.metaLabel}>
+              {VIN_SPECS_TITLE}  ·  {THIS_VIN_CHIP}
             </Text>
             <View style={styles.specGrid}>
               {specList.map((spec, index) => (
                 <View key={`${spec.label}-${index}`} style={styles.spec}>
-                  <View style={styles.specCard}>
-                    <Text style={styles.specLabel}>{spec.label}</Text>
-                    <Text style={styles.specValue}>{spec.value}</Text>
-                  </View>
+                  <Text style={styles.specLabel}>{spec.label}</Text>
+                  <Text style={styles.specValue}>{spec.value}</Text>
                 </View>
               ))}
             </View>
