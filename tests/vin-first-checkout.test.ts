@@ -100,7 +100,7 @@ describe("VIN-first checkout", () => {
     const layout = await readSrc("app/layout.tsx");
     const ga = await readSrc("lib/google-analytics.ts");
 
-    assert.match(ads, /AW-1844093667/);
+    assert.match(ads, /AW-18440939667/);
     assert.match(purchase, /GOOGLE_ADS_ID/);
     assert.match(success, /<GoogleAdsPurchase orderId=\{order\.id\} \/>/);
     assert.match(layout, /<GoogleAnalytics \/>/);

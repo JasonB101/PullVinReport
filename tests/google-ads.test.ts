@@ -28,22 +28,35 @@ afterEach(() => {
 
 describe("Google Ads Purchase IDs", () => {
   it("uses the confirmed AW tag, send_to, and $14.99 USD", () => {
-    assert.equal(GOOGLE_ADS_ID, "AW-1844093667");
+    assert.equal(GOOGLE_ADS_ID, "AW-18440939667");
     assert.equal(
       GOOGLE_ADS_PURCHASE_SEND_TO,
-      "AW-1844093667/VQOrCJabp_IcEJPRqdlE",
+      "AW-18440939667/VQOrCJabp_IcEJPRqdlE",
     );
     assert.equal(GOOGLE_ADS_PURCHASE_VALUE, 14.99);
     assert.equal(GOOGLE_ADS_PURCHASE_CURRENCY, "USD");
     assert.equal(
       GOOGLE_ADS_SCRIPT_SRC,
-      "https://www.googletagmanager.com/gtag/js?id=AW-1844093667",
+      "https://www.googletagmanager.com/gtag/js?id=AW-18440939667",
     );
     assert.deepEqual(purchaseConversionParams(), {
-      send_to: "AW-1844093667/VQOrCJabp_IcEJPRqdlE",
+      send_to: "AW-18440939667/VQOrCJabp_IcEJPRqdlE",
       value: 14.99,
       currency: "USD",
     });
+  });
+
+  it("rejects the truncated AW-1844093667 typo in Ads source", async () => {
+    const files = [
+      "lib/google-ads.ts",
+      "lib/google-analytics.ts",
+      "components/google-analytics.tsx",
+      "components/google-ads-purchase.tsx",
+    ];
+    for (const file of files) {
+      const source = await readSrc(file);
+      assert.doesNotMatch(source, /AW-1844093667/, file);
+    }
   });
 });
 
@@ -88,7 +101,7 @@ describe("firePurchaseConversionOnce", () => {
         "event",
         "conversion",
         {
-          send_to: "AW-1844093667/VQOrCJabp_IcEJPRqdlE",
+          send_to: "AW-18440939667/VQOrCJabp_IcEJPRqdlE",
           value: 14.99,
           currency: "USD",
         },

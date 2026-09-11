@@ -1,6 +1,6 @@
 /**
  * Sitewide Google tag (gtag). Configures GA4 when NEXT_PUBLIC_GA_MEASUREMENT_ID
- * is a G- id, and always configs Google Ads AW-1844093667 on the same snippet.
+ * is a G- id, and always configs Google Ads AW-18440939667 on the same snippet.
  *
  * The Purchase conversion stays on Stripe success only — this module never
  * emits a conversion event. Admin GOOGLE_ADS_* spend credentials are unrelated.

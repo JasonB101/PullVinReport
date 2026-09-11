@@ -8,7 +8,7 @@ import {
 
 /**
  * Sitewide Google tag: gtag.js plus config for GA4 (when set) and
- * Google Ads AW-1844093667. The Purchase conversion still fires only on
+ * Google Ads AW-18440939667. The Purchase conversion still fires only on
  * Stripe confirmation — this component never sends it.
  */
 export function GoogleAnalytics() {
