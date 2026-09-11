@@ -539,8 +539,23 @@ export function complaintSamples(
   return complaints?.samples ?? [];
 }
 
-/** One printed line for the PDF — still names the model, not the VIN. */
-export function modelExtrasSummaryLine(extras: ModelExtras): string {
+export type MpgFigure = {
+  key: "city" | "highway" | "combined";
+  label: string;
+  value: number;
+};
+
+/** City / highway / combined in EPA order — the numbers already on the extras. */
+export function mpgFigureRows(mpg: ModelMpg): MpgFigure[] {
+  return [
+    { key: "city", label: "City", value: mpg.city },
+    { key: "highway", label: "Highway", value: mpg.highway },
+    { key: "combined", label: "Combined", value: mpg.combined },
+  ];
+}
+
+/** Recall and complaint counts only — MPG prints as figures, not this line. */
+export function modelExtrasCountsLine(extras: ModelExtras): string {
   const bits: string[] = [];
   if (extras.recalls) {
     const n = extras.recalls.total;
@@ -554,6 +569,14 @@ export function modelExtrasSummaryLine(extras: ModelExtras): string {
       `${n} owner ${n === 1 ? "complaint" : "complaints"} for this model year`,
     );
   }
+  return bits.join(" · ");
+}
+
+/** One printed line for text-only surfaces — still names the model, not the VIN. */
+export function modelExtrasSummaryLine(extras: ModelExtras): string {
+  const bits: string[] = [];
+  const counts = modelExtrasCountsLine(extras);
+  if (counts) bits.push(counts);
   if (extras.mpg) {
     const fuel = extras.mpg.fuelType ? `, ${extras.mpg.fuelType}` : "";
     bits.push(

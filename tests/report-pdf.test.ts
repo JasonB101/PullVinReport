@@ -129,6 +129,18 @@ describe("report PDF", () => {
     assert.match(source, /owner write-ups[\s\S]*not this VIN/);
     assert.match(source, /if \(!hasModelExtras\(extras\)\) return null/);
     assert.doesNotMatch(source, /failed to load/i);
+    assert.match(source, /mpgFigureRows/);
+    assert.match(source, /EPA_MPG_TITLE/);
+    assert.match(source, /EPA_MPG_NOTE/);
+    assert.match(source, /modelExtrasCountsLine/);
+    assert.match(source, /VIN_SPECS_TITLE/);
+    assert.match(source, /VIN_SPECS_NOTE/);
+    assert.match(source, /function EpaMpgFigures/);
+    assert.doesNotMatch(
+      source,
+      /modelExtrasSummaryLine/,
+      "PDF MPG must print as figures, not the jammed summary line",
+    );
   });
 
   it("omits the model zone from the PDF when extras are missing", async () => {

@@ -4,13 +4,16 @@ import { useEffect, useState } from "react";
 
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { cleanCustomerLine, cleanModelExtras } from "@/lib/customer-text";
-import type { ModelComplaints, ModelExtras } from "@/lib/model-extras";
+import type { ModelComplaints, ModelExtras, ModelMpg } from "@/lib/model-extras";
 import {
   complaintSamples,
   hasModelExtras,
+  mpgFigureRows,
   requestPaidModelExtras,
 } from "@/lib/model-extras";
 import {
+  EPA_MPG_NOTE,
+  EPA_MPG_TITLE,
   MODEL_ZONE_NOTE,
   MODEL_ZONE_TITLE,
   NOT_THIS_VIN_CHIP,
@@ -173,6 +176,65 @@ function OwnerComplaints({
 }
 
 /**
+ * City / highway / combined as figures, not a jammed "24 city / 34 hwy" line.
+ * Labelled as a model-year EPA listing — never a reading from this VIN.
+ */
+function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
+  const figures = mpgFigureRows(mpg);
+
+  return (
+    <div>
+      <dt
+        id="epa-mpg-heading"
+        className="text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+      >
+        {EPA_MPG_TITLE}
+      </dt>
+      <dd className="mt-2">
+        <ul
+          aria-labelledby="epa-mpg-heading"
+          className="grid grid-cols-3 gap-2"
+        >
+          {figures.map((row) => {
+            const combined = row.key === "combined";
+            return (
+              <li
+                key={row.key}
+                className={`rounded-xl border px-2 py-3 text-center sm:px-3 ${
+                  combined
+                    ? "border-amber-300 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                    : "border-amber-200/80 bg-white/80"
+                }`}
+              >
+                <p
+                  className={`font-semibold tabular-nums tracking-tight text-slate-900 ${
+                    combined ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"
+                  }`}
+                >
+                  {row.value}
+                </p>
+                <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                  {row.label}
+                </p>
+                <p className="text-[11px] text-slate-400">mpg</p>
+              </li>
+            );
+          })}
+        </ul>
+        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+          {mpg.fuelType ? (
+            <span className="rounded-full bg-white px-2.5 py-1 text-[11px] font-medium text-slate-600 ring-1 ring-amber-200">
+              {mpg.fuelType}
+            </span>
+          ) : null}
+          <p className="text-xs leading-relaxed text-slate-500">{EPA_MPG_NOTE}</p>
+        </div>
+      </dd>
+    </div>
+  );
+}
+
+/**
  * Compact public-records card for this year/make/model.
  *
  * Sits after every VIN history section, in a dashed/amber zone, so it cannot
@@ -322,22 +384,7 @@ export function ModelExtrasCard({ extras: cached = null, token }: Props) {
           <OwnerComplaints ymm={ymm} complaints={extras.complaints} />
         )}
 
-        {extras.mpg && (
-          <div>
-            <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
-              EPA fuel economy
-            </dt>
-            <dd className="mt-0.5 text-sm text-slate-800">
-              {extras.mpg.city} city / {extras.mpg.highway} hwy /{" "}
-              {extras.mpg.combined} combined mpg
-              {extras.mpg.fuelType ? ` · ${extras.mpg.fuelType}` : ""}
-              <span className="text-slate-500">
-                {" "}
-                for this model year, when the EPA listing matches — not this VIN
-              </span>
-            </dd>
-          </div>
-        )}
+        {extras.mpg && <EpaMpgFigures mpg={extras.mpg} />}
       </dl>
     </section>
     </section>

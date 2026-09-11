@@ -27,10 +27,12 @@ import {
 import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import type { ModelExtras } from "@/lib/model-extras";
+import type { ModelMpg } from "@/lib/model-extras";
 import {
   complaintSamples,
   hasModelExtras,
-  modelExtrasSummaryLine,
+  modelExtrasCountsLine,
+  mpgFigureRows,
 } from "@/lib/model-extras";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import {
@@ -41,11 +43,15 @@ import {
 } from "@/lib/customer-text";
 import {
   COMMON_FOR_MODEL,
+  EPA_MPG_NOTE,
+  EPA_MPG_TITLE,
   FROM_THIS_VIN,
   MODEL_ZONE_NOTE,
   MODEL_ZONE_TITLE,
   QUESTIONS_HEADING,
   THIS_VIN_CHIP,
+  VIN_SPECS_NOTE,
+  VIN_SPECS_TITLE,
 } from "@/lib/report-zones";
 import type {
   Field,
@@ -234,9 +240,40 @@ const styles = StyleSheet.create({
   },
 
   headerSpecs: { marginTop: 10 },
-  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 4 },
-  spec: { width: "33.3%", paddingRight: 10, marginBottom: 6 },
+  specGrid: { flexDirection: "row", flexWrap: "wrap", marginTop: 6 },
+  spec: { width: "33.3%", paddingRight: 6, marginBottom: 6 },
+  specCard: {
+    borderWidth: 1,
+    borderColor: LINE,
+    borderRadius: 3,
+    padding: 6,
+    minHeight: 28,
+  },
   specLabel: { fontSize: 7, color: FAINT, textTransform: "uppercase", letterSpacing: 0.6 },
+  specValue: { fontFamily: "Helvetica-Bold", fontSize: 8.5, marginTop: 2 },
+  mpgRow: { flexDirection: "row", gap: 6, marginTop: 8 },
+  mpgCard: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: "#fde68a",
+    backgroundColor: "#fffbeb",
+    borderRadius: 3,
+    paddingVertical: 6,
+    paddingHorizontal: 4,
+    alignItems: "center",
+  },
+  mpgCardCombined: {
+    borderColor: "#f59e0b",
+    backgroundColor: "#fffbeb",
+  },
+  mpgValue: { fontFamily: "Helvetica-Bold", fontSize: 14 },
+  mpgLabel: {
+    fontSize: 6.5,
+    color: MUTED,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    marginTop: 2,
+  },
 
   footer: {
     position: "absolute",
@@ -586,16 +623,43 @@ function clipPdf(value: string, max = 160): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
+  return (
+    <View>
+      <Text style={styles.briefHeading}>{EPA_MPG_TITLE.toUpperCase()}</Text>
+      <View style={styles.mpgRow}>
+        {mpgFigureRows(mpg).map((row) => (
+          <View
+            key={row.key}
+            style={[
+              styles.mpgCard,
+              row.key === "combined" ? styles.mpgCardCombined : {},
+            ]}
+          >
+            <Text style={styles.mpgValue}>{row.value}</Text>
+            <Text style={styles.mpgLabel}>{row.label} mpg</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.caveat}>
+        {mpg.fuelType ? `${mpg.fuelType}. ` : ""}
+        {EPA_MPG_NOTE}
+      </Text>
+    </View>
+  );
+}
+
 function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
   if (!hasModelExtras(extras)) return null;
   const samples = complaintSamples(extras.complaints).slice(0, 3);
+  const counts = modelExtrasCountsLine(extras);
   return (
     <View style={styles.section} wrap={false}>
       <Text style={styles.sectionTitle}>{MODEL_ZONE_TITLE}</Text>
       <Text style={styles.sectionNote}>
         {MODEL_ZONE_NOTE} The {extras.ymmLabel} only.
       </Text>
-      <Text style={styles.bullet}>{modelExtrasSummaryLine(extras)}</Text>
+      {counts ? <Text style={styles.bullet}>{counts}</Text> : null}
       {extras.recalls?.campaigns.map((campaign, index) => (
         <Text key={campaign.campaign} style={styles.bullet}>
           Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
@@ -613,6 +677,7 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
           {sample.components}: {clipPdf(sample.summary)}
         </Text>
       ))}
+      {extras.mpg ? <EpaMpgFigures mpg={extras.mpg} /> : null}
     </View>
   );
 }
@@ -685,12 +750,17 @@ export function ReportDocument({
         </View>
         {specList.length > 0 && (
           <View style={styles.headerSpecs} wrap={false}>
-            <Text style={styles.metaLabel}>Specifications</Text>
+            <Text style={styles.metaLabel}>{VIN_SPECS_TITLE}</Text>
+            <Text style={styles.caveat}>
+              {THIS_VIN_CHIP} — {VIN_SPECS_NOTE}
+            </Text>
             <View style={styles.specGrid}>
               {specList.map((spec, index) => (
                 <View key={`${spec.label}-${index}`} style={styles.spec}>
-                  <Text style={styles.specLabel}>{spec.label}</Text>
-                  <Text>{spec.value}</Text>
+                  <View style={styles.specCard}>
+                    <Text style={styles.specLabel}>{spec.label}</Text>
+                    <Text style={styles.specValue}>{spec.value}</Text>
+                  </View>
                 </View>
               ))}
             </View>

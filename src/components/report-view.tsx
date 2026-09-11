@@ -7,7 +7,7 @@ import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { cleanBrief, cleanModelExtras, cleanReport } from "@/lib/customer-text";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
-import { THIS_VIN_CHIP } from "@/lib/report-zones";
+import { THIS_VIN_CHIP, VIN_SPECS_NOTE, VIN_SPECS_TITLE } from "@/lib/report-zones";
 import { reportHealth } from "@/lib/report-health";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import type {
@@ -729,6 +729,7 @@ function SectionBlock({
  * The card already states the year, make, model and the status chips. The
  * engine, drivetrain, fuel and trim sit behind this disclosure so they stop
  * being a second section at the bottom of the report. Print opens it.
+ * Compact cards, not a raw definition list — VIN-build facts only.
  */
 function HeaderSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
@@ -739,23 +740,27 @@ function HeaderSpecs({ specifications }: { specifications: Field[] }) {
       summaryClassName="flex cursor-pointer list-none items-center justify-between gap-3 text-sm [&::-webkit-details-marker]:hidden"
       summary={
         <>
-          <span className="font-semibold text-slate-900">
-            Vehicle specifications
-          </span>
+          <span className="font-semibold text-slate-900">{VIN_SPECS_TITLE}</span>
           <MoreHint count={specifications.length} />
         </>
       }
     >
-      <p className="mt-3 text-xs text-slate-500">
-        From the VIN build record and listing fields on this report.
-      </p>
-      <dl className="mt-3 grid gap-x-8 gap-y-4 sm:grid-cols-2 lg:grid-cols-3">
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <span className="rounded-full bg-slate-50 px-2.5 py-1 text-[11px] font-medium text-slate-500 ring-1 ring-slate-200">
+          {THIS_VIN_CHIP}
+        </span>
+        <p className="text-xs text-slate-500">{VIN_SPECS_NOTE}</p>
+      </div>
+      <dl className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
         {specifications.map((spec, index) => (
-          <div key={`${spec.label}-${index}`} className="border-t border-slate-100 pt-3">
+          <div
+            key={`${spec.label}-${index}`}
+            className="rounded-xl border border-slate-200 bg-slate-50/80 px-3.5 py-3"
+          >
             <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
               {spec.label}
             </dt>
-            <dd className="mt-0.5 break-words text-sm text-slate-800">
+            <dd className="mt-1 break-words text-sm font-medium leading-snug text-slate-900">
               <FieldValue value={spec.value} />
             </dd>
           </div>

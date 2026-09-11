@@ -59,6 +59,16 @@ describe("report view layout", () => {
       card.indexOf("Show details") < card.indexOf("{body}"),
       "recall risk and remedy must sit behind the expand, not on the closed face",
     );
+    assert.match(card, /EPA_MPG_TITLE/);
+    assert.match(card, /EPA_MPG_NOTE/);
+    assert.match(card, /function EpaMpgFigures/);
+    assert.match(card, /mpgFigureRows/);
+    assert.match(card, /grid grid-cols-3/);
+    assert.doesNotMatch(
+      card,
+      /city \/ \{extras\.mpg\.highway\} hwy/,
+      "EPA MPG must not stay a jammed city / hwy / combined line",
+    );
   });
 
   it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {
@@ -177,6 +187,17 @@ describe("report view layout", () => {
     assert.match(source, /headerSpecifications\(report\)/);
     assert.match(source, /headerSpecSummary\(specList\)/);
     assert.match(source, /<HeaderSpecs specifications=\{specList\} \/>/);
+    assert.match(source, /VIN_SPECS_TITLE/);
+    assert.match(source, /VIN_SPECS_NOTE/);
+    assert.match(
+      source,
+      /function HeaderSpecs[\s\S]*THIS_VIN_CHIP[\s\S]*rounded-xl border border-slate-200 bg-slate-50/,
+    );
+    assert.doesNotMatch(
+      source.slice(source.indexOf("function HeaderSpecs")),
+      /border-t border-slate-100 pt-3/,
+      "VIN specs must be compact cards, not a raw definition list",
+    );
   });
 
   it("keeps the illustrated hero in the header and marks the sample as static", async () => {
