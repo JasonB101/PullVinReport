@@ -194,6 +194,27 @@ function briefSales(report: VehicleReport): BriefFacts["sales"] {
   };
 }
 
+function titleRecordCount(report: VehicleReport): number {
+  const titles = report.checks.find((check) => check.key === "titles");
+  if (titles) return titles.count;
+  return report.sections.find((section) => section.key === "titles")?.records.length ?? 0;
+}
+
+function checkResult(
+  check: { key: string; status: string; count: number },
+  titlesOnFile: number,
+): string {
+  if (check.status === "found") {
+    return `${check.count} record${check.count === 1 ? "" : "s"}`;
+  }
+  // An empty titles feed is not a clean branded-title check. Saying
+  // "nothing on file" here is how the model writes "no title brands".
+  if (check.key === "branded" && titlesOnFile === 0) {
+    return "unknown — no title records came back to read";
+  }
+  return "nothing on file";
+}
+
 export function briefFacts(incoming: VehicleReport): BriefFacts {
   const report = cleanReport(withResolvedDispositions(incoming));
   return {
@@ -204,10 +225,7 @@ export function briefFacts(incoming: VehicleReport): BriefFacts {
       .map((spec) => `${spec.label}: ${clip(spec.value)}`),
     checks: report.checks.map((check) => ({
       check: check.label,
-      result:
-        check.status === "found"
-          ? `${check.count} record${check.count === 1 ? "" : "s"}`
-          : "nothing on file",
+      result: checkResult(check, titleRecordCount(report)),
     })),
     odometer: report.odometer
       .slice(-MAX_ODOMETER_ROWS)
@@ -260,7 +278,7 @@ Rules, in order of importance:
 3. Never estimate a price, market value, condition grade, score or rating. That data does not exist here.
 4. Never mention data providers, databases, agencies or where the records came from.
 5. Never leave a trade term standing on its own. A disposition code, a claim type, a salvage yard's name, an auction house's name and a brand code mean nothing to a buyer. Say what the record is in ordinary words.
-6. A report with nothing on file is good news. Say so plainly instead of manufacturing concern.
+6. A report with nothing on file is good news — except title history. If Title records are nothing on file, that is a thin or missing titles feed, not a clean title. Never say there are no title brands, that brands are nothing on file, or that the title is clean. Say the title records did not come back.
 7. Plain English. No preamble, no marketing, no hedging boilerplate.
 8. When FACTS include junk, salvage, rebuilt, a total loss, or a salvage auction house (Copart, IAA, Insurance Auto Auctions), never say there were no accidents, that the picture is clean, or that nothing is worrying on the accident, theft or lien fronts. Those records already mean the vehicle entered the total-loss or salvage channel — even when a separate accident row is absent. You may say no separate accident, theft or lien row appears; do not call that clean.
 
@@ -277,7 +295,7 @@ Records with nothing worrying in them do not need a consequence. Do not manufact
 Reply with JSON and nothing else:
 {"fromReport":["..."],"commonForModel":["..."],"questions":["..."]}
 
-fromReport: 2 to 6 bullets on what this report shows — title brands or their absence, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the listings when FACTS.sales is present, stated as facts only. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
+fromReport: 2 to 6 bullets on what this report shows — title brands or their absence only when title records exist, how the mileage progresses, moves between states, accidents, liens, salvage or junk entries, and the listings when FACTS.sales is present, stated as facts only. When Title records are nothing on file, say the title history is thin or did not come back — never that there are no brands. Use the actual counts, dates and listing totals from FACTS. A listing total copied from FACTS.sales is a fact, not a valuation — never estimate what the car is worth. Each bullet is at most two sentences and 400 characters.
 commonForModel: 0 to 4 bullets on well-known trouble spots for the exact vehicle in FACTS.yearMakeModel. Every bullet MUST name that full year, make and model (for example "2021 Subaru Outback"). Never name a sibling or a different model — Legacy is not Outback, Camry is not Avalon, F-150 is not Expedition. Never name a different model year. If FACTS.yearMakeModel is "unknown", or you are not confident about that exact vehicle, return [].
 questions: 0 to 4 short questions for the seller, each one following from a bullet above. When the report shows a brand, a salvage or junk entry or an accident, include one question that asks for the reason and the repair documentation. A junk/salvage entry and a branded title are usually the same event — do not ask for that paperwork twice. A distinct accident may have its own ask. Do not ask whether a TBD or "to be determined" status has been resolved when FACTS already record Sold (or another final salvage/auction disposition) for that event.`;
 
@@ -377,6 +395,63 @@ function dropCleanFrontWhenSalvage(fromReport: string[], salvage: boolean): stri
   return fromReport.filter(
     (bullet) => !CLEAN_ACCIDENT_FRONT.some((pattern) => pattern.test(bullet)),
   );
+}
+
+/**
+ * Claims that treat a missing titles feed as a clean title.
+ *
+ * "No title brands on file" is only sayable when we actually read title
+ * records. Zero rows is thin history, not a clean bill of health.
+ */
+const CLEAN_TITLE_WITHOUT_RECORDS = [
+  /\bno title brands?\b/i,
+  /\bno brands? on file\b/i,
+  /\bno brands? reported\b/i,
+  /\bclean(?:[\s-]+)title\b/i,
+  /\btitle(?:s)?\s+(?:is|are|looks?|came back)\s+clean\b/i,
+  /\bno branded titles?\b/i,
+  /\bno brand (?:on|in) (?:the |any )?titles?\b/i,
+  /\bno salvage, junk or (?:other |insurance(?:-loss)? )?brand/i,
+  /\bwithout (?:a )?(?:title )?brand/i,
+  /\bbrands? (?:are |were )?nothing on file\b/i,
+  /\b(?:branded title|title brands?).{0,40}nothing on file\b/i,
+];
+
+const THIN_TITLE_HISTORY =
+  "No title records came back — that is a thin title history, not a finding that the title is clean.";
+
+/** True when FACTS have no title rows to read brands from. */
+export function factsIndicateEmptyTitles(facts: BriefFacts): boolean {
+  const hasTitleRows = facts.records.some((entry) => /title/i.test(entry.section));
+  if (hasTitleRows) return false;
+  const titles = facts.checks.find((check) => /^title records$/i.test(check.check));
+  return !titles || titles.result === "nothing on file";
+}
+
+function dropCleanTitleWhenEmptyTitles(
+  fromReport: string[],
+  emptyTitles: boolean,
+): string[] {
+  if (!emptyTitles) return fromReport;
+  const kept = fromReport.filter(
+    (bullet) => !CLEAN_TITLE_WITHOUT_RECORDS.some((pattern) => pattern.test(bullet)),
+  );
+  return kept.length > 0 ? kept : [THIN_TITLE_HISTORY];
+}
+
+/**
+ * Applies stored-brief copy guards so an already-written brief cannot keep
+ * saying "no title brands" on an empty titles feed.
+ */
+export function presentBrief(brief: VehicleBrief, report: VehicleReport): VehicleBrief {
+  const facts = briefFacts(report);
+  return {
+    ...brief,
+    fromReport: dropCleanTitleWhenEmptyTitles(
+      brief.fromReport,
+      factsIndicateEmptyTitles(facts),
+    ),
+  };
 }
 
 const TBD_QUESTION =
@@ -605,12 +680,15 @@ export function parseBrief(
   if (typeof parsed !== "object" || parsed === null) return null;
 
   const payload = parsed as Record<string, unknown>;
-  const fromReport = dropCleanFrontWhenSalvage(
-    bullets(payload.fromReport, LIMITS.fromReport, {
-      allowAmounts: true,
-      rejectListingFiction: true,
-    }),
-    Boolean(facts && factsIndicateSalvageChannel(facts)),
+  const fromReport = dropCleanTitleWhenEmptyTitles(
+    dropCleanFrontWhenSalvage(
+      bullets(payload.fromReport, LIMITS.fromReport, {
+        allowAmounts: true,
+        rejectListingFiction: true,
+      }),
+      Boolean(facts && factsIndicateSalvageChannel(facts)),
+    ),
+    Boolean(facts && factsIndicateEmptyTitles(facts)),
   );
   if (fromReport.length === 0) return null;
 

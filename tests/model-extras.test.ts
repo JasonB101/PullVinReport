@@ -15,6 +15,7 @@ import {
   matchingEpaOptions,
   MODEL_EXTRAS_FETCH_ATTEMPTS,
   modelExtrasSummaryLine,
+  nhtsaModelCandidates,
   parseComplaintsPayload,
   parseEpaOptions,
   parseEpaVehicle,
@@ -248,6 +249,19 @@ describe("model extras parsers", () => {
   it("refuses to compose extras without a year, make and model", () => {
     assert.equal(ymmFromVehicle({ make: "Toyota", model: "Camry" }), null);
     assert.equal(ymmCacheKey("2012", "Toyota", "Camry"), "2012|toyota|camry");
+  });
+
+  it("tries NHTSA's shorter model name after a series token, not Grand Cherokee", () => {
+    assert.deepEqual(nhtsaModelCandidates("Clubman Cooper"), [
+      "Clubman Cooper",
+      "Clubman",
+    ]);
+    assert.deepEqual(nhtsaModelCandidates("Cooper Clubman"), [
+      "Cooper Clubman",
+      "Clubman",
+    ]);
+    assert.deepEqual(nhtsaModelCandidates("Camry"), ["Camry"]);
+    assert.deepEqual(nhtsaModelCandidates("Grand Cherokee"), ["Grand Cherokee"]);
   });
 
   it("hides the card when every slice is empty", () => {
@@ -494,6 +508,105 @@ describe("model extras fetch and cache", () => {
       assert.equal(seen.recalls, 1);
       assert.equal(seen.complaints, 1);
       assert.equal(seen.epa, 1);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("uses NHTSA Clubman rows when the report model is Clubman Cooper", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const recallModels: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      const model = new URL(href).searchParams.get("model") ?? "";
+      if (href.includes("recallsByVehicle")) {
+        recallModels.push(model);
+        if (/clubman cooper/i.test(model)) {
+          return new Response(JSON.stringify({ Count: 0, results: [] }), {
+            status: 200,
+          });
+        }
+        if (/^clubman$/i.test(model)) {
+          return new Response(
+            JSON.stringify({
+              Count: 2,
+              results: [
+                {
+                  NHTSACampaignNumber: "16V553000",
+                  Component: "AIR BAGS:SIDE/WINDOW",
+                  Consequence: "Airbag may not inflate as intended.",
+                  Remedy: "Dealers will modify the covers.",
+                },
+                {
+                  NHTSACampaignNumber: "17E051000",
+                  Component: "TRAILER HITCHES",
+                  Consequence: "The hitch may fail.",
+                  Remedy: "Replace the hitch.",
+                },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+      }
+      if (href.includes("complaintsByVehicle")) {
+        if (/clubman cooper/i.test(model)) {
+          return new Response(JSON.stringify({ count: 0, results: [] }), {
+            status: 200,
+          });
+        }
+        return new Response(
+          JSON.stringify({
+            count: 18,
+            results: [
+              {
+                odiNumber: 2001,
+                components: "AIR BAGS",
+                summary: "Curtain airbag light stays on after a low-speed bump.",
+                dateComplaintFiled: "04/02/2017",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("menu/options")) {
+        return new Response(JSON.stringify({ menuItem: [] }), { status: 200 });
+      }
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport({
+        ...buildSampleReport(),
+        vehicle: { year: "2016", make: "Mini", model: "Clubman Cooper" },
+      });
+      assert.ok(extras);
+      assert.equal(extras.ymmLabel, "2016 Mini Clubman Cooper");
+      assert.deepEqual(
+        extras.recalls?.campaigns.map((row) => row.campaign),
+        ["16V553000", "17E051000"],
+      );
+      assert.equal(extras.complaints?.total, 18);
+      assert.deepEqual(recallModels, ["Clubman Cooper", "Clubman"]);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("omits the model zone when every NHTSA name, including fallbacks, is empty", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ Count: 0, count: 0, results: [] }), {
+        status: 200,
+      })) as typeof fetch;
+    try {
+      const extras = await extrasForReport({
+        ...buildSampleReport(),
+        vehicle: { year: "2016", make: "Mini", model: "Clubman Cooper" },
+      });
+      assert.equal(extras, null);
     } finally {
       globalThis.fetch = previous;
     }

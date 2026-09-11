@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 
 import { extrasForReport, hasModelExtras } from "@/lib/model-extras";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 
 export const runtime = "nodejs";
@@ -51,7 +52,7 @@ export async function POST(request: Request) {
   const order = await store.getByAccessToken(token);
   if (!order || !order.report) return unavailable(404);
 
-  const extras = await extrasForReport(order.report, store);
+  const extras = await extrasForReport(withCurrentLayout(order.report), store);
   if (!hasModelExtras(extras)) return unavailable();
 
   return NextResponse.json({ status: "ready", extras }, { headers: NO_STORE });

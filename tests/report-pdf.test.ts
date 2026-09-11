@@ -154,8 +154,27 @@ describe("report PDF", () => {
       fileURLToPath(new URL("../src/lib/email.ts", import.meta.url)),
       "utf8",
     );
-    assert.match(source, /extrasForReport/);
+    assert.match(source, /extrasForReport\(withCurrentLayout\(order\.report\)/);
     assert.match(source, /renderOrderReportPdf\(order, modelExtras\)/);
+  });
+
+  it("loads paid HTML and PDF extras through extrasForReport, not a cache peek", async () => {
+    const html = await readFile(
+      fileURLToPath(new URL("../src/app/report/[token]/page.tsx", import.meta.url)),
+      "utf8",
+    );
+    const pdf = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf-serve.ts", import.meta.url)),
+      "utf8",
+    );
+    const api = await readFile(
+      fileURLToPath(new URL("../src/app/api/model-extras/route.ts", import.meta.url)),
+      "utf8",
+    );
+    assert.match(html, /extrasForReport\(report, store\)/);
+    assert.doesNotMatch(html, /cachedExtrasForReport/);
+    assert.match(pdf, /extrasForReport\(\s*withCurrentLayout\(order\.report\)/);
+    assert.match(api, /extrasForReport\(withCurrentLayout\(order\.report\)/);
   });
 
   it("embeds a cached hero beside the vehicle card and labels it an illustration", async () => {

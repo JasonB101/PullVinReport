@@ -78,7 +78,10 @@ export async function pdfForPaidReport(
   const order = await store.getByAccessToken(accessToken);
   if (!order?.report) return { ok: false, status: 404 };
 
-  const extras = await extrasForReport(order.report, store).catch((error) => {
+  const extras = await extrasForReport(
+    withCurrentLayout(order.report),
+    store,
+  ).catch((error) => {
     console.error(`[pdf] model extras failed for order ${order.id}`, error);
     return null;
   });

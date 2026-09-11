@@ -13,7 +13,7 @@ import {
   customerFailureMessage,
   refundPromise,
 } from "@/lib/customer-copy";
-import { cachedExtrasForReport } from "@/lib/model-extras";
+import { extrasForReport } from "@/lib/model-extras";
 import { paidReportPdfPath } from "@/lib/report-pdf-serve";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
@@ -147,11 +147,14 @@ export default async function ReportPage({
   }
   const hero =
     isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
+  // Same fetch as the PDF: a cache peek left the first HTML paint (and the
+  // RSC payload) without About this model even when NHTSA had campaigns.
+  // extrasToken still lets the client retry if this call fails closed.
   let modelExtras = null;
   try {
-    modelExtras = await cachedExtrasForReport(report, store);
+    modelExtras = await extrasForReport(report, store);
   } catch (error) {
-    console.error("[extras] could not read cached model extras", error);
+    console.error("[extras] could not load model extras", error);
   }
 
   return (

@@ -4,6 +4,7 @@ import { BRAND, absoluteUrl, emailConfig, formatPrice, isEmailConfigured } from 
 import { REPORT_DISCLAIMER_SHORT } from "@/lib/customer-copy";
 import { extrasForReport, type ModelExtras } from "@/lib/model-extras";
 import { vehicleTitle } from "@/lib/report";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { renderOrderReportPdf } from "@/lib/report-pdf-serve";
 import { reportPdfFilename } from "@/lib/report-pdf";
 import { getStore, type Order } from "@/lib/store";
@@ -124,7 +125,7 @@ type ReportAttachment = {
 async function loadModelExtras(order: Order): Promise<ModelExtras | null> {
   if (!order.report) return null;
   try {
-    return await extrasForReport(order.report, getStore());
+    return await extrasForReport(withCurrentLayout(order.report), getStore());
   } catch (error) {
     console.error(`[email] model extras failed for order ${order.id}`, error);
     return null;

@@ -24,7 +24,7 @@ import {
   renderToBuffer,
 } from "@react-pdf/renderer";
 
-import type { VehicleBrief } from "@/lib/ai-brief";
+import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import type { ModelExtras } from "@/lib/model-extras";
 import {
@@ -644,7 +644,9 @@ export function ReportDocument({
 }) {
   const report = cleanReport(withResolvedDispositions(incoming));
   const title = vehicleTitle(report.vehicle);
-  const brief = incomingBrief ? cleanBrief(incomingBrief) : incomingBrief;
+  const brief = incomingBrief
+    ? presentBrief(cleanBrief(incomingBrief), report)
+    : incomingBrief;
   const modelExtras = incomingExtras
     ? cleanModelExtras(incomingExtras)
     : incomingExtras;
