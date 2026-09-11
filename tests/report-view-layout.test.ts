@@ -190,24 +190,34 @@ describe("report view layout", () => {
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
       "utf8",
     );
+    const specs = await readFile(
+      fileURLToPath(new URL("../src/components/vehicle-specs.tsx", import.meta.url)),
+      "utf8",
+    );
     assert.match(source, /headerSpecifications\(report\)/);
     assert.match(source, /headerSpecSummary\(specList\)/);
-    assert.match(source, /<HeaderSpecs specifications=\{specList\} \/>/);
-    assert.match(source, /partitionSpecMpg/);
-    assert.match(source, /specMpgTeaser/);
-    assert.match(source, /<MpgFigures/);
-    assert.match(source, /SPEC_MPG_TITLE/);
-    assert.match(source, /SPEC_MPG_NOTE/);
-    assert.match(source, /VIN_SPECS_TITLE/);
-    assert.match(source, /VIN_SPECS_NOTE/);
-    assert.match(
-      source,
-      /function HeaderSpecs[\s\S]*THIS_VIN_CHIP[\s\S]*rounded-xl border border-slate-200 bg-slate-50/,
+    assert.match(source, /<VehicleSpecs specifications=\{specList\} \/>/);
+    assert.match(specs, /partitionSpecMpg/);
+    assert.match(specs, /groupSpecFields/);
+    assert.match(specs, /specTeaserFacts/);
+    assert.match(specs, /specMpgTeaser/);
+    assert.match(specs, /<MpgFigures/);
+    assert.match(specs, /SPEC_MPG_TITLE/);
+    assert.match(specs, /SPEC_MPG_NOTE/);
+    assert.match(specs, /VIN_SPECS_TITLE/);
+    assert.match(specs, /VIN_SPECS_NOTE/);
+    assert.match(specs, /VIN_SPECS_OPEN/);
+    assert.match(specs, /THIS_VIN_CHIP/);
+    assert.match(specs, /rounded-xl border border-slate-200\/90 bg-white/);
+    assert.match(specs, /when-closed mt-4/);
+    assert.doesNotMatch(
+      specs,
+      /20 more details/,
     );
     assert.doesNotMatch(
-      source.slice(source.indexOf("function HeaderSpecs")),
+      specs,
       /border-t border-slate-100 pt-3/,
-      "VIN specs must be compact cards, not a raw definition list",
+      "VIN specs must be grouped cards, not a raw definition list",
     );
   });
 

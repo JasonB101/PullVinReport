@@ -4,7 +4,13 @@ import {
   PAINT_COLOR_LABEL,
   pickColor,
 } from "@/lib/vehicle-color";
-import { MODEL_ZONE_NAV } from "@/lib/report-zones";
+import {
+  MODEL_ZONE_NAV,
+  SPEC_GROUP_BODY,
+  SPEC_GROUP_FEATURES,
+  SPEC_GROUP_MORE,
+  SPEC_GROUP_POWERTRAIN,
+} from "@/lib/report-zones";
 
 /**
  * The normalized report model that every renderer in the app consumes.
@@ -1580,4 +1586,141 @@ export function specMpgTeaser(mpg: SpecMpg): string {
   return `${mpg.figures
     .map((row) => `${row.display} ${row.label.toLowerCase()}`)
     .join(" · ")} mpg`;
+}
+
+export type SpecGroupKey = "powertrain" | "body" | "features" | "more";
+
+export type SpecGroup = {
+  key: SpecGroupKey;
+  title: string;
+  fields: Field[];
+};
+
+const SPEC_GROUP_TITLE: Record<SpecGroupKey, string> = {
+  powertrain: SPEC_GROUP_POWERTRAIN,
+  body: SPEC_GROUP_BODY,
+  features: SPEC_GROUP_FEATURES,
+  more: SPEC_GROUP_MORE,
+};
+
+const SPEC_GROUP_ORDER: SpecGroupKey[] = [
+  "powertrain",
+  "body",
+  "features",
+  "more",
+];
+
+/**
+ * Closed-face chips under the MPG tiles — complementary to the header line,
+ * so the teaser does not restate Color · Style · Engine.
+ */
+const TEASER_SPEC_LABELS = [
+  "Transmission",
+  "Drive type",
+  "Drivetrain",
+  "Fuel type",
+  "Standard seating",
+  "Made in",
+  "Anti-brake system",
+  "Style",
+  "Engine",
+  "Color",
+];
+
+function specGroupKey(label: string): SpecGroupKey {
+  const n = normalizeSpecLabel(label);
+  if (!n) return "more";
+
+  if (
+    /^(engine|engine type|engine size|engine cylinders|cylinders|displacement|horsepower|torque|aspiration|turbocharger|hybrid|electric range|motor|transmission|transmission type|trans|drivetrain|drive type|drive|driveline|fuel type|fuel|fuel tank|fuel capacity|tank size)$/.test(
+      n,
+    ) ||
+    /\b(engine|transmission|drivetrain|driveline|horsepower|torque|cylinder|displacement|fuel type|fuel tank|fuel capacity)\b/.test(
+      n,
+    )
+  ) {
+    return "powertrain";
+  }
+
+  if (
+    /anti[- ]?brake/.test(n) ||
+    /\b(brake|abs|airbags?|steering|suspension|tires?|tyres?|wheels?|equipment|options?|safety|audio|navigation|sunroof|moonroof|bluetooth|cruise|camera|sensor|assist|climate|air condition)\b/.test(
+      n,
+    )
+  ) {
+    return "features";
+  }
+
+  if (
+    n === "size" ||
+    n === "category" ||
+    n === "type" ||
+    n === "class" ||
+    /\b(style|body|doors?|seats?|seating|length|width|height|wheelbase|weight|curb|gvwr|payload|towing|cargo|dimension|made in|manufactur|country|color|colour|paint|vehicle type|vehicle class|headroom|legroom|shoulder|hip room)\b/.test(
+      n,
+    )
+  ) {
+    return "body";
+  }
+
+  return "more";
+}
+
+/**
+ * Buckets the remaining (non-MPG) VIN specs so HTML and PDF can print the
+ * same groups. Unknown labels land in More specifications — nothing is
+ * dropped or invented.
+ */
+export function groupSpecFields(fields: Field[]): SpecGroup[] {
+  const buckets = new Map<SpecGroupKey, Field[]>();
+  for (const field of fields) {
+    const key = specGroupKey(field.label);
+    const list = buckets.get(key);
+    if (list) list.push(field);
+    else buckets.set(key, [field]);
+  }
+
+  return SPEC_GROUP_ORDER.flatMap((key) => {
+    const groupFields = buckets.get(key);
+    if (!groupFields || groupFields.length === 0) return [];
+    return [{ key, title: SPEC_GROUP_TITLE[key], fields: groupFields }];
+  });
+}
+
+/**
+ * A few scan-friendly facts for the closed Vehicle specifications face.
+ *
+ * Prefers complementary labels (transmission, drive, seating) and skips
+ * values already named in `exclude` — typically the header spec line.
+ */
+export function specTeaserFacts(
+  fields: Field[],
+  options: { exclude?: Field[]; limit?: number } = {},
+): Field[] {
+  const limit = options.limit ?? 3;
+  const excluded = new Set(
+    (options.exclude ?? []).map((field) => `${field.label}\0${field.value}`),
+  );
+  const available = fields.filter(
+    (field) => !excluded.has(`${field.label}\0${field.value}`),
+  );
+  const picked: Field[] = [];
+
+  for (const label of TEASER_SPEC_LABELS) {
+    if (picked.length >= limit) break;
+    const spec = available.find((entry) => entry.label === label);
+    if (spec && !alreadyStated(picked, spec.value)) picked.push(spec);
+  }
+
+  if (picked.length < limit) {
+    for (const spec of available) {
+      if (picked.length >= limit) break;
+      if (picked.some((field) => field.label === spec.label && field.value === spec.value)) {
+        continue;
+      }
+      if (!alreadyStated(picked, spec.value)) picked.push(spec);
+    }
+  }
+
+  return picked;
 }

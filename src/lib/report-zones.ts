@@ -20,11 +20,18 @@ export const MODEL_ZONE_NOTE =
 export const VIN_SPECS_TITLE = "Vehicle specifications";
 export const VIN_SPECS_NOTE =
   "From the VIN build record and listing fields on this report.";
+export const VIN_SPECS_OPEN = "Show specifications";
 
 /** City/highway estimates that arrived on the VIN build record. */
 export const SPEC_MPG_TITLE = "Gas mileage";
 export const SPEC_MPG_NOTE =
   "City and highway estimates from the VIN build record on this report.";
+
+/** Spec sheet groups — same wording on HTML, sample, and PDF. */
+export const SPEC_GROUP_POWERTRAIN = "Powertrain";
+export const SPEC_GROUP_BODY = "Body & dimensions";
+export const SPEC_GROUP_FEATURES = "Equipment";
+export const SPEC_GROUP_MORE = "More specifications";
 
 /** EPA MPG is a model-year listing, never a reading from this VIN. */
 export const EPA_MPG_TITLE = "EPA fuel economy";

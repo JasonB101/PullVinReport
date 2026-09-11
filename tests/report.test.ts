@@ -4,12 +4,14 @@ import { describe, it } from "node:test";
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
 import {
   currentEvent,
+  groupSpecFields,
   headerSpecifications,
   headerSpecSummary,
   partitionSpecMpg,
   specMpgDisplay,
   specMpgKind,
   specMpgTeaser,
+  specTeaserFacts,
   dedupeConsecutiveRecords,
   dedupeOdometerReadings,
   formatEventDate,
@@ -891,6 +893,53 @@ describe("the specs on the vehicle card", () => {
       ["Engine", "Made In City", "Fuel type"],
     );
     assert.equal(specMpgTeaser(mpg!), "21 city · 31 highway mpg");
+  });
+
+  it("groups remaining VIN specs without dropping or inventing any", () => {
+    const { rest } = partitionSpecMpg([
+      { label: "Engine", value: "1.5L I3" },
+      { label: "City Mileage", value: "21 miles/gallon" },
+      { label: "Highway Mileage", value: "31 miles/gallon" },
+      { label: "Transmission", value: "6-Speed Automatic" },
+      { label: "Drive type", value: "FWD" },
+      { label: "Style", value: "4 Door Wagon" },
+      { label: "Made In City", value: "Oxford" },
+      { label: "Standard seating", value: "5" },
+      { label: "Anti-brake system", value: "4-Wheel ABS" },
+      { label: "Steering type", value: "Rack and Pinion" },
+      { label: "Wheelbase", value: "105.1 in" },
+      { label: "MSRP", value: "$24,100" },
+    ]);
+    const groups = groupSpecFields(rest);
+    assert.deepEqual(
+      groups.map((group) => [group.key, group.title, group.fields.map((field) => field.label)]),
+      [
+        ["powertrain", "Powertrain", ["Engine", "Transmission", "Drive type"]],
+        ["body", "Body & dimensions", ["Style", "Made In City", "Standard seating", "Wheelbase"]],
+        ["features", "Equipment", ["Anti-brake system", "Steering type"]],
+        ["more", "More specifications", ["MSRP"]],
+      ],
+    );
+    assert.equal(
+      groups.flatMap((group) => group.fields).length,
+      rest.length,
+    );
+  });
+
+  it("teases complementary specs instead of repeating the header line", () => {
+    const fields = [
+      { label: "Color", value: "Chili Red" },
+      { label: "Style", value: "Cooper S Clubman" },
+      { label: "Engine", value: "1.5L I3" },
+      { label: "Transmission", value: "6-Speed Automatic" },
+      { label: "Drive type", value: "FWD" },
+      { label: "Fuel type", value: "Gasoline" },
+    ];
+    const summary = headerSpecSummary(fields);
+    assert.deepEqual(
+      specTeaserFacts(fields, { exclude: summary, limit: 3 }).map((field) => field.label),
+      ["Transmission", "Drive type", "Fuel type"],
+    );
   });
 
   it("keeps a mileage range instead of inventing one number", () => {

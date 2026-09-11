@@ -161,6 +161,7 @@ export function buildSampleReport(): VehicleReport {
       { label: "Standard seating", value: "5" },
       { label: "Made in", value: "Georgetown, Kentucky, United States" },
       { label: "Anti-brake system", value: "4-Wheel ABS" },
+      { label: "Steering type", value: "Rack and Pinion" },
     ],
     checks: [
       {
