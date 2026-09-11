@@ -1,5 +1,5 @@
 import type { VehicleBrief } from "@/lib/ai-brief";
-import { generateBrief } from "@/lib/ai-brief";
+import { generateBrief, presentBrief } from "@/lib/ai-brief";
 import { cleanBrief } from "@/lib/customer-text";
 import { isAnthropicConfigured } from "@/lib/config";
 import { withCurrentLayout } from "@/lib/report-layout";
@@ -26,7 +26,11 @@ export async function briefForOrder(
     return { status: "unavailable", reason: "this order has no report yet" };
   }
   if (order.aiBrief && !options.refresh) {
-    return { status: "ready", brief: cleanBrief(order.aiBrief), cached: true };
+    return {
+      status: "ready",
+      brief: presentBrief(cleanBrief(order.aiBrief), withCurrentLayout(order.report)),
+      cached: true,
+    };
   }
   if (!isAnthropicConfigured()) {
     return { status: "unavailable", reason: "ANTHROPIC_API_KEY is not set" };
@@ -52,5 +56,9 @@ export async function briefForOrder(
     console.error(`[brief] could not cache the brief for order ${order.id}`, error);
   }
 
-  return { status: "ready", brief: cleanBrief(brief), cached: false };
+  return {
+    status: "ready",
+    brief: presentBrief(cleanBrief(brief), withCurrentLayout(order.report)),
+    cached: false,
+  };
 }

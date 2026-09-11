@@ -3,7 +3,7 @@ import { ModelExtrasCard } from "@/components/model-extras";
 import { ReportHealthCard } from "@/components/report-health";
 import { ScrollOpenDetails } from "@/components/scroll-open-details";
 import { VehicleHero } from "@/components/vehicle-hero";
-import type { VehicleBrief } from "@/lib/ai-brief";
+import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { cleanBrief, cleanModelExtras, cleanReport } from "@/lib/customer-text";
 import type { ModelExtras } from "@/lib/model-extras";
 import { hasModelExtras } from "@/lib/model-extras";
@@ -828,7 +828,9 @@ export function ReportView({
   extrasToken?: string;
 }) {
   const report = cleanReport(withResolvedDispositions(incoming));
-  const brief = incomingBrief ? cleanBrief(incomingBrief) : incomingBrief;
+  const brief = incomingBrief
+    ? presentBrief(cleanBrief(incomingBrief), report)
+    : incomingBrief;
   const modelExtras = incomingExtras
     ? cleanModelExtras(incomingExtras)
     : incomingExtras;

@@ -217,11 +217,10 @@ describe("report health", () => {
         odometer: [],
       }),
     );
+    const titles = health.factors.find((factor) => factor.key === "titles");
     assert.equal(health.score >= 0 && health.score <= 100, true);
-    assert.match(
-      health.factors.find((factor) => factor.key === "titles")?.reason ?? "",
-      /thin/i,
-    );
+    assert.equal(titles?.delta, -8);
+    assert.match(titles?.reason ?? "", /thin/i);
   });
 
   it("labels bands without using a market-value word", () => {

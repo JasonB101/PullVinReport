@@ -4,11 +4,13 @@ import { afterEach, describe, it } from "node:test";
 import {
   briefFacts,
   exactYearMakeModel,
+  factsIndicateEmptyTitles,
   factsIndicateResolvedSalvageSale,
   factsIndicateSalvageChannel,
   filterSellerQuestions,
   generateBrief,
   parseBrief,
+  presentBrief,
 } from "@/lib/ai-brief";
 import { buildSampleBrief, buildSampleReport } from "@/lib/sample-report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
@@ -320,6 +322,65 @@ describe("reading a brief out of a reply", () => {
     assert.deepEqual(brief?.fromReport, [
       "Copart junk-and-salvage rows from April 2023 show Sold and TBD, which usually follows a total loss and a rebuilt path.",
     ]);
+  });
+
+  it("does not treat an empty titles feed as no title brands", () => {
+    const report = normalizeVinAuditReport(
+      { attributes: { Year: "2016", Make: "Mini", Model: "Clubman" } },
+      VIN,
+    );
+    const facts = briefFacts(report);
+    assert.equal(factsIndicateEmptyTitles(facts), true);
+    assert.deepEqual(
+      facts.checks.find((check) => check.check === "Branded title"),
+      {
+        check: "Branded title",
+        result: "unknown — no title records came back to read",
+      },
+    );
+
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "No title brands on file.",
+          "Mileage history is thin because no title events came back.",
+        ],
+      }),
+      "test-model",
+      report.vehicle,
+      facts,
+    );
+    assert.deepEqual(brief?.fromReport, [
+      "Mileage history is thin because no title events came back.",
+    ]);
+    assert.doesNotMatch(brief?.fromReport.join(" ") ?? "", /no title brands|clean title/i);
+
+    const stored = presentBrief(
+      {
+        fromReport: ["No title brands on file — a clean title."],
+        commonForModel: [],
+        questions: [],
+        model: "cached",
+      },
+      report,
+    );
+    assert.deepEqual(stored.fromReport, [
+      "No title records came back — that is a thin title history, not a finding that the title is clean.",
+    ]);
+  });
+
+  it("still allows no-brands copy when title records exist", () => {
+    const facts = briefFacts(paidReport());
+    assert.equal(factsIndicateEmptyTitles(facts), false);
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: ["Two title records, no brands reported."],
+      }),
+      "test-model",
+      paidReport().vehicle,
+      facts,
+    );
+    assert.deepEqual(brief?.fromReport, ["Two title records, no brands reported."]);
   });
 
   it("keeps a nothing-on-file accident bullet when there is no salvage channel", () => {
