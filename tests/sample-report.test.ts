@@ -48,6 +48,9 @@ describe("sample report", () => {
     assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
     assert.ok((extras.complaints?.samples[0]?.summary.length ?? 0) > 40);
     assert.equal(extras.mpg?.city, 24);
+    assert.equal(extras.ownership?.annualFuelCost, 2250);
+    assert.equal(extras.safetyRatings?.overall, 5);
+    assert.equal(extras.ev, undefined);
     assert.equal(JSON.stringify(extras).includes(SAMPLE_VIN), false);
   });
 

@@ -29,12 +29,23 @@ import {
 import { presentBrief, type VehicleBrief } from "@/lib/ai-brief";
 import { BRAND } from "@/lib/config";
 import type { ModelExtras } from "@/lib/model-extras";
+import type { ModelEv } from "@/lib/model-extras";
 import type { ModelMpg } from "@/lib/model-extras";
+import type { ModelOwnership } from "@/lib/model-extras";
+import type { ModelSafetyRatings } from "@/lib/model-extras";
 import {
+  campaignBadges,
   complaintSamples,
+  formatUsdEstimate,
+  hasEvCard,
   hasModelExtras,
+  hasOwnership,
+  hasSafetyRatings,
   modelExtrasCountsLine,
   mpgFigureRows,
+  recallHeaderBadges,
+  safetyFigureRows,
+  youSaveSpendCopy,
 } from "@/lib/model-extras";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import {
@@ -45,9 +56,15 @@ import {
 } from "@/lib/customer-text";
 import {
   COMMON_FOR_MODEL,
+  EPA_EV_NOTE,
+  EPA_EV_TITLE,
   EPA_MPG_NOTE,
   EPA_MPG_TITLE,
+  EPA_OWNERSHIP_NOTE,
+  EPA_OWNERSHIP_TITLE,
   FROM_THIS_VIN,
+  SAFETY_RATINGS_NOTE,
+  SAFETY_RATINGS_TITLE,
   SPEC_MPG_NOTE,
   SPEC_MPG_TITLE,
   MODEL_ZONE_NOTE,
@@ -797,7 +814,7 @@ function SpecMpgFigures({
   );
 }
 
-function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
+function EpaMpgFigures({ mpg, unit = "mpg" }: { mpg: ModelMpg; unit?: string }) {
   return (
     <View wrap={false}>
       <Text style={styles.briefHeading}>{EPA_MPG_TITLE.toUpperCase()}</Text>
@@ -811,7 +828,9 @@ function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
             ]}
           >
             <Text style={styles.mpgValue}>{row.value}</Text>
-            <Text style={styles.mpgLabel}>{row.label} mpg</Text>
+            <Text style={styles.mpgLabel}>
+              {row.label} {unit}
+            </Text>
           </View>
         ))}
       </View>
@@ -819,6 +838,77 @@ function EpaMpgFigures({ mpg }: { mpg: ModelMpg }) {
         {mpg.fuelType ? `${mpg.fuelType}. ` : ""}
         {EPA_MPG_NOTE}
       </Text>
+    </View>
+  );
+}
+
+function SafetyRatingsBlock({ ratings }: { ratings: ModelSafetyRatings }) {
+  const figures = safetyFigureRows(ratings);
+  if (figures.length === 0) return null;
+  return (
+    <View wrap={false}>
+      <Text style={styles.briefHeading}>{SAFETY_RATINGS_TITLE.toUpperCase()}</Text>
+      <View style={styles.mpgRow}>
+        {figures.map((row) => (
+          <View key={row.key} style={styles.specMpgCard}>
+            <Text style={styles.mpgValue}>{row.value}</Text>
+            <Text style={styles.mpgLabel}>{row.label} stars</Text>
+          </View>
+        ))}
+      </View>
+      <Text style={styles.caveat}>
+        {ratings.vehicleDescription ? `${ratings.vehicleDescription}. ` : ""}
+        {SAFETY_RATINGS_NOTE}
+      </Text>
+    </View>
+  );
+}
+
+function OwnershipBlock({ ownership }: { ownership: ModelOwnership }) {
+  const bits: string[] = [];
+  if (ownership.annualFuelCost !== undefined) {
+    bits.push(
+      `Annual fuel cost (estimate) ${formatUsdEstimate(ownership.annualFuelCost)}`,
+    );
+  }
+  if (ownership.youSaveSpend !== undefined) {
+    bits.push(`${youSaveSpendCopy(ownership.youSaveSpend)} (estimate)`);
+  }
+  if (ownership.feScore !== undefined) bits.push(`Fuel economy score ${ownership.feScore}/10`);
+  if (ownership.ghgScore !== undefined) bits.push(`GHG score ${ownership.ghgScore}/10`);
+  if (ownership.co2 !== undefined) {
+    bits.push(`Tailpipe CO2 ${ownership.co2.toLocaleString("en-US")} g/mi`);
+  }
+  if (bits.length === 0) return null;
+  return (
+    <View wrap={false}>
+      <Text style={styles.briefHeading}>{EPA_OWNERSHIP_TITLE.toUpperCase()}</Text>
+      <Text style={styles.bullet}>{bits.join("  ·  ")}</Text>
+      <Text style={styles.caveat}>{EPA_OWNERSHIP_NOTE}</Text>
+    </View>
+  );
+}
+
+function EvBlock({ ev }: { ev: ModelEv }) {
+  const bits: string[] = [ev.kind === "PHEV" ? "Plug-in hybrid" : "Electric"];
+  if (ev.range !== undefined) {
+    bits.push(
+      `${ev.kind === "PHEV" ? "Electric range" : "Range"} ${ev.range.toLocaleString("en-US")} mi`,
+    );
+  }
+  if (ev.charge240 !== undefined) bits.push(`Charge at 240V ${ev.charge240} hr`);
+  if (ev.charge120 !== undefined) bits.push(`Charge at 120V ${ev.charge120} hr`);
+  if (ev.batteryKwh !== undefined) bits.push(`Battery ${ev.batteryKwh} kWh`);
+  if (ev.mpge) {
+    bits.push(
+      `${ev.mpge.city} city / ${ev.mpge.highway} hwy / ${ev.mpge.combined} combined MPGe`,
+    );
+  }
+  return (
+    <View wrap={false}>
+      <Text style={styles.briefHeading}>{EPA_EV_TITLE.toUpperCase()}</Text>
+      <Text style={styles.bullet}>{bits.join("  ·  ")}</Text>
+      <Text style={styles.caveat}>{EPA_EV_NOTE}</Text>
     </View>
   );
 }
@@ -836,11 +926,29 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
         </Text>
         {counts ? <Text style={styles.bullet}>{counts}</Text> : null}
       </View>
-      {extras.recalls?.campaigns.map((campaign, index) => (
-        <Text key={campaign.campaign} style={styles.bullet}>
-          Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
+      {hasSafetyRatings(extras.safetyRatings) ? (
+        <SafetyRatingsBlock ratings={extras.safetyRatings} />
+      ) : null}
+      {extras.recalls && recallHeaderBadges(extras.recalls).length > 0 ? (
+        <Text style={styles.bullet}>
+          NHTSA flags:{" "}
+          {recallHeaderBadges(extras.recalls)
+            .map((badge) => badge.label)
+            .join(" · ")}
         </Text>
-      ))}
+      ) : null}
+      {extras.recalls?.campaigns.map((campaign, index) => {
+        const badges = campaignBadges(campaign);
+        const flag = badges.length
+          ? ` [${badges.map((badge) => badge.label).join(", ")}]`
+          : "";
+        return (
+          <Text key={campaign.campaign} style={styles.bullet}>
+            Campaign {index + 1}: {campaign.title} (NHTSA {campaign.campaign})
+            {flag}
+          </Text>
+        );
+      })}
       {samples.length > 0 && extras.complaints && (
         <Text style={styles.sectionNote}>
           Showing {samples.length} of {extras.complaints.total} owner write-ups
@@ -853,7 +961,14 @@ function ModelExtrasBlock({ extras }: { extras: ModelExtras | null }) {
           {sample.components}: {clipPdf(sample.summary)}
         </Text>
       ))}
-      {extras.mpg ? <EpaMpgFigures mpg={extras.mpg} /> : null}
+      {hasEvCard(extras.ev) ? (
+        <EvBlock ev={extras.ev} />
+      ) : extras.mpg ? (
+        <EpaMpgFigures mpg={extras.mpg} />
+      ) : null}
+      {hasOwnership(extras.ownership) ? (
+        <OwnershipBlock ownership={extras.ownership} />
+      ) : null}
     </View>
   );
 }

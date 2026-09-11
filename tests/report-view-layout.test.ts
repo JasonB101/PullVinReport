@@ -64,6 +64,17 @@ describe("report view layout", () => {
     assert.match(card, /function EpaMpgFigures/);
     assert.match(card, /mpgFigureRows/);
     assert.match(card, /<MpgFigures/);
+    assert.match(card, /SAFETY_RATINGS_TITLE/);
+    assert.match(card, /function SafetyRatingsCard/);
+    assert.match(card, /border-sky-200/);
+    assert.match(card, /EPA_OWNERSHIP_TITLE/);
+    assert.match(card, /function OwnershipEconomics/);
+    assert.match(card, /Fuel costs are estimates|EPA_OWNERSHIP_NOTE/);
+    assert.match(card, /function EvChargeCard/);
+    assert.match(card, /hasEvCard\(extras\.ev\)/);
+    assert.match(card, /recallHeaderBadges/);
+    assert.match(card, /campaignBadges/);
+    assert.match(card, /Park it|badge\.label/);
     assert.doesNotMatch(
       card,
       /city \/ \{extras\.mpg\.highway\} hwy/,
@@ -311,6 +322,13 @@ describe("sample and paid extras parity", () => {
     );
     assert.match(card, /MODEL_ZONE_TITLE/);
     assert.match(card, /if \(!hasModelExtras\(extras\)\) return null/);
+    assert.match(card, /SAFETY_RATINGS_TITLE/);
+    assert.match(card, /EPA_OWNERSHIP_TITLE/);
+    assert.match(card, /EPA_EV_TITLE/);
+    assert.match(pdf, /SAFETY_RATINGS_TITLE/);
+    assert.match(pdf, /EPA_OWNERSHIP_TITLE/);
+    assert.match(pdf, /EPA_EV_TITLE/);
+    assert.match(pdf, /if \(!hasModelExtras\(extras\)\) return null/);
 
     const extrasAfter = view.indexOf("<ModelExtrasCard");
     const sections = view.indexOf("{sections.map((section) =>");

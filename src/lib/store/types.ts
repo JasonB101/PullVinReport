@@ -102,8 +102,10 @@ export interface OrderStore {
   /** Drop cached drawings whose key does not start with `keepPrefix`. */
   clearStaleVehicleHeroes(keepPrefix: string): Promise<number>;
   /**
-   * Public model extras (NHTSA / EPA), keyed by year/make/model — not by
-   * order or VIN. Payload is the already-summarised slice.
+   * Public model extras (NHTSA recalls / 5-Star / complaints, EPA), keyed by
+   * year/make/model — not by order or VIN. Payload is the already-summarised
+   * slice. Cache keys are versioned in model-extras (`v4|…`); TTL is 7 days
+   * for hits and 15 minutes for empty/failed slices.
    */
   getModelExtras(cacheKey: string): Promise<ModelExtrasRecord | null>;
   saveModelExtras(record: ModelExtrasRecord): Promise<void>;

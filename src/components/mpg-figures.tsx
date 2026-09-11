@@ -20,6 +20,7 @@ export function MpgFigures({
   fuelType,
   tone = "slate",
   emphasize = "combined",
+  unit = "mpg",
 }: {
   headingId?: string;
   heading: string;
@@ -28,6 +29,7 @@ export function MpgFigures({
   fuelType?: string;
   tone?: "slate" | "amber";
   emphasize?: "combined" | "none";
+  unit?: string;
 }) {
   if (figures.length === 0) return null;
 
@@ -75,7 +77,7 @@ export function MpgFigures({
               <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
                 {row.label}
               </p>
-              <p className="text-[11px] text-slate-400">mpg</p>
+              <p className="text-[11px] text-slate-400">{unit}</p>
             </li>
           );
         })}

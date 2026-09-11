@@ -104,6 +104,9 @@ export function cleanModelExtras(extras: ModelExtras): ModelExtras {
             ...(campaign.remedy
               ? { remedy: cleanCustomerLine(campaign.remedy) }
               : {}),
+            ...(campaign.takataNote
+              ? { takataNote: cleanCustomerLine(campaign.takataNote) }
+              : {}),
           })),
         }
       : extras.recalls,
@@ -121,6 +124,18 @@ export function cleanModelExtras(extras: ModelExtras): ModelExtras {
           })),
         }
       : extras.complaints,
+    safetyRatings: extras.safetyRatings
+      ? {
+          ...extras.safetyRatings,
+          ...(extras.safetyRatings.vehicleDescription
+            ? {
+                vehicleDescription: cleanCustomerLine(
+                  extras.safetyRatings.vehicleDescription,
+                ),
+              }
+            : {}),
+        }
+      : extras.safetyRatings,
   };
 }
 

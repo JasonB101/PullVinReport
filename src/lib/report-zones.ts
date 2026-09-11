@@ -38,3 +38,15 @@ export const SPEC_GROUP_MORE = "More specifications";
 export const EPA_MPG_TITLE = "EPA fuel economy";
 export const EPA_MPG_NOTE =
   "EPA listing for this model year, when it matches the engine on this report — not this VIN.";
+
+export const SAFETY_RATINGS_TITLE = "NHTSA 5-Star safety ratings";
+export const SAFETY_RATINGS_NOTE =
+  "NHTSA crash-test ratings for this model year — not this VIN.";
+
+export const EPA_OWNERSHIP_TITLE = "Ownership costs & emissions";
+export const EPA_OWNERSHIP_NOTE =
+  "EPA estimates for this model year, when they match the engine on this report — not this VIN. Fuel costs are estimates.";
+
+export const EPA_EV_TITLE = "Electric range & charging";
+export const EPA_EV_NOTE =
+  "EPA listing for this electric or plug-in hybrid model year, when it matches the powertrain on this report — not this VIN.";

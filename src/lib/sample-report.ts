@@ -126,6 +126,18 @@ export function buildSampleModelExtras(): ModelExtras {
       combined: 28,
       fuelType: "Regular Gasoline",
     },
+    ownership: {
+      annualFuelCost: 2250,
+      youSaveSpend: 0,
+    },
+    safetyRatings: {
+      overall: 5,
+      front: 4,
+      side: 5,
+      rollover: 4,
+      sidePole: 5,
+      vehicleDescription: "2012 Toyota Camry 4 DR FWD",
+    },
   };
 }
 
