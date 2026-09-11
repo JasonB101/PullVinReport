@@ -164,8 +164,8 @@ export function ymmCacheKey(year: string, make: string, model: string): string {
 /**
  * NHTSA often indexes a car under a shorter model name than the report prints.
  *
- * The 2016 Mini Clubman Cooper is the case that surfaced this: VinAudit / the
- * heading say "Clubman Cooper", vPIC Series is Cooper, and NHTSA recalls
+ * The 2016 Mini Clubman Cooper is the case that surfaced this: the report
+ * heading says "Clubman Cooper", vPIC Series is Cooper, and NHTSA recalls
  * 16V553000 / 17E051000 live under `Clubman` with zero rows for the longer
  * name. We only drop leading or trailing series tokens so `Grand Cherokee`
  * stays `Grand Cherokee`.
