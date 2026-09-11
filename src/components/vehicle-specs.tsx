@@ -20,6 +20,34 @@ import {
   VIN_SPECS_OPEN,
   VIN_SPECS_TITLE,
 } from "@/lib/report-zones";
+import { specIconPaths, type SpecIconName } from "@/lib/spec-icons";
+
+function SpecIcon({
+  name,
+  className = "h-4 w-4 text-slate-400",
+}: {
+  name: SpecIconName;
+  className?: string;
+}) {
+  const paths = specIconPaths(name);
+  if (!paths) return null;
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`shrink-0 ${className}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.7"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      {paths.map((d) => (
+        <path key={d} d={d} />
+      ))}
+    </svg>
+  );
+}
 
 function FieldValue({ value }: { value: string }) {
   return <span className="whitespace-pre-line break-words">{value}</span>;
@@ -91,7 +119,11 @@ function SpecsFace({
                     key={row.key}
                     className="rounded-2xl border border-slate-200 bg-white px-2.5 py-3 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
                   >
-                    <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">
+                    <SpecIcon
+                      name={row.key}
+                      className="mx-auto h-3.5 w-3.5 text-slate-400"
+                    />
+                    <p className="mt-1 text-3xl font-semibold tabular-nums tracking-tight text-slate-900">
                       {row.display}
                     </p>
                     <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
@@ -162,7 +194,8 @@ function SpecGroupSheet({ group }: { group: SpecGroup }) {
 
   return (
     <section className="mt-5">
-      <h3 className="text-sm font-semibold tracking-tight text-slate-900">
+      <h3 className="flex items-center gap-2 text-sm font-semibold tracking-tight text-slate-900">
+        <SpecIcon name={group.key} />
         {group.title}
       </h3>
       <div className="mt-2.5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">

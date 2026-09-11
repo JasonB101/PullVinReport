@@ -140,6 +140,9 @@ describe("report PDF", () => {
     assert.match(source, /groupSpecFields/);
     assert.match(source, /specMeasureFigures/);
     assert.match(source, /function SpecGroupPdf/);
+    assert.match(source, /function PdfSpecIcon/);
+    assert.match(source, /specIconPaths/);
+    assert.match(source, /<PdfSpecIcon name=\{group\.key\}/);
     assert.match(source, /function SpecMpgFigures/);
     assert.doesNotMatch(
       source,

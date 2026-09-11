@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
 import type { ReportSection, VehicleReport } from "../src/lib/report.ts";
+import { SPEC_ICON_PATHS, specIconPaths } from "../src/lib/spec-icons.ts";
 import {
   currentEvent,
   groupSpecFields,
@@ -1005,6 +1006,24 @@ describe("the specs on the vehicle card", () => {
       specTeaserFacts(fields, { exclude: summary, limit: 3 }).map((field) => field.label),
       ["Transmission", "Drive type", "Fuel type"],
     );
+  });
+
+  it("ships a stroke icon for every spec group and MPG tile", () => {
+    for (const name of [
+      "powertrain",
+      "body",
+      "features",
+      "price",
+      "more",
+      "city",
+      "highway",
+      "combined",
+    ] as const) {
+      const paths = specIconPaths(name);
+      assert.ok(paths && paths.length > 0, `${name} needs a path`);
+    }
+    assert.equal(specIconPaths("engine"), null);
+    assert.equal(Object.keys(SPEC_ICON_PATHS).length, 8);
   });
 
   it("keeps a mileage range instead of inventing one number", () => {

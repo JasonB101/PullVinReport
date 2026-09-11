@@ -211,7 +211,16 @@ describe("report view layout", () => {
     assert.match(specs, /VIN_SPECS_OPEN/);
     assert.match(specs, /THIS_VIN_CHIP/);
     assert.match(specs, /function SpecGroupSheet/);
+    assert.match(specs, /function SpecIcon/);
+    assert.match(specs, /specIconPaths/);
+    assert.match(specs, /<SpecIcon name=\{group\.key\}/);
+    assert.match(specs, /<SpecIcon[\s\S]*name=\{row\.key\}/);
     assert.match(specs, /specMeasureFigures/);
+    assert.ok(
+      specs.indexOf("<SpecIcon name={group.key}") <
+        specs.indexOf("{rest.map((field, index) =>"),
+      "icons belong on group headers, not on every spec row",
+    );
     assert.match(specs, /text-sm font-semibold tracking-tight text-slate-900/);
     assert.match(specs, /sm:grid-cols-\[minmax\(7.5rem,11rem\)_1fr\]/);
     assert.match(specs, /when-closed mt-4/);

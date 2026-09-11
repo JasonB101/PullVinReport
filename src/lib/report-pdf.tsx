@@ -18,7 +18,9 @@ import {
   Document,
   Image,
   Page,
+  Path,
   StyleSheet,
+  Svg,
   Text,
   View,
   renderToBuffer,
@@ -82,6 +84,7 @@ import {
   withResolvedDispositions,
 } from "@/lib/report";
 import { reportHealth } from "@/lib/report-health";
+import { specIconPaths } from "@/lib/spec-icons";
 import { HERO_ILLUSTRATION_LABEL } from "@/lib/vehicle-hero";
 import { normalizeVin, prettyVin } from "@/lib/vin";
 
@@ -284,13 +287,18 @@ const styles = StyleSheet.create({
     borderRadius: 3,
     overflow: "hidden",
   },
+  specGroupHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 6,
+    paddingTop: 5,
+    paddingBottom: 3,
+  },
   specGroupTitle: {
     fontFamily: "Helvetica-Bold",
     fontSize: 8,
     color: INK,
-    paddingHorizontal: 6,
-    paddingTop: 5,
-    paddingBottom: 3,
   },
   specMeasureRow: {
     flexDirection: "row",
@@ -702,6 +710,32 @@ function chunkFields<T>(items: T[], size: number): T[][] {
   return rows;
 }
 
+function PdfSpecIcon({
+  name,
+  size = 8,
+}: {
+  name: string;
+  size?: number;
+}) {
+  const paths = specIconPaths(name);
+  if (!paths) return null;
+  return (
+    <Svg viewBox="0 0 24 24" width={size} height={size}>
+      {paths.map((d) => (
+        <Path
+          key={d}
+          d={d}
+          stroke={MUTED}
+          strokeWidth={1.7}
+          fill="none"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ))}
+    </Svg>
+  );
+}
+
 function SpecGroupPdf({
   group,
 }: {
@@ -712,7 +746,10 @@ function SpecGroupPdf({
 
   return (
     <View style={styles.specGroup} wrap={false}>
-      <Text style={styles.specGroupTitle}>{group.title}</Text>
+      <View style={styles.specGroupHead}>
+        <PdfSpecIcon name={group.key} />
+        <Text style={styles.specGroupTitle}>{group.title}</Text>
+      </View>
       {measures.length > 0 ? (
         <View style={styles.specMeasureRow}>
           {measures.map((row) => (
@@ -748,6 +785,7 @@ function SpecMpgFigures({
       <View style={styles.mpgRow}>
         {figures.map((row) => (
           <View key={row.key} style={styles.specMpgCard}>
+            <PdfSpecIcon name={row.key} size={7} />
             <Text style={styles.mpgValue}>{row.display}</Text>
             <Text style={styles.mpgLabel}>{row.label}</Text>
             <Text style={styles.mpgUnit}>mpg</Text>
