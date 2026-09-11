@@ -162,6 +162,72 @@ export function ymmCacheKey(year: string, make: string, model: string): string {
 }
 
 /**
+ * NHTSA often indexes a car under a shorter model name than the report prints.
+ *
+ * The 2016 Mini Clubman Cooper is the case that surfaced this: VinAudit / the
+ * heading say "Clubman Cooper", vPIC Series is Cooper, and NHTSA recalls
+ * 16V553000 / 17E051000 live under `Clubman` with zero rows for the longer
+ * name. We only drop leading or trailing series tokens so `Grand Cherokee`
+ * stays `Grand Cherokee`.
+ */
+const NHTSA_SERIES_TOKENS = new Set([
+  "all4",
+  "base",
+  "cooper",
+  "ex",
+  "jcw",
+  "le",
+  "limited",
+  "lx",
+  "premium",
+  "s",
+  "se",
+  "si",
+  "sport",
+  "touring",
+  "xle",
+]);
+
+export function nhtsaModelCandidates(model: string): string[] {
+  const primary = model.trim().replace(/\s+/g, " ");
+  if (!primary) return [];
+
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (value: string) => {
+    const normalized = value.trim().replace(/\s+/g, " ");
+    const key = normalized.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
+  };
+
+  add(primary);
+  const parts = primary.split(" ");
+  if (parts.length < 2) return out;
+
+  let trailing = parts.slice();
+  while (
+    trailing.length > 1 &&
+    NHTSA_SERIES_TOKENS.has(trailing[trailing.length - 1]!.toLowerCase())
+  ) {
+    trailing = trailing.slice(0, -1);
+  }
+  add(trailing.join(" "));
+
+  let leading = parts.slice();
+  while (
+    leading.length > 1 &&
+    NHTSA_SERIES_TOKENS.has(leading[0]!.toLowerCase())
+  ) {
+    leading = leading.slice(1);
+  }
+  add(leading.join(" "));
+
+  return out;
+}
+
+/**
  * Litres from the report's engine line, used to pick one EPA row when a
  * model has more than one powertrain. `2.5L L4` → `2.5`. Empty when we
  * cannot tell — then MPG is only shown if every EPA option agrees.
@@ -684,17 +750,32 @@ function nhtsaQuery(ymm: Ymm): string {
   return params.toString();
 }
 
+async function firstMatchingSlice<T>(
+  ymm: Ymm,
+  load: (candidate: Ymm) => Promise<T | null>,
+): Promise<T | null> {
+  for (const model of nhtsaModelCandidates(ymm.model)) {
+    const parsed = await load({ ...ymm, model });
+    if (parsed) return parsed;
+  }
+  return null;
+}
+
 async function loadRecalls(ymm: Ymm): Promise<ModelRecalls | null> {
-  const payload = await getJson(`${RECALLS_URL}?${nhtsaQuery(ymm)}`);
-  return payload ? parseRecallsPayload(payload) : null;
+  return firstMatchingSlice(ymm, async (candidate) => {
+    const payload = await getJson(`${RECALLS_URL}?${nhtsaQuery(candidate)}`);
+    return payload ? parseRecallsPayload(payload) : null;
+  });
 }
 
 async function loadComplaints(ymm: Ymm): Promise<ModelComplaints | null> {
-  const payload = await getJson(`${COMPLAINTS_URL}?${nhtsaQuery(ymm)}`);
-  return payload ? parseComplaintsPayload(payload) : null;
+  return firstMatchingSlice(ymm, async (candidate) => {
+    const payload = await getJson(`${COMPLAINTS_URL}?${nhtsaQuery(candidate)}`);
+    return payload ? parseComplaintsPayload(payload) : null;
+  });
 }
 
-async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
+async function loadEpaVehiclesFor(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
   const optionsPayload = await getJson(
     `${EPA_OPTIONS_URL}?${new URLSearchParams({
       year: ymm.year,
@@ -722,6 +803,16 @@ async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
   // "no MPG for this model" for a week.
   if (vehicles.length === 0 && options.length > 0) return null;
   return vehicles;
+}
+
+async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
+  let sawEmptyMenu = false;
+  for (const model of nhtsaModelCandidates(ymm.model)) {
+    const vehicles = await loadEpaVehiclesFor({ ...ymm, model });
+    if (vehicles && vehicles.length > 0) return vehicles;
+    if (vehicles) sawEmptyMenu = true;
+  }
+  return sawEmptyMenu ? [] : null;
 }
 
 async function peekSlice<T>(

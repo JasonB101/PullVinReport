@@ -236,6 +236,12 @@ describe("sample and paid extras parity", () => {
       "the sample ships a static hero; it must not fetch or flash a draft",
     );
     assert.match(paidPage, /<ReportView/);
+    assert.match(paidPage, /extrasForReport\(report, store\)/);
+    assert.doesNotMatch(
+      paidPage,
+      /cachedExtrasForReport/,
+      "the paid HTML path must fetch extras like the PDF, not only peek the cache",
+    );
     assert.match(paidPage, /modelExtras=\{modelExtras\}/);
     assert.match(paidPage, /extrasToken=\{token\}/);
     assert.match(view, /<ModelExtrasCard extras=\{modelExtras\} token=\{extrasToken\} \/>/);

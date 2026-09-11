@@ -89,6 +89,8 @@ describe("download uses the server PDF, not window.print", () => {
     assert.match(serve, /renderStoredReportPdf/);
     assert.match(serve, /renderOrderReportPdf/);
     assert.match(email, /renderOrderReportPdf\(order, modelExtras\)/);
+    assert.match(serve, /extrasForReport\(\s*withCurrentLayout\(order\.report\)/);
+    assert.match(email, /extrasForReport\(withCurrentLayout\(order\.report\)/);
     assert.doesNotMatch(serve, /generateVehicleHero|heroForOrder/);
     assert.doesNotMatch(email, /generateVehicleHero|heroForOrder/);
   });

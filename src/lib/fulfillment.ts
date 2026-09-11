@@ -7,6 +7,7 @@ import { sendReportEmail } from "@/lib/email";
 import { extrasForReport } from "@/lib/model-extras";
 import { briefForOrder } from "@/lib/order-brief";
 import { refundOrder } from "@/lib/refund";
+import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
 import { pullVinAuditReport } from "@/lib/vinaudit";
@@ -114,7 +115,7 @@ export async function fulfillOrder(orderId: string): Promise<FulfillmentResult> 
 
   const [briefed, modelExtras] = await Promise.all([
     withBrief(fulfilled),
-    extrasForReport(report, store).catch((error) => {
+    extrasForReport(withCurrentLayout(report), store).catch((error) => {
       console.error(`[fulfillment] Model extras failed for ${order.id}`, error);
       return null;
     }),
