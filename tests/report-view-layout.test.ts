@@ -210,16 +210,21 @@ describe("report view layout", () => {
     assert.match(specs, /VIN_SPECS_NOTE/);
     assert.match(specs, /VIN_SPECS_OPEN/);
     assert.match(specs, /THIS_VIN_CHIP/);
-    assert.match(specs, /rounded-xl border border-slate-200\/90 bg-white/);
+    assert.match(specs, /function SpecGroupSheet/);
+    assert.match(specs, /specMeasureFigures/);
+    assert.match(specs, /text-sm font-semibold tracking-tight text-slate-900/);
+    assert.match(specs, /sm:grid-cols-\[minmax\(7.5rem,11rem\)_1fr\]/);
     assert.match(specs, /when-closed mt-4/);
+    assert.doesNotMatch(specs, /20 more details/);
     assert.doesNotMatch(
       specs,
-      /20 more details/,
+      /No data/,
+      "empty VinAudit placeholders must not be hard-coded into the spec sheet",
     );
     assert.doesNotMatch(
       specs,
       /border-t border-slate-100 pt-3/,
-      "VIN specs must be grouped cards, not a raw definition list",
+      "VIN specs must be grouped spec-sheet rows, not a raw definition list",
     );
   });
 

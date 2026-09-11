@@ -10,6 +10,7 @@ import {
   SPEC_GROUP_FEATURES,
   SPEC_GROUP_MORE,
   SPEC_GROUP_POWERTRAIN,
+  SPEC_GROUP_PRICE,
 } from "@/lib/report-zones";
 
 /**
@@ -1449,7 +1450,7 @@ export function reportPaintColorField(report: VehicleReport): Field | null {
 export function headerSpecifications(report: VehicleReport): Field[] {
   const color = reportPaintColorField(report);
   const rest = report.specifications.filter((field) => !isPaintColorLabel(field.label));
-  return color ? [color, ...rest] : rest;
+  return presentableSpecFields(color ? [color, ...rest] : rest);
 }
 
 export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {
@@ -1457,9 +1458,13 @@ export function headerSpecSummary(specifications: Field[], limit = 3): Field[] {
   for (const label of HEADER_SPEC_LABELS) {
     if (picked.length === limit) break;
     const spec = specifications.find((entry) => entry.label === label);
-    if (spec && !alreadyStated(picked, spec.value)) picked.push(spec);
+    if (spec && isPresentableSpecValue(spec.value) && !alreadyStated(picked, spec.value)) {
+      picked.push(spec);
+    }
   }
-  return picked.length > 0 ? picked : specifications.slice(0, limit);
+  return picked.length > 0
+    ? picked
+    : presentableSpecFields(specifications).slice(0, limit);
 }
 
 export type SpecMpgKind = "city" | "highway" | "combined";
@@ -1588,7 +1593,7 @@ export function specMpgTeaser(mpg: SpecMpg): string {
     .join(" · ")} mpg`;
 }
 
-export type SpecGroupKey = "powertrain" | "body" | "features" | "more";
+export type SpecGroupKey = "powertrain" | "body" | "features" | "price" | "more";
 
 export type SpecGroup = {
   key: SpecGroupKey;
@@ -1596,10 +1601,17 @@ export type SpecGroup = {
   fields: Field[];
 };
 
+export type SpecMeasure = {
+  key: string;
+  label: string;
+  display: string;
+};
+
 const SPEC_GROUP_TITLE: Record<SpecGroupKey, string> = {
   powertrain: SPEC_GROUP_POWERTRAIN,
   body: SPEC_GROUP_BODY,
   features: SPEC_GROUP_FEATURES,
+  price: SPEC_GROUP_PRICE,
   more: SPEC_GROUP_MORE,
 };
 
@@ -1607,8 +1619,26 @@ const SPEC_GROUP_ORDER: SpecGroupKey[] = [
   "powertrain",
   "body",
   "features",
+  "price",
   "more",
 ];
+
+/**
+ * VinAudit fills unknown attributes with "No data". Those rows make the
+ * spec sheet look broken; omit them rather than printing the placeholder.
+ * A real "No" (yes/no flag) and a real 0 stay.
+ */
+const BLANK_SPEC_VALUE =
+  /^(no data|n\/a|n\/a\.|not available|not applicable|unknown|null|undefined|none|-|—|–|\.)$/i;
+
+export function isPresentableSpecValue(value: string): boolean {
+  const n = value.replace(/\s+/g, " ").trim();
+  return n.length > 0 && !BLANK_SPEC_VALUE.test(n);
+}
+
+export function presentableSpecFields(fields: Field[]): Field[] {
+  return fields.filter((field) => isPresentableSpecValue(field.value));
+}
 
 /**
  * Closed-face chips under the MPG tiles — complementary to the header line,
@@ -1630,6 +1660,13 @@ const TEASER_SPEC_LABELS = [
 function specGroupKey(label: string): SpecGroupKey {
   const n = normalizeSpecLabel(label);
   if (!n) return "more";
+
+  if (
+    /^(msrp|invoice|invoice price|destination|destination charge)$/.test(n) ||
+    /\b(msrp|invoice price|destination charge)\b/.test(n)
+  ) {
+    return "price";
+  }
 
   if (
     /^(engine|engine type|engine size|engine cylinders|cylinders|displacement|horsepower|torque|aspiration|turbocharger|hybrid|electric range|motor|transmission|transmission type|trans|drivetrain|drive type|drive|driveline|fuel type|fuel|fuel tank|fuel capacity|tank size)$/.test(
@@ -1671,9 +1708,47 @@ function specGroupKey(label: string): SpecGroupKey {
  * same groups. Unknown labels land in More specifications — nothing is
  * dropped or invented.
  */
+const SPEC_MEASURES: { match: RegExp; key: string; label: string }[] = [
+  { match: /^(overall length|length)$/, key: "length", label: "Length" },
+  { match: /^(overall width|width)$/, key: "width", label: "Width" },
+  { match: /^(overall height|height)$/, key: "height", label: "Height" },
+  { match: /^wheelbase$/, key: "wheelbase", label: "Wheelbase" },
+  { match: /^standard seating$/, key: "seats", label: "Seats" },
+  { match: /^(tank size|fuel tank|fuel capacity)$/, key: "tank", label: "Tank" },
+];
+
+/**
+ * Lifts length / height / seats / tank into compact figures when a group
+ * has two or more. A single measure stays a row so it is not a lonely tile.
+ * Values are printed as they arrived — no units invented.
+ */
+export function specMeasureFigures(fields: Field[]): {
+  measures: SpecMeasure[];
+  rest: Field[];
+} {
+  const measures: SpecMeasure[] = [];
+  const rest: Field[] = [];
+  const used = new Set<string>();
+
+  for (const field of fields) {
+    if (!isPresentableSpecValue(field.value)) continue;
+    const n = normalizeSpecLabel(field.label);
+    const rule = SPEC_MEASURES.find((entry) => entry.match.test(n));
+    if (rule && !used.has(rule.key)) {
+      used.add(rule.key);
+      measures.push({ key: rule.key, label: rule.label, display: field.value });
+    } else {
+      rest.push(field);
+    }
+  }
+
+  if (measures.length < 2) return { measures: [], rest: presentableSpecFields(fields) };
+  return { measures, rest };
+}
+
 export function groupSpecFields(fields: Field[]): SpecGroup[] {
   const buckets = new Map<SpecGroupKey, Field[]>();
-  for (const field of fields) {
+  for (const field of presentableSpecFields(fields)) {
     const key = specGroupKey(field.label);
     const list = buckets.get(key);
     if (list) list.push(field);
@@ -1701,7 +1776,7 @@ export function specTeaserFacts(
   const excluded = new Set(
     (options.exclude ?? []).map((field) => `${field.label}\0${field.value}`),
   );
-  const available = fields.filter(
+  const available = presentableSpecFields(fields).filter(
     (field) => !excluded.has(`${field.label}\0${field.value}`),
   );
   const picked: Field[] = [];

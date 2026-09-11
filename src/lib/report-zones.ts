@@ -31,6 +31,7 @@ export const SPEC_MPG_NOTE =
 export const SPEC_GROUP_POWERTRAIN = "Powertrain";
 export const SPEC_GROUP_BODY = "Body & dimensions";
 export const SPEC_GROUP_FEATURES = "Equipment";
+export const SPEC_GROUP_PRICE = "Manufacturer pricing";
 export const SPEC_GROUP_MORE = "More specifications";
 
 /** EPA MPG is a model-year listing, never a reading from this VIN. */

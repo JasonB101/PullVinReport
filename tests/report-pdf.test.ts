@@ -138,7 +138,14 @@ describe("report PDF", () => {
     assert.match(source, /THIS_VIN_CHIP/);
     assert.match(source, /partitionSpecMpg/);
     assert.match(source, /groupSpecFields/);
+    assert.match(source, /specMeasureFigures/);
+    assert.match(source, /function SpecGroupPdf/);
     assert.match(source, /function SpecMpgFigures/);
+    assert.doesNotMatch(
+      source,
+      /No data/,
+      "PDF must not print VinAudit No data placeholders",
+    );
     assert.match(source, /SPEC_MPG_TITLE/);
     assert.match(source, /SPEC_MPG_NOTE/);
     assert.match(source, /function EpaMpgFigures/);

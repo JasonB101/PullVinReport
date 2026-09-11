@@ -5,8 +5,11 @@ import {
   groupSpecFields,
   headerSpecSummary,
   partitionSpecMpg,
+  specMeasureFigures,
   specMpgTeaser,
   specTeaserFacts,
+  type SpecGroup,
+  type SpecMeasure,
   type SpecMpg,
 } from "@/lib/report";
 import {
@@ -131,16 +134,60 @@ function SpecsFace({
   );
 }
 
-function SpecCard({ field }: { field: Field }) {
+function MeasureStrip({ measures }: { measures: SpecMeasure[] }) {
+  const columns =
+    measures.length === 2
+      ? "max-w-[18rem] grid-cols-2"
+      : measures.length === 3
+        ? "max-w-[28rem] grid-cols-3"
+        : "max-w-xl grid-cols-2 sm:grid-cols-4";
+
   return (
-    <div className="min-w-0 rounded-xl border border-slate-200/90 bg-white px-4 py-3.5 shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
-      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400">
-        {field.label}
-      </dt>
-      <dd className="mt-1.5 break-words text-[15px] font-medium leading-snug tracking-tight text-slate-900">
-        <FieldValue value={field.value} />
-      </dd>
-    </div>
+    <ul className={`grid gap-2.5 px-4 pt-4 ${columns}`}>
+      {measures.map((row) => (
+        <li key={row.key} className="min-w-0 text-left">
+          <p className="text-[15px] font-semibold tabular-nums tracking-tight text-slate-900">
+            {row.display}
+          </p>
+          <p className="mt-0.5 text-sm text-slate-500">{row.label}</p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function SpecGroupSheet({ group }: { group: SpecGroup }) {
+  const { measures, rest } = specMeasureFigures(group.fields);
+  if (measures.length === 0 && rest.length === 0) return null;
+
+  return (
+    <section className="mt-5">
+      <h3 className="text-sm font-semibold tracking-tight text-slate-900">
+        {group.title}
+      </h3>
+      <div className="mt-2.5 overflow-hidden rounded-2xl border border-slate-200/90 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]">
+        {measures.length > 0 && <MeasureStrip measures={measures} />}
+        {rest.length > 0 && (
+          <dl
+            className={
+              measures.length > 0 ? "border-t border-slate-100" : undefined
+            }
+          >
+            {rest.map((field, index) => (
+              <div
+                key={`${field.label}-${index}`}
+                className="grid grid-cols-1 gap-0.5 px-4 py-3 sm:grid-cols-[minmax(7.5rem,11rem)_1fr] sm:items-baseline sm:gap-6 [&:not(:first-child)]:border-t [&:not(:first-child)]:border-slate-100"
+              >
+                <dt className="text-sm text-slate-500">{field.label}</dt>
+                <dd className="text-[15px] font-medium leading-snug tracking-tight text-slate-900">
+                  <FieldValue value={field.value} />
+                </dd>
+              </div>
+            ))}
+          </dl>
+        )}
+      </div>
+    </section>
   );
 }
 
@@ -149,8 +196,8 @@ function SpecCard({ field }: { field: Field }) {
  *
  * Closed: a designed teaser — MPG tiles, a few complementary chips, and a
  * Show-specifications control. Open: MPG as the hero band, then grouped
- * cards (powertrain, body, equipment). Print opens it. Same fields the
- * PDF prints; nothing invented.
+ * spec-sheet rows (powertrain, body, equipment, pricing). Empty provider
+ * placeholders are omitted. Print opens it. Same fields the PDF prints.
  */
 export function VehicleSpecs({ specifications }: { specifications: Field[] }) {
   if (specifications.length === 0) return null;
@@ -187,16 +234,7 @@ export function VehicleSpecs({ specifications }: { specifications: Field[] }) {
         )}
 
         {groups.map((group) => (
-          <section key={group.key} className="mt-6">
-            <h3 className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
-              {group.title}
-            </h3>
-            <dl className="mt-3 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {group.fields.map((field, index) => (
-                <SpecCard key={`${field.label}-${index}`} field={field} />
-              ))}
-            </dl>
-          </section>
+          <SpecGroupSheet key={group.key} group={group} />
         ))}
       </div>
     </ScrollOpenDetails>

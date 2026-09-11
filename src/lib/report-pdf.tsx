@@ -71,6 +71,7 @@ import {
   groupSpecFields,
   headerSpecifications,
   partitionSpecMpg,
+  specMeasureFigures,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
@@ -269,31 +270,47 @@ const styles = StyleSheet.create({
     color: MUTED,
   },
   specNote: { color: MUTED, fontSize: 7, marginBottom: 6 },
-  specGroup: { marginTop: 7 },
-  specGroupTitle: {
+  specMpgHeading: {
     fontFamily: "Helvetica-Bold",
-    fontSize: 6.5,
-    letterSpacing: 0.7,
-    color: FAINT,
-    textTransform: "uppercase",
-    marginBottom: 3,
+    fontSize: 8,
+    color: INK,
+    marginBottom: 2,
   },
-  specGrid: { flexDirection: "row", flexWrap: "wrap" },
-  spec: {
-    width: "33.3%",
-    paddingRight: 8,
-    marginBottom: 5,
-  },
-  specCard: {
+  specGroup: {
+    marginTop: 7,
     borderWidth: 1,
     borderColor: LINE,
     backgroundColor: "#ffffff",
     borderRadius: 3,
-    paddingVertical: 4,
-    paddingHorizontal: 5,
+    overflow: "hidden",
   },
-  specLabel: { fontSize: 6.5, color: FAINT, textTransform: "uppercase", letterSpacing: 0.5 },
-  specValue: { fontFamily: "Helvetica-Bold", fontSize: 8.5, marginTop: 1 },
+  specGroupTitle: {
+    fontFamily: "Helvetica-Bold",
+    fontSize: 8,
+    color: INK,
+    paddingHorizontal: 6,
+    paddingTop: 5,
+    paddingBottom: 3,
+  },
+  specMeasureRow: {
+    flexDirection: "row",
+    gap: 8,
+    paddingHorizontal: 6,
+    paddingBottom: 5,
+  },
+  specMeasure: { minWidth: 56 },
+  specMeasureValue: { fontFamily: "Helvetica-Bold", fontSize: 9 },
+  specMeasureLabel: { fontSize: 7, color: MUTED, marginTop: 1 },
+  specRow: {
+    flexDirection: "row",
+    borderTopWidth: 1,
+    borderTopColor: "#f1f5f9",
+    paddingVertical: 3.5,
+    paddingHorizontal: 6,
+  },
+  specCell: { width: "50%", paddingRight: 8 },
+  specRowLabel: { fontSize: 7, color: MUTED },
+  specRowValue: { fontFamily: "Helvetica-Bold", fontSize: 8, marginTop: 1 },
   mpgRow: { flexDirection: "row", gap: 6, marginTop: 4 },
   mpgCard: {
     width: 72,
@@ -677,6 +694,49 @@ function clipPdf(value: string, max = 160): string {
   return `${text.slice(0, max - 1).trimEnd()}…`;
 }
 
+function chunkFields<T>(items: T[], size: number): T[][] {
+  const rows: T[][] = [];
+  for (let i = 0; i < items.length; i += size) {
+    rows.push(items.slice(i, i + size));
+  }
+  return rows;
+}
+
+function SpecGroupPdf({
+  group,
+}: {
+  group: { key: string; title: string; fields: Field[] };
+}) {
+  const { measures, rest } = specMeasureFigures(group.fields);
+  if (measures.length === 0 && rest.length === 0) return null;
+
+  return (
+    <View style={styles.specGroup} wrap={false}>
+      <Text style={styles.specGroupTitle}>{group.title}</Text>
+      {measures.length > 0 ? (
+        <View style={styles.specMeasureRow}>
+          {measures.map((row) => (
+            <View key={row.key} style={styles.specMeasure}>
+              <Text style={styles.specMeasureValue}>{row.display}</Text>
+              <Text style={styles.specMeasureLabel}>{row.label}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+      {chunkFields(rest, 2).map((pair, index) => (
+        <View key={index} style={styles.specRow}>
+          {pair.map((spec) => (
+            <View key={spec.label} style={styles.specCell}>
+              <Text style={styles.specRowLabel}>{spec.label}</Text>
+              <Text style={styles.specRowValue}>{spec.value}</Text>
+            </View>
+          ))}
+        </View>
+      ))}
+    </View>
+  );
+}
+
 function SpecMpgFigures({
   figures,
 }: {
@@ -684,7 +744,7 @@ function SpecMpgFigures({
 }) {
   return (
     <View wrap={false}>
-      <Text style={styles.specGroupTitle}>{SPEC_MPG_TITLE}</Text>
+      <Text style={styles.specMpgHeading}>{SPEC_MPG_TITLE}</Text>
       <View style={styles.mpgRow}>
         {figures.map((row) => (
           <View key={row.key} style={styles.specMpgCard}>
@@ -836,19 +896,7 @@ export function ReportDocument({
             <Text style={styles.specNote}>{VIN_SPECS_NOTE}</Text>
             {specMpg ? <SpecMpgFigures figures={specMpg.figures} /> : null}
             {groupSpecFields(specRest).map((group) => (
-              <View key={group.key} style={styles.specGroup} wrap={false}>
-                <Text style={styles.specGroupTitle}>{group.title}</Text>
-                <View style={styles.specGrid}>
-                  {group.fields.map((spec, index) => (
-                    <View key={`${spec.label}-${index}`} style={styles.spec}>
-                      <View style={styles.specCard}>
-                        <Text style={styles.specLabel}>{spec.label}</Text>
-                        <Text style={styles.specValue}>{spec.value}</Text>
-                      </View>
-                    </View>
-                  ))}
-                </View>
-              </View>
+              <SpecGroupPdf key={group.key} group={group} />
             ))}
           </View>
         )}
