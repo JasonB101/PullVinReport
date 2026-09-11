@@ -177,7 +177,7 @@ describe("where the tag is mounted", () => {
     assert.ok(unmatched > 0 && unmatched < mount);
   });
 
-  it("is absent from landing, sample, preview, and canceled checkout", async () => {
+  it("does not fire Purchase on landing, sample, preview, or canceled checkout", async () => {
     const surfaces = [
       "app/layout.tsx",
       "app/page.tsx",
@@ -188,12 +188,19 @@ describe("where the tag is mounted", () => {
     ];
     for (const file of surfaces) {
       const source = await readSrc(file);
-      assert.doesNotMatch(
-        source,
-        /GoogleAdsPurchase|AW-1844093667|gtag\/js/,
-        file,
-      );
+      assert.doesNotMatch(source, /GoogleAdsPurchase|VQOrCJabp_IcEJPRqdlE/, file);
     }
+  });
+
+  it("configs the AW tag sitewide without sending the Purchase event", async () => {
+    const component = await readSrc("components/google-analytics.tsx");
+    const bootstrap = await readSrc("lib/google-analytics.ts");
+    assert.match(component, /sitewideGtagInlineScript/);
+    assert.match(bootstrap, /GOOGLE_ADS_ID/);
+    assert.match(bootstrap, /gtag\('config'/);
+    assert.doesNotMatch(component, /firePurchaseConversionOnce|VQOrCJabp_IcEJPRqdlE/);
+    assert.doesNotMatch(bootstrap, /firePurchaseConversionOnce/);
+    assert.doesNotMatch(bootstrap, /VQOrCJabp_IcEJPRqdlE/);
   });
 });
 

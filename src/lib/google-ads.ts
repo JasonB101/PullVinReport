@@ -1,9 +1,10 @@
 /**
  * Google Ads conversion IDs for vehiclehistorybyvin.com.
  *
- * The base tag is loaded only on the paid confirmation path. The Purchase
- * event is fired once per order after Stripe has confirmed payment — never
- * on the landing page, the sample report, or an abandoned checkout.
+ * The base tag (gtag config AW-1844093667) is loaded sitewide so Ads can
+ * attribute sessions. The Purchase event is still fired once per order after
+ * Stripe has confirmed payment — never on the landing page, the sample
+ * report, or an abandoned checkout. Tags are for vehiclehistorybyvin.com only.
  */
 
 export const GOOGLE_ADS_ID = "AW-1844093667";
