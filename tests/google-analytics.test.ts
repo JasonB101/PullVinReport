@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises";
 import { afterEach, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { gaMeasurementId, gaScriptSrc } from "../src/lib/google-analytics.ts";
+import { GOOGLE_ADS_SCRIPT_SRC } from "../src/lib/google-ads.ts";
+import {
+  gaMeasurementId,
+  gaScriptSrc,
+  sitewideGtagInlineScript,
+  sitewideGtagScriptSrc,
+} from "../src/lib/google-analytics.ts";
 
 const SRC = fileURLToPath(new URL("../src/", import.meta.url));
 const ROOT = fileURLToPath(new URL("../", import.meta.url));
@@ -46,6 +52,28 @@ describe("gaMeasurementId", () => {
   });
 });
 
+describe("sitewide gtag bootstrap", () => {
+  it("always configs AW-1844093667 and adds GA4 when a G- id is set", () => {
+    const withGa = sitewideGtagInlineScript("G-E2Z25ZEBVF");
+    assert.match(withGa, /gtag\('config', "G-E2Z25ZEBVF"\)/);
+    assert.match(withGa, /gtag\('config', "AW-1844093667"\)/);
+    assert.doesNotMatch(withGa, /VQOrCJabp_IcEJPRqdlE/);
+    assert.doesNotMatch(withGa, /['"]conversion['"]/);
+    assert.doesNotMatch(withGa, /pullvinreport/i);
+
+    const adsOnly = sitewideGtagInlineScript(undefined);
+    assert.doesNotMatch(adsOnly, /gtag\('config', "G-/);
+    assert.match(adsOnly, /gtag\('config', "AW-1844093667"\)/);
+    assert.doesNotMatch(adsOnly, /VQOrCJabp_IcEJPRqdlE|pullvinreport/i);
+
+    assert.equal(
+      sitewideGtagScriptSrc("G-E2Z25ZEBVF"),
+      "https://www.googletagmanager.com/gtag/js?id=G-E2Z25ZEBVF",
+    );
+    assert.equal(sitewideGtagScriptSrc(undefined), GOOGLE_ADS_SCRIPT_SRC);
+  });
+});
+
 describe("where GA4 is mounted", () => {
   it("loads gtag.js from the root layout via Script afterInteractive", async () => {
     const layout = await readSrc("app/layout.tsx");
@@ -53,11 +81,11 @@ describe("where GA4 is mounted", () => {
     assert.match(layout, /<GoogleAnalytics \/>/);
     assert.doesNotMatch(layout, /G-E2Z25ZEBVF|AW-1844093667|GTM-/);
     assert.match(component, /strategy="afterInteractive"/);
-    assert.match(component, /gaScriptSrc\(measurementId\)/);
-    assert.match(component, /gtag\('config'/);
+    assert.match(component, /sitewideGtagScriptSrc\(measurementId\)/);
+    assert.match(component, /sitewideGtagInlineScript\(measurementId\)/);
     assert.match(component, /NEXT_PUBLIC_GA_MEASUREMENT_ID|gaMeasurementId/);
     assert.doesNotMatch(component, /G-E2Z25ZEBVF/);
-    assert.doesNotMatch(component, /AW-1844093667|GoogleAdsPurchase|GTM-/);
+    assert.doesNotMatch(component, /GTM-|VQOrCJabp_IcEJPRqdlE/);
   });
 
   it("does not hardcode a measurement ID in source", async () => {
@@ -76,9 +104,11 @@ describe("where GA4 is mounted", () => {
     const example = await readRoot(".env.example");
     assert.match(
       example,
-      /# Sitewide GA4 \(gtag\)\. Set to a G- id \(e\.g\. G-E2Z25ZEBVF\) to load; leave empty to omit the script\./,
+      /# Sitewide GA4 \(gtag\)\. Set to a G- id \(e\.g\. G-E2Z25ZEBVF\) to load; leave empty to omit the GA4 config\./,
     );
+    assert.match(example, /AW-1844093667 is always configured on the same sitewide gtag/);
     assert.match(example, /NEXT_PUBLIC_GA_MEASUREMENT_ID=""/);
+    assert.doesNotMatch(example, /pullvinreport\.com.*gtag|gtag.*pullvinreport\.com/i);
   });
 });
 

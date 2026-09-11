@@ -105,5 +105,7 @@ describe("VIN-first checkout", () => {
     assert.match(success, /<GoogleAdsPurchase orderId=\{order\.id\} \/>/);
     assert.match(layout, /<GoogleAnalytics \/>/);
     assert.match(ga, /NEXT_PUBLIC_GA_MEASUREMENT_ID/);
+    assert.match(ga, /GOOGLE_ADS_ID/);
+    assert.doesNotMatch(ga, /VQOrCJabp_IcEJPRqdlE/);
   });
 });
