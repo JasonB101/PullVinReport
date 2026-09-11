@@ -75,6 +75,8 @@ describe("report view layout", () => {
     );
     assert.match(figures, /grid-cols-3/);
     assert.match(figures, /grid-cols-2/);
+    assert.match(figures, /max-w-\[18rem\]/);
+    assert.match(figures, /max-w-\[28rem\]/);
   });
 
   it("keeps VIN brief bullets and model notes in separate labelled lists", async () => {

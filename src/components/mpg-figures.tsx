@@ -32,6 +32,7 @@ export function MpgFigures({
   if (figures.length === 0) return null;
 
   const columns = figures.length === 2 ? "grid-cols-2" : "grid-cols-3";
+  const cluster = figures.length === 2 ? "max-w-[18rem]" : "max-w-[28rem]";
   const chip =
     tone === "amber"
       ? "bg-white text-slate-600 ring-amber-200"
@@ -41,13 +42,13 @@ export function MpgFigures({
     <div>
       <p
         id={headingId}
-        className="text-[11px] font-semibold uppercase tracking-wider text-slate-400"
+        className="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400"
       >
         {heading}
       </p>
       <ul
         aria-labelledby={headingId}
-        className={`mt-2 grid gap-2 ${columns}`}
+        className={`mt-3 grid gap-2.5 ${columns} ${cluster}`}
       >
         {figures.map((row) => {
           const featured = emphasize === "combined" && row.key === "combined";
@@ -58,11 +59,11 @@ export function MpgFigures({
                 : "border-amber-200/80 bg-white/80"
               : featured
                 ? "border-slate-300 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                : "border-slate-200 bg-slate-50/80";
+                : "border-slate-200 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]";
           return (
             <li
               key={row.key}
-              className={`rounded-xl border px-2 py-3 text-center sm:px-3 ${face}`}
+              className={`rounded-2xl border px-2.5 py-3.5 text-center sm:px-3 ${face}`}
             >
               <p
                 className={`font-semibold tabular-nums tracking-tight text-slate-900 ${

@@ -70,47 +70,52 @@ function SpecsFace({
         <Chevron className="disclosure-chevron mt-1 text-slate-400" />
       </div>
 
-      {mpg && (
-        <div className="when-closed mt-4">
-          <p className="sr-only">{specMpgTeaser(mpg)}</p>
-          <ul
-            aria-hidden="true"
-            className={`grid gap-2 ${
-              mpg.figures.length === 2 ? "grid-cols-2" : "grid-cols-3"
-            }`}
-          >
-            {mpg.figures.map((row) => (
-              <li
-                key={row.key}
-                className="rounded-xl border border-slate-200/90 bg-white px-2 py-2.5 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:px-3"
+      {(mpg || facts.length > 0) && (
+        <div className="when-closed mt-4 flex flex-col gap-3 sm:flex-row sm:items-end sm:gap-5">
+          {mpg && (
+            <div className="min-w-0">
+              <p className="sr-only">{specMpgTeaser(mpg)}</p>
+              <ul
+                aria-hidden="true"
+                className={`grid gap-2.5 ${
+                  mpg.figures.length === 2
+                    ? "max-w-[18rem] grid-cols-2"
+                    : "max-w-[28rem] grid-cols-3"
+                }`}
               >
-                <p className="text-2xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-[1.75rem]">
-                  {row.display}
-                </p>
-                <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                  {row.label}
-                </p>
-                <p className="text-[11px] text-slate-400">mpg</p>
-              </li>
-            ))}
-          </ul>
+                {mpg.figures.map((row) => (
+                  <li
+                    key={row.key}
+                    className="rounded-2xl border border-slate-200 bg-white px-2.5 py-3 text-center shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
+                  >
+                    <p className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900">
+                      {row.display}
+                    </p>
+                    <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+                      {row.label}
+                    </p>
+                    <p className="text-[11px] text-slate-400">mpg</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {facts.length > 0 && (
+            <ul className="flex min-w-0 flex-wrap content-end gap-2 pb-0.5">
+              {facts.map((field, index) => (
+                <li
+                  key={`${field.label}-${index}`}
+                  className="inline-flex max-w-full items-baseline gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs ring-1 ring-inset ring-slate-200"
+                >
+                  <span className="shrink-0 text-slate-400">{field.label}</span>
+                  <span className="min-w-0 break-words font-medium text-slate-800">
+                    <FieldValue value={field.value} />
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
-      )}
-
-      {facts.length > 0 && (
-        <ul className="when-closed mt-3 flex flex-wrap gap-2">
-          {facts.map((field, index) => (
-            <li
-              key={`${field.label}-${index}`}
-              className="inline-flex max-w-full items-baseline gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs ring-1 ring-inset ring-slate-200"
-            >
-              <span className="shrink-0 text-slate-400">{field.label}</span>
-              <span className="min-w-0 break-words font-medium text-slate-800">
-                <FieldValue value={field.value} />
-              </span>
-            </li>
-          ))}
-        </ul>
       )}
 
       <span className="when-closed mt-3 flex min-h-11 items-center gap-1.5 text-sm font-medium text-brand-600">
