@@ -17,7 +17,7 @@ export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.png";
  * Bump this when the drawing contract changes (colour source, cutout, prompt)
  * so a cached white studio shot cannot be served as the new hero.
  */
-export const HERO_CACHE_VERSION = "cutout-v1";
+export const HERO_CACHE_VERSION = "cutout-v2";
 
 /**
  * Caption under the PDF hero. The on-page cutout has no on-image label
@@ -27,6 +27,17 @@ export const HERO_CACHE_VERSION = "cutout-v1";
 export const HERO_ILLUSTRATION_LABEL = "Illustration — not this VIN";
 
 const TRIM_LABELS = ["Trim", "Trim level", "Series", "Package"];
+const BODY_LABELS = ["Style", "Body Type", "Body Style", "Body"];
+
+/**
+ * Recraft will happily draw the common hardtop of a model (Beetle, 911)
+ * when the catalog string only mentions Convertible in passing. An explicit
+ * clause is what actually changes the body.
+ */
+const OPEN_TOP_WORD = /\b(convertible|cabriolet|roadster|soft-?top)\b/i;
+const SHORT_OPEN_TOP = /^(convertible|cabriolet|roadster|soft-?top)$/i;
+const OPEN_TOP_CLAUSE =
+  "convertible cabriolet with folding fabric soft-top; not a hardtop coupe; show the open-top body or convertible roofline.";
 
 export type HeroFacts = {
   year: string;
@@ -107,6 +118,30 @@ export function heroFactsFromParts(parts: HeroVehicleParts): HeroFacts | null {
   return { year, make, model, trim, color, bodyStyle, engine, cacheKey };
 }
 
+function canonicalOpenTopToken(value: string): string {
+  const lower = value.toLowerCase();
+  if (lower === "cabriolet") return "Cabriolet";
+  if (lower === "roadster") return "Roadster";
+  if (lower.startsWith("soft")) return "Soft-top";
+  return "Convertible";
+}
+
+/**
+ * A catalog `Style` is often a long line (`2.0T S Convertible 2D`).
+ * When a short body token is also on the record, that is what Recraft
+ * should see.
+ */
+function preferHeroBodyStyle(vehicleBody: string, candidates: string[]): string {
+  const short = [vehicleBody, ...candidates]
+    .map(normalizePart)
+    .find((value) => SHORT_OPEN_TOP.test(value));
+  return short ? canonicalOpenTopToken(short) : vehicleBody;
+}
+
+export function isOpenTopHero(facts: Pick<HeroFacts, "trim" | "bodyStyle">): boolean {
+  return OPEN_TOP_WORD.test(`${facts.trim} ${facts.bodyStyle}`);
+}
+
 /**
  * The facts an illustration may use — year, make, model, a richer listing
  * trim when one exists, an exterior colour from the build record or listings,
@@ -128,7 +163,10 @@ export function heroFacts(report: VehicleReport): HeroFacts | null {
     model: report.vehicle.model,
     trim: pickRicher(report.vehicle.trim ?? "", fieldValues(allFields, TRIM_LABELS)),
     color: reportPaintColor(report),
-    bodyStyle: report.vehicle.bodyStyle,
+    bodyStyle: preferHeroBodyStyle(
+      normalizePart(report.vehicle.bodyStyle ?? ""),
+      fieldValues(allFields, BODY_LABELS),
+    ),
     engine: report.vehicle.engine,
   });
 }
@@ -142,15 +180,19 @@ export function heroPrompt(facts: HeroFacts): string {
   const colorLine = facts.color
     ? `Exact exterior colour: ${facts.color}. Paint the whole body ${facts.color} — not white, not a default studio silver, not a different shade.`
     : "Paint colour as a typical factory example for this year, make and model.";
+  const openTop = isOpenTopHero(facts) ? OPEN_TOP_CLAUSE : "";
 
   return [
     `Isolated product-cutout illustration of a generic example ${name}${body}${engine}.`,
+    openTop,
     colorLine,
     "Three-quarter front view, clean stock catalog cutout, illustrated vehicle only.",
     "Transparent background, no studio backdrop, no floor, no ground shadow plate, no scenery, no horizon.",
     "Soft illustrated product rendering — not a photograph of a real specific vehicle, no photoreal VIN clone, no 3D dealership catalog photo.",
     "No people, no license plate, no VIN, no badge text.",
-  ].join(" ");
+  ]
+    .filter(Boolean)
+    .join(" ");
 }
 
 export function heroAlt(facts: HeroFacts): string {
