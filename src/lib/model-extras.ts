@@ -1098,6 +1098,16 @@ export function safetyFigureRows(ratings: ModelSafetyRatings): SafetyFigure[] {
   return rows;
 }
 
+export function safetyOverallFigure(
+  ratings: ModelSafetyRatings,
+): SafetyFigure | undefined {
+  return safetyFigureRows(ratings).find((row) => row.key === "overall");
+}
+
+export function safetyCategoryRows(ratings: ModelSafetyRatings): SafetyFigure[] {
+  return safetyFigureRows(ratings).filter((row) => row.key !== "overall");
+}
+
 /* -------------------------------------------------------------------------- */
 /* Fetch + cache                                                              */
 /* -------------------------------------------------------------------------- */

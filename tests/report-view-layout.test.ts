@@ -66,7 +66,18 @@ describe("report view layout", () => {
     assert.match(card, /<MpgFigures/);
     assert.match(card, /SAFETY_RATINGS_TITLE/);
     assert.match(card, /function SafetyRatingsCard/);
+    assert.match(card, /function NhtsaStars/);
+    assert.match(card, /STAR_PATH/);
+    assert.match(card, /nhtsaStarSlots/);
+    assert.match(card, /nhtsaStarScore/);
+    assert.match(card, /safetyOverallFigure/);
+    assert.match(card, /safetyCategoryRows/);
     assert.match(card, /border-sky-200/);
+    assert.doesNotMatch(
+      card,
+      /text-slate-400">stars</,
+      "NHTSA ratings must show star glyphs, not a 'stars' caption under a number",
+    );
     assert.match(card, /EPA_OWNERSHIP_TITLE/);
     assert.match(card, /function OwnershipEconomics/);
     assert.match(card, /Fuel costs are estimates|EPA_OWNERSHIP_NOTE/);
