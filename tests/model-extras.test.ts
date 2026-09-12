@@ -10,6 +10,7 @@ import {
   composeModelExtras,
   displayComponent,
   engineDisplacementHint,
+  epaSafetyModelCandidates,
   evKindFromAtvType,
   extrasForReport,
   hasEvCard,
@@ -327,6 +328,34 @@ describe("model extras parsers", () => {
     assert.deepEqual(nhtsaModelCandidates("Grand Cherokee"), ["Grand Cherokee"]);
   });
 
+  it("aliases Mini Clubman to Cooper Clubman for EPA and SafetyRatings menus", () => {
+    assert.deepEqual(epaSafetyModelCandidates("Mini", "Clubman"), [
+      "Clubman",
+      "Cooper Clubman",
+    ]);
+    assert.deepEqual(epaSafetyModelCandidates("MINI", "clubman"), [
+      "clubman",
+      "Cooper Clubman",
+    ]);
+    assert.deepEqual(epaSafetyModelCandidates("Mini", "Clubman Cooper"), [
+      "Clubman Cooper",
+      "Clubman",
+      "Cooper Clubman",
+    ]);
+    assert.deepEqual(epaSafetyModelCandidates("Mini", "Clubman S"), [
+      "Clubman S",
+      "Clubman",
+      "Cooper S Clubman",
+      "Cooper Clubman",
+    ]);
+    assert.deepEqual(epaSafetyModelCandidates("Mini", "Cooper Clubman"), [
+      "Cooper Clubman",
+      "Clubman",
+    ]);
+    assert.deepEqual(epaSafetyModelCandidates("Toyota", "Camry"), ["Camry"]);
+    assert.deepEqual(epaSafetyModelCandidates("Mini", "Cooper"), ["Cooper"]);
+  });
+
   it("hides the card when every slice is empty", () => {
     const ymm = ymmFromVehicle({ year: "2012", make: "Toyota", model: "Camry" });
     assert.ok(ymm);
@@ -539,7 +568,7 @@ describe("model extras cache key", () => {
       fileURLToPath(new URL("../src/lib/model-extras.ts", import.meta.url)),
       "utf8",
     );
-    assert.match(source, /EXTRAS_CACHE_VERSION = "v4"/);
+    assert.match(source, /EXTRAS_CACHE_VERSION = "v5"/);
     assert.match(source, /\$\{EXTRAS_CACHE_VERSION\}\|\$\{ymmCacheKey/);
   });
 });
@@ -821,6 +850,166 @@ describe("model extras fetch and cache", () => {
       );
       assert.equal(extras.complaints?.total, 18);
       assert.deepEqual(recallModels, ["Clubman Cooper", "Clubman"]);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("uses EPA and SafetyRatings Cooper Clubman rows when the report model is Clubman", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const epaModels: string[] = [];
+    const safetyModels: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("recallsByVehicle") || href.includes("complaintsByVehicle")) {
+        return new Response(JSON.stringify({ Count: 0, count: 0, results: [] }), {
+          status: 200,
+        });
+      }
+      if (href.includes("menu/options")) {
+        const model = new URL(href).searchParams.get("model") ?? "";
+        epaModels.push(model);
+        if (/^cooper clubman$/i.test(model)) {
+          return new Response(
+            JSON.stringify({
+              menuItem: [{ text: "Auto (S6), 3 cyl, 1.5 L, Turbo", value: "37139" }],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ menuItem: [] }), { status: 200 });
+      }
+      if (href.endsWith("/37139")) {
+        return new Response(
+          JSON.stringify({
+            city08: 22,
+            highway08: 31,
+            comb08: 25,
+            fuelType1: "Premium Gasoline",
+            displ: "1.5",
+            fuelCost08: 1850,
+            youSaveSpend: 1000,
+            feScore: 6,
+            ghgScore: 6,
+            co2: 350,
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("/SafetyRatings/VehicleId/")) {
+        return new Response(
+          JSON.stringify({
+            Count: 1,
+            Results: [
+              {
+                OverallRating: "4",
+                OverallFrontCrashRating: "4",
+                OverallSideCrashRating: "5",
+                RolloverRating: "4",
+                SidePoleCrashRating: "5",
+                VehicleDescription: "2016 Mini Cooper Clubman",
+                VehicleId: 9999,
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("/SafetyRatings/")) {
+        const model = decodeURIComponent(href.split("/model/")[1] ?? "");
+        safetyModels.push(model);
+        if (/^cooper clubman$/i.test(model)) {
+          return new Response(
+            JSON.stringify({
+              Count: 1,
+              Results: [
+                { VehicleDescription: "2016 Mini Cooper Clubman", VehicleId: 9999 },
+              ],
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ Count: 0, Results: [] }), {
+          status: 200,
+        });
+      }
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport({
+        ...buildSampleReport(),
+        vehicle: { year: "2016", make: "Mini", model: "Clubman", engine: "1.5L I3" },
+      });
+      assert.ok(extras);
+      assert.equal(extras.ymmLabel, "2016 Mini Clubman");
+      assert.deepEqual(extras.mpg, {
+        city: 22,
+        highway: 31,
+        combined: 25,
+        fuelType: "Premium Gasoline",
+      });
+      assert.equal(extras.ownership?.annualFuelCost, 1850);
+      assert.equal(extras.safetyRatings?.overall, 4);
+      assert.deepEqual(epaModels, ["Clubman", "Cooper Clubman"]);
+      assert.deepEqual(safetyModels, ["Clubman", "Cooper Clubman"]);
+    } finally {
+      globalThis.fetch = previous;
+    }
+  });
+
+  it("soft-omits EPA ownership and 5-Star when Clubman aliases still miss", async () => {
+    resetModelExtrasCacheForTests();
+    const previous = globalThis.fetch;
+    const epaModels: string[] = [];
+    const safetyModels: string[] = [];
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const href = String(input);
+      if (href.includes("recallsByVehicle")) {
+        return new Response(
+          JSON.stringify({
+            Count: 1,
+            results: [
+              {
+                NHTSACampaignNumber: "16V553000",
+                Component: "AIR BAGS:SIDE/WINDOW",
+                Consequence: "Airbag may not inflate as intended.",
+                Remedy: "Dealers will modify the covers.",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      if (href.includes("complaintsByVehicle")) {
+        return new Response(JSON.stringify({ count: 0, results: [] }), {
+          status: 200,
+        });
+      }
+      if (href.includes("menu/options")) {
+        epaModels.push(new URL(href).searchParams.get("model") ?? "");
+        return new Response(JSON.stringify({ menuItem: [] }), { status: 200 });
+      }
+      if (href.includes("/SafetyRatings/")) {
+        safetyModels.push(decodeURIComponent(href.split("/model/")[1] ?? ""));
+        return new Response(JSON.stringify({ Count: 0, Results: [] }), {
+          status: 200,
+        });
+      }
+      return new Response("nope", { status: 404 });
+    }) as typeof fetch;
+    try {
+      const extras = await extrasForReport({
+        ...buildSampleReport(),
+        vehicle: { year: "2016", make: "Mini", model: "Clubman" },
+      });
+      assert.ok(extras);
+      assert.equal(extras.recalls?.campaigns[0]?.campaign, "16V553000");
+      assert.equal(extras.mpg, undefined);
+      assert.equal(extras.ownership, undefined);
+      assert.equal(extras.safetyRatings, undefined);
+      assert.deepEqual(epaModels, ["Clubman", "Cooper Clubman"]);
+      assert.deepEqual(safetyModels, ["Clubman", "Cooper Clubman"]);
     } finally {
       globalThis.fetch = previous;
     }
