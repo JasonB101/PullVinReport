@@ -414,7 +414,7 @@ export default function IsCarfaxWorthItPage() {
           </div>
 
           <div className="mt-10 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table className="min-w-full text-left text-sm">
+            <table className="min-w-[44rem] text-left text-sm">
               <caption className="sr-only">
                 Typical 2026 retail prices for Carfax, AutoCheck, and{" "}
                 {BRAND.name}
