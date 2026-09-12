@@ -17,7 +17,7 @@ export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.png";
  * Bump this when the drawing contract changes (colour source, cutout, prompt)
  * so a cached white studio shot cannot be served as the new hero.
  */
-export const HERO_CACHE_VERSION = "cutout-v2";
+export const HERO_CACHE_VERSION = "cutout-v3";
 
 /**
  * Caption under the PDF hero. The on-page cutout has no on-image label
@@ -33,11 +33,14 @@ const BODY_LABELS = ["Style", "Body Type", "Body Style", "Body"];
  * Recraft will happily draw the common hardtop of a model (Beetle, 911)
  * when the catalog string only mentions Convertible in passing. An explicit
  * clause is what actually changes the body.
+ *
+ * "Open-top" means a normal convertible silhouette (top up or neatly down) —
+ * never a floating roof or exploded open panels.
  */
 const OPEN_TOP_WORD = /\b(convertible|cabriolet|roadster|soft-?top)\b/i;
 const SHORT_OPEN_TOP = /^(convertible|cabriolet|roadster|soft-?top)$/i;
 const OPEN_TOP_CLAUSE =
-  "convertible cabriolet with folding fabric soft-top; not a hardtop coupe; show the open-top body or convertible roofline.";
+  "convertible cabriolet with folding fabric soft-top; not a hardtop coupe; show the open-top body or convertible roofline as one coherent car silhouette — top up or top neatly down as a clean catalog pose, never a floating or detached soft-top above the car, never an exploded view with open hood or trunk.";
 
 export type HeroFacts = {
   year: string;
@@ -186,7 +189,8 @@ export function heroPrompt(facts: HeroFacts): string {
     `Isolated product-cutout illustration of a generic example ${name}${body}${engine}.`,
     openTop,
     colorLine,
-    "Three-quarter front view, clean stock catalog cutout, illustrated vehicle only.",
+    "Closed stock catalog three-quarter front view, clean product cutout, illustrated vehicle only — one coherent car silhouette.",
+    "Doors, hood, bonnet, trunk, hatch and windows shut; no accessories being used; no open hood, no open trunk, no open hatch, no open doors, no windows popped for drama; no exploded view; no floating or detached roof or parts.",
     "Transparent background, no studio backdrop, no floor, no ground shadow plate, no scenery, no horizon.",
     "Soft illustrated product rendering — not a photograph of a real specific vehicle, no photoreal VIN clone, no 3D dealership catalog photo.",
     "No people, no license plate, no VIN, no badge text.",

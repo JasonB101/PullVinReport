@@ -149,7 +149,8 @@ describe("the illustration prompt", () => {
     assert.match(prompt, /2012 Toyota Camry SE/);
     assert.match(prompt, /Super White/);
     assert.match(prompt, /Exact exterior colour/);
-    assert.match(prompt, /Three-quarter/);
+    assert.match(prompt, /three-quarter/i);
+    assert.match(prompt, /Closed stock catalog/);
     assert.match(prompt, /Transparent background/i);
     assert.match(prompt, /2\.5L L4/);
     assert.doesNotMatch(prompt, new RegExp(buildSampleReport().vin, "i"));
@@ -233,6 +234,44 @@ describe("the illustration prompt", () => {
     assert.equal(isOpenTopHero(facts), true);
     assert.match(heroPrompt(facts), /not a hardtop coupe/i);
     assert.match(heroPrompt(facts), /open-top body or convertible roofline/);
+  });
+
+  it("forbids an open hood or trunk and a floating roof on every cutout", () => {
+    const sedan = heroFacts(buildSampleReport());
+    assert.ok(sedan);
+    const sedanPrompt = heroPrompt(sedan);
+    assert.match(sedanPrompt, /no open hood/i);
+    assert.match(sedanPrompt, /no open trunk/i);
+    assert.match(sedanPrompt, /no floating or detached roof/i);
+    assert.match(sedanPrompt, /no exploded view/i);
+    assert.doesNotMatch(sedanPrompt, /soft-top/i);
+
+    const convertible = heroFacts(
+      normalizeVinAuditReport(
+        {
+          attributes: {
+            Year: "2018",
+            Make: "Volkswagen",
+            Model: "Beetle",
+            Trim: "S",
+            Style: "2.0T S Convertible 2D",
+            "Body Type": "Convertible",
+          },
+        },
+        "3VW5DAAT4JM515636",
+      ),
+    );
+    assert.ok(convertible);
+    const convertiblePrompt = heroPrompt(convertible);
+    assert.match(
+      convertiblePrompt,
+      /convertible cabriolet with folding fabric soft-top; not a hardtop coupe; show the open-top body or convertible roofline/,
+    );
+    assert.match(convertiblePrompt, /never a floating or detached soft-top/i);
+    assert.match(convertiblePrompt, /no open hood/i);
+    assert.match(convertiblePrompt, /no open trunk/i);
+    assert.match(convertiblePrompt, /top up or top neatly down/);
+    assert.match(convertiblePrompt, /one coherent car silhouette/);
   });
 });
 
