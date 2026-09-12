@@ -171,6 +171,7 @@ describe("customer-facing surfaces", () => {
       "app/privacy/page.tsx",
       "app/terms/page.tsx",
       "app/disclaimer/page.tsx",
+      "app/is-carfax-worth-it/page.tsx",
       "app/admin/login/page.tsx",
       "components/logo.tsx",
       "components/site-footer.tsx",

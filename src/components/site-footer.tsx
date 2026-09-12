@@ -10,6 +10,7 @@ const COLUMNS = [
     links: [
       { href: "/#vin", label: "Check a VIN" },
       { href: "/sample", label: "See a sample report" },
+      { href: "/is-carfax-worth-it", label: "Is Carfax worth it?" },
       { href: "/lookup", label: "Find my report" },
     ],
   },
