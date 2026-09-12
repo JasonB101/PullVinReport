@@ -107,6 +107,12 @@ export interface OrderStore {
   ping(): Promise<{ ok: boolean; detail: string }>;
   /** Illustrated hero, keyed by year/make/model/trim/color — not by VIN. */
   getVehicleHero(cacheKey: string): Promise<VehicleHeroRecord | null>;
+  /**
+   * Newest cached drawing whose key starts with `prefix` (the year/make/model
+   * family). Used so a pre-pay generate without paint is reused after checkout
+   * when listings add a colour and the exact key would otherwise miss.
+   */
+  findVehicleHeroByPrefix(prefix: string): Promise<VehicleHeroRecord | null>;
   saveVehicleHero(hero: VehicleHeroRecord): Promise<void>;
   /** Drop cached drawings whose key does not start with `keepPrefix`. */
   clearStaleVehicleHeroes(keepPrefix: string): Promise<number>;

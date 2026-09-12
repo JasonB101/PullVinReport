@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
 
-import { cachedHeroForReport, heroForOrder } from "@/lib/order-hero";
+import { cachedHeroForFacts, cachedHeroForReport, heroForFacts, heroForOrder } from "@/lib/order-hero";
 import { buildSampleReport } from "@/lib/sample-report";
 import { FileOrderStore } from "@/lib/store/file-store";
 import type { Order } from "@/lib/store";
-import { heroFacts } from "@/lib/vehicle-hero";
+import { heroFacts, heroFactsFromParts, heroFamilyPrefix } from "@/lib/vehicle-hero";
 
 let dataDir = "";
 let calls = 0;
@@ -110,6 +110,48 @@ describe("the hero on an order", () => {
     const cached = await cachedHeroForReport(order.report!, store);
     assert.ok(cached);
     assert.equal(cached.src, "data:image/png;base64,ZmFrZQ==");
+    assert.equal(calls, before);
+  });
+
+  it("reuses a pre-pay family hit after listings add a colour, without drawing again", async () => {
+    const store = new FileOrderStore(dataDir);
+    const preview = heroFactsFromParts({
+      year: "2003",
+      make: "Honda",
+      model: "Accord",
+      trim: "EX-V6",
+      bodyStyle: "Coupe",
+    });
+    const paid = heroFactsFromParts({
+      year: "2003",
+      make: "Honda",
+      model: "Accord",
+      trim: "EX-V6",
+      color: "Satin Silver",
+      bodyStyle: "Coupe",
+      engine: "3.0L 6-cyl",
+    });
+    assert.ok(preview);
+    assert.ok(paid);
+    assert.notEqual(preview.cacheKey, paid.cacheKey);
+    assert.equal(heroFamilyPrefix(preview), heroFamilyPrefix(paid));
+
+    await store.saveVehicleHero({
+      cacheKey: preview.cacheKey,
+      src: "data:image/png;base64,ZmFtaWx5",
+      contentType: "image/png",
+      model: "test",
+      createdAt: new Date().toISOString(),
+    });
+
+    const before = calls;
+    const cached = await cachedHeroForFacts(paid, store);
+    assert.ok(cached);
+    assert.equal(cached.src, "data:image/png;base64,ZmFtaWx5");
+
+    const outcome = await heroForFacts(paid, store);
+    assert.equal(outcome.status, "ready");
+    assert.equal(outcome.status === "ready" && outcome.cached, true);
     assert.equal(calls, before);
   });
 

@@ -7,11 +7,15 @@ import { HERO_DRAFT_COPY, SAMPLE_HERO_SRC } from "@/lib/vehicle-hero";
 type Props = {
   /** Cached drawing for this year/make/model/trim/color, if we already have one. */
   src?: string | null;
-  /** Access token, given only when a missing hero may be requested. */
+  /** Access token, given only when a missing paid-report hero may be requested. */
   token?: string;
+  /** VIN, given on the pre-pay preview so a missing hero may be requested. */
+  vin?: string;
   /** Stable sample illustration. Never generated, never a paid call. */
   sample?: boolean;
   alt: string;
+  /** Print-style honesty line. Preview shows it; the paid cutout does not. */
+  caption?: string | null;
 };
 
 /**
@@ -24,14 +28,21 @@ export const HERO_DRAFT_REVEAL_MS = 120;
 /**
  * Cutout vehicle on the report card, to the right of the details on wide
  * screens. Fetched after the records are already on screen, the way the brief
- * is. A failed draw after the sketch was already up keeps a quiet reserved
+ * is. A failed draw after the plate was already up keeps a quiet reserved
  * slot so the header does not collapse. A report that never offered a hero
  * still renders without one.
  *
  * While a drawing is in flight (or the browser is still decoding one), the
- * slot holds a sketch so the header never reads as a blank hole.
+ * slot holds a branded identity plate — never a cartoon car.
  */
-export function VehicleHero({ src: cached = null, token, sample = false, alt }: Props) {
+export function VehicleHero({
+  src: cached = null,
+  token,
+  vin,
+  sample = false,
+  alt,
+  caption = null,
+}: Props) {
   const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
   const [src, setSrc] = useState<string | null>(sample ? SAMPLE_HERO_SRC : cached);
   const [readySrc, setReadySrc] = useState<string | null>(null);
@@ -39,10 +50,11 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
   const [awaitingGenerated, setAwaitingGenerated] = useState(false);
   const [failed, setFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
-  const offeredSlot = !sample && Boolean(token || cached);
+  const canGenerate = Boolean(token || vin);
+  const offeredSlot = !sample && Boolean(canGenerate || cached);
 
   useEffect(() => {
-    if (sample || cached || !token) return;
+    if (sample || cached || !canGenerate) return;
     let live = true;
 
     (async () => {
@@ -50,7 +62,7 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
         const response = await fetch("/api/vehicle-hero", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ token }),
+          body: JSON.stringify(token ? { token } : { vin }),
         });
         const payload = (await response.json()) as { status?: string; src?: string };
         if (!live) return;
@@ -68,11 +80,11 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
     return () => {
       live = false;
     };
-  }, [cached, sample, token]);
+  }, [cached, canGenerate, sample, token, vin]);
 
   const pixelsReady = Boolean(src && readySrc === src);
   const slowLoad = Boolean(src && slowForSrc === src && !pixelsReady);
-  const generating = !src && Boolean(token) && !failed;
+  const generating = !src && canGenerate && !failed;
   const drafting =
     !sample && !failed && !pixelsReady && (generating || slowLoad || awaitingGenerated);
   const failedEmpty = Boolean(failed && !src && offeredSlot);
@@ -100,23 +112,24 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
     setAwaitingGenerated(false);
   }
 
-  if (!src && !token && !sample && !failedEmpty) return null;
+  if (!src && !canGenerate && !sample && !failedEmpty) return null;
 
   const imageVisible = pixelsReady || Boolean(src && !drafting);
-  const keepSketchLayer = offeredSlot || drafting || failedEmpty;
-  const sketchVisible = drafting || failedEmpty;
+  const keepPlateLayer = offeredSlot || drafting || failedEmpty;
+  const plateVisible = drafting || failedEmpty;
+  const shownCaption = caption && imageVisible ? caption : null;
 
   return (
     <figure className="mx-auto w-full max-w-[13.5rem] shrink-0 sm:max-w-md md:mx-0 md:w-[min(46%,22rem)]">
       <div className={`relative w-full ${reserveHeight ? "min-h-[11rem] sm:min-h-[12.5rem]" : ""}`}>
-        {keepSketchLayer && (
+        {keepPlateLayer && (
           <div
             className={`hero-draft-layer no-print absolute inset-0 z-0 flex items-center justify-center transition-opacity duration-700 ease-out ${
-              sketchVisible ? "opacity-100" : "pointer-events-none opacity-0"
+              plateVisible ? "opacity-100" : "pointer-events-none opacity-0"
             }`}
             aria-hidden={!drafting}
           >
-            <HeroDraftPlaceholder uid={uid} quiet={failedEmpty} />
+            <HeroIdentityPlate uid={uid} quiet={failedEmpty} />
           </div>
         )}
         {src ? (
@@ -137,94 +150,35 @@ export function VehicleHero({ src: cached = null, token, sample = false, alt }: 
           />
         ) : null}
       </div>
+      {shownCaption ? (
+        <figcaption className="mt-2 text-center text-[11px] font-medium tracking-wide text-slate-400">
+          {shownCaption}
+        </figcaption>
+      ) : null}
     </figure>
   );
 }
 
-function HeroDraftPlaceholder({ uid, quiet = false }: { uid: string; quiet?: boolean }) {
-  const washId = `hero-draft-wash-${uid}`;
+export function HeroIdentityPlate({ uid, quiet = false }: { uid: string; quiet?: boolean }) {
   const sheenId = `hero-draft-sheen-${uid}`;
 
   return (
     <div className="flex h-full w-full flex-col items-center justify-center px-2 py-1">
-      <div className="relative w-full overflow-hidden rounded-xl">
-        <svg
-          viewBox="0 0 320 190"
-          className="hero-draft-sketch mx-auto block h-auto w-full text-slate-400"
+      <div className="relative w-full overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+        <div
+          className="absolute inset-0 bg-[radial-gradient(18rem_12rem_at_100%_0%,rgba(37,99,235,0.10),transparent_58%),radial-gradient(14rem_10rem_at_0%_120%,rgba(14,165,233,0.07),transparent_52%)]"
           aria-hidden="true"
-        >
-          <defs>
-            <linearGradient id={washId} x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0%" stopColor="#dbeafe" stopOpacity="0.55" />
-              <stop offset="55%" stopColor="#f8fafc" stopOpacity="0.2" />
-              <stop offset="100%" stopColor="#e0f2fe" stopOpacity="0.4" />
-            </linearGradient>
-            <linearGradient id={sheenId} x1="0" y1="0" x2="1" y2="0">
-              <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
-              <stop offset="50%" stopColor="#ffffff" stopOpacity="0.7" />
-              <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
-            </linearGradient>
-          </defs>
-
-          <rect width="320" height="190" fill={`url(#${washId})`} />
-
-          <g
-            className={quiet ? undefined : "hero-draft-guide"}
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="0.6"
-            opacity="0.28"
-          >
-            <line x1="24" y1="28" x2="296" y2="28" />
-            <line x1="24" y1="162" x2="296" y2="162" />
-            <line x1="40" y1="20" x2="40" y2="170" />
-            <line x1="280" y1="20" x2="280" y2="170" />
-            <line x1="16" y1="148" x2="304" y2="148" />
-          </g>
-
-          <g
-            fill="none"
-            stroke="#64748b"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <circle
-              className={quiet ? undefined : "hero-draft-stroke"}
-              cx="96"
-              cy="142"
-              r="24"
-              strokeWidth="1.3"
-            />
-            <circle
-              className={quiet ? undefined : "hero-draft-stroke"}
-              cx="228"
-              cy="142"
-              r="24"
-              strokeWidth="1.3"
-            />
-            <circle cx="96" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-            <circle cx="228" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-
-            <path
-              className={quiet ? undefined : "hero-draft-stroke"}
-              strokeWidth="1.7"
-              d="M42 140c6-28 22-44 48-52l28-28c8-8 16-12 36-12h52c22 0 36 8 50 24l22 16c10 4 18 12 22 28 2 8 6 18 8 24"
-            />
-            <path
-              className={quiet ? undefined : "hero-draft-stroke"}
-              strokeWidth="1.35"
-              d="M54 128h28c6-18 16-30 34-38m48-2c22 4 40 16 54 34h36"
-            />
-            <path
-              className={quiet ? undefined : "hero-draft-guide"}
-              strokeWidth="1"
-              d="M118 78c18-2 40-2 58 6M86 118h36M196 116h40"
-              opacity="0.55"
-            />
-          </g>
-
+        />
+        <div className="relative flex aspect-[16/10] flex-col items-center justify-center px-5 py-6 text-center">
           {!quiet && (
-            <>
+            <svg className="pointer-events-none absolute inset-0 h-full w-full" aria-hidden="true">
+              <defs>
+                <linearGradient id={sheenId} x1="0" y1="0" x2="1" y2="0">
+                  <stop offset="0%" stopColor="#ffffff" stopOpacity="0" />
+                  <stop offset="50%" stopColor="#ffffff" stopOpacity="0.7" />
+                  <stop offset="100%" stopColor="#ffffff" stopOpacity="0" />
+                </linearGradient>
+              </defs>
               <rect
                 className="hero-draft-shimmer"
                 x="-80"
@@ -233,26 +187,30 @@ function HeroDraftPlaceholder({ uid, quiet = false }: { uid: string; quiet?: boo
                 height="190"
                 fill={`url(#${sheenId})`}
               />
-              <g className="hero-draft-pencil text-brand-600">
-                <g transform="translate(248 44) rotate(-18)">
-                  <rect x="0" y="0" width="7" height="22" rx="1.2" fill="currentColor" />
-                  <rect x="0.8" y="1.2" width="5.4" height="6" rx="0.6" fill="#dbeafe" />
-                  <path d="M0.6 22h5.8L3.5 30Z" fill="#cbd5e1" />
-                  <path d="M2.2 26.6h2.6L3.5 30Z" fill="#334155" />
-                </g>
-              </g>
-            </>
+            </svg>
           )}
-        </svg>
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_8px_20px_-8px_rgba(37,99,235,0.85)]">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="5" y="4" width="14" height="16" rx="2" />
+              <path d="M8 9h8M8 13h8M8 17h5" />
+            </svg>
+          </span>
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Factory identity
+          </p>
+          <p className="mt-1 text-xs leading-snug text-slate-400">
+            {quiet ? "Decoded from this VIN" : HERO_DRAFT_COPY}
+          </p>
+        </div>
       </div>
-      {!quiet && (
-        <p
-          className="mt-2 text-center text-xs font-medium tracking-wide text-slate-500"
-          role="status"
-        >
-          {HERO_DRAFT_COPY}
-        </p>
-      )}
     </div>
   );
 }

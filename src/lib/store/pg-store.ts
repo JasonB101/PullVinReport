@@ -334,6 +334,29 @@ export class PostgresOrderStore implements OrderStore {
     };
   }
 
+  async findVehicleHeroByPrefix(prefix: string): Promise<VehicleHeroRecord | null> {
+    if (!prefix) return null;
+    const result = await this.query<{
+      cache_key: string;
+      src: string;
+      content_type: string;
+      model: string;
+      created_at: Date | string;
+    }>(
+      `SELECT * FROM ${HEROES} WHERE cache_key LIKE $1 ORDER BY created_at DESC LIMIT 1`,
+      [`${prefix.replaceAll("%", "\\%").replaceAll("_", "\\_")}%`],
+    );
+    const row = result.rows[0];
+    if (!row) return null;
+    return {
+      cacheKey: row.cache_key,
+      src: row.src,
+      contentType: row.content_type,
+      model: row.model,
+      createdAt: iso(row.created_at) as string,
+    };
+  }
+
   async saveVehicleHero(hero: VehicleHeroRecord): Promise<void> {
     await this.query(
       `INSERT INTO ${HEROES} (cache_key, src, content_type, model, created_at)

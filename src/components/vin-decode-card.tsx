@@ -1,5 +1,12 @@
+import { VehicleHero } from "@/components/vehicle-hero";
 import { VIN_DECODE_UNAVAILABLE } from "@/lib/customer-copy";
+import { cachedHeroForFacts } from "@/lib/order-hero";
 import { decodeVin } from "@/lib/nhtsa";
+import {
+  HERO_ILLUSTRATION_LABEL,
+  heroAlt,
+  heroFactsFromParts,
+} from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 function IdentityFrame({ children }: { children: React.ReactNode }) {
@@ -36,9 +43,10 @@ export function VinDecodeSkeleton() {
  * thinks it does?
  *
  * The decode comes from the public vPIC database rather than the records the
- * paid report is built from — nothing chargeable is pulled before checkout.
- * Colour and the illustrated hero arrive only on the paid report, where the
- * listings actually name the paint.
+ * paid report is built from — nothing chargeable at the records vendor is
+ * pulled before checkout. The illustrated hero uses the same fal cache as a
+ * paid report (year/make/model family). Colour from listings still arrives
+ * only after purchase; a pre-pay drawing without paint is reused then.
  */
 export async function VinDecodeCard({
   vin,
@@ -71,6 +79,16 @@ export async function VinDecodeCard({
   }
 
   const { decode } = result;
+  const facts = heroFactsFromParts({
+    year: decode.vehicle.year ?? (fallbackYear ? String(fallbackYear) : ""),
+    make: decode.vehicle.make,
+    model: decode.vehicle.model,
+    trim: decode.vehicle.trim,
+    bodyStyle: decode.vehicle.bodyStyle,
+    engine: decode.vehicle.engine,
+  });
+  const cached = facts ? await cachedHeroForFacts(facts) : null;
+  const illustrationAlt = facts ? heroAlt(facts) : `Illustrated ${decode.label}`;
 
   return (
     <IdentityFrame>
@@ -105,51 +123,15 @@ export async function VinDecodeCard({
           </p>
         </div>
 
-        <VehicleIdentitySlot />
+        {facts ? (
+          <VehicleHero
+            src={cached?.src}
+            vin={vin}
+            alt={illustrationAlt}
+            caption={HERO_ILLUSTRATION_LABEL}
+          />
+        ) : null}
       </div>
     </IdentityFrame>
-  );
-}
-
-/**
- * Pre-pay hero slot. A branded identity plate — never a cartoon car, never the
- * sample Camry, never a fal draw. Year, make and model are already the headline;
- * this keeps the card balanced without pretending we have a picture of the car.
- */
-function VehicleIdentitySlot() {
-  return (
-    <figure
-      className="mx-auto w-full max-w-[13.5rem] shrink-0 sm:max-w-xs md:mx-0 md:w-[min(42%,18rem)]"
-      aria-hidden="true"
-    >
-      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
-        <div
-          className="absolute inset-0 bg-[radial-gradient(18rem_12rem_at_100%_0%,rgba(37,99,235,0.10),transparent_58%),radial-gradient(14rem_10rem_at_0%_120%,rgba(14,165,233,0.07),transparent_52%)]"
-          aria-hidden="true"
-        />
-        <div className="relative flex aspect-[16/10] flex-col items-center justify-center px-5 py-6 text-center">
-          <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_8px_20px_-8px_rgba(37,99,235,0.85)]">
-            <svg
-              viewBox="0 0 24 24"
-              className="h-5 w-5 text-white"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <rect x="5" y="4" width="14" height="16" rx="2" />
-              <path d="M8 9h8M8 13h8M8 17h5" />
-            </svg>
-          </span>
-          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
-            Factory identity
-          </p>
-          <p className="mt-1 text-xs leading-snug text-slate-400">
-            Decoded from this VIN
-          </p>
-        </div>
-      </div>
-    </figure>
   );
 }
