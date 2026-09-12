@@ -93,6 +93,21 @@ describe("VIN-first checkout", () => {
     );
   });
 
+  it("holds the pre-pay hero slot with a branded plate, not a cartoon car", async () => {
+    const decode = await readSrc("components/vin-decode-card.tsx");
+
+    assert.match(decode, /<VehicleIdentitySlot/);
+    assert.match(decode, /Factory identity/);
+    assert.match(decode, /Decoded from this VIN/);
+    assert.doesNotMatch(decode, /VehicleMark/);
+    assert.doesNotMatch(decode, /vin-mark-wash/);
+    assert.doesNotMatch(decode, /sample-vehicle-hero/);
+    assert.doesNotMatch(decode, /M42 140c6-28/);
+    assert.doesNotMatch(decode, /circle cx="96"/);
+    assert.doesNotMatch(decode, /circle cx="228"/);
+    assert.doesNotMatch(decode, /hero-draft-stroke|hero-draft-pencil/);
+  });
+
   it("leaves Google Ads Purchase and GA4 wiring intact", async () => {
     const ads = await readSrc("lib/google-ads.ts");
     const purchase = await readSrc("components/google-ads-purchase.tsx");

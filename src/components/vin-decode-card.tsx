@@ -105,48 +105,51 @@ export async function VinDecodeCard({
           </p>
         </div>
 
-        <VehicleMark />
+        <VehicleIdentitySlot />
       </div>
     </IdentityFrame>
   );
 }
 
-/** Decorative silhouette so the identified car has a face — not a photo of this VIN. */
-function VehicleMark() {
+/**
+ * Pre-pay hero slot. A branded identity plate — never a cartoon car, never the
+ * sample Camry, never a fal draw. Year, make and model are already the headline;
+ * this keeps the card balanced without pretending we have a picture of the car.
+ */
+function VehicleIdentitySlot() {
   return (
     <figure
       className="mx-auto w-full max-w-[13.5rem] shrink-0 sm:max-w-xs md:mx-0 md:w-[min(42%,18rem)]"
       aria-hidden="true"
     >
-      <svg viewBox="0 0 320 190" className="h-auto w-full text-slate-400">
-        <defs>
-          <linearGradient id="vin-mark-wash" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#dbeafe" stopOpacity="0.55" />
-            <stop offset="55%" stopColor="#f8fafc" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#e0f2fe" stopOpacity="0.4" />
-          </linearGradient>
-        </defs>
-        <rect width="320" height="190" fill="url(#vin-mark-wash)" rx="16" />
-        <g
-          fill="none"
-          stroke="#64748b"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="96" cy="142" r="24" strokeWidth="1.3" />
-          <circle cx="228" cy="142" r="24" strokeWidth="1.3" />
-          <circle cx="96" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-          <circle cx="228" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-          <path
-            strokeWidth="1.7"
-            d="M42 140c6-28 22-44 48-52l28-28c8-8 16-12 36-12h52c22 0 36 8 50 24l22 16c10 4 18 12 22 28 2 8 6 18 8 24"
-          />
-          <path
-            strokeWidth="1.35"
-            d="M54 128h28c6-18 16-30 34-38m48-2c22 4 40 16 54 34h36"
-          />
-        </g>
-      </svg>
+      <div className="relative overflow-hidden rounded-2xl border border-slate-200/80 bg-white/80 shadow-[inset_0_1px_0_rgba(255,255,255,0.85)]">
+        <div
+          className="absolute inset-0 bg-[radial-gradient(18rem_12rem_at_100%_0%,rgba(37,99,235,0.10),transparent_58%),radial-gradient(14rem_10rem_at_0%_120%,rgba(14,165,233,0.07),transparent_52%)]"
+          aria-hidden="true"
+        />
+        <div className="relative flex aspect-[16/10] flex-col items-center justify-center px-5 py-6 text-center">
+          <span className="grid h-11 w-11 place-items-center rounded-xl bg-gradient-to-br from-brand-500 to-brand-700 shadow-[0_8px_20px_-8px_rgba(37,99,235,0.85)]">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-5 w-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.8"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <rect x="5" y="4" width="14" height="16" rx="2" />
+              <path d="M8 9h8M8 13h8M8 17h5" />
+            </svg>
+          </span>
+          <p className="mt-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+            Factory identity
+          </p>
+          <p className="mt-1 text-xs leading-snug text-slate-400">
+            Decoded from this VIN
+          </p>
+        </div>
+      </div>
     </figure>
   );
 }
