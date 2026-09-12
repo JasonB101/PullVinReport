@@ -6,11 +6,16 @@ import { after, before, describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 import {
+  campaignBadges,
   composeModelExtras,
   displayComponent,
   engineDisplacementHint,
+  evKindFromAtvType,
   extrasForReport,
+  hasEvCard,
   hasModelExtras,
+  hasOwnership,
+  hasSafetyRatings,
   isRetryableHttpStatus,
   matchingEpaOptions,
   MODEL_EXTRAS_FETCH_ATTEMPTS,
@@ -22,10 +27,17 @@ import {
   parseEpaOptions,
   parseEpaVehicle,
   parseRecallsPayload,
+  parseSafetyRatings,
+  parseSafetyVariants,
+  pickEv,
   pickMpg,
+  pickOwnership,
+  pickSafetyRatings,
+  recallHeaderBadges,
   requestPaidModelExtras,
   resetModelExtrasCacheForTests,
   resetModelExtrasRetryForTests,
+  safetyFigureRows,
   setModelExtrasRetryDelaysForTests,
   ymmCacheKey,
   ymmFromVehicle,
@@ -110,6 +122,16 @@ const EPA_25 = {
   comb08: "28",
   fuelType1: "Regular Gasoline",
   displ: "2.5",
+  fuelCost08: "2250",
+  youSaveSpend: "0",
+  feScore: "-1",
+  ghgScore: "-1",
+  co2: "-1",
+  atvType: "",
+  range: "0",
+  charge120: "0.0",
+  charge240: "0.0",
+  battery: "-1",
 };
 
 const EPA_35 = {
@@ -118,6 +140,45 @@ const EPA_35 = {
   comb08: 24,
   fuelType1: "Regular Gasoline",
   displ: "3.5",
+  fuelCost08: 2550,
+  youSaveSpend: -1500,
+};
+
+const EPA_EV = {
+  city08: 131,
+  highway08: 109,
+  comb08: 120,
+  fuelType1: "Electricity",
+  atvType: "EV",
+  fuelCost08: 650,
+  youSaveSpend: 8000,
+  feScore: 10,
+  ghgScore: 10,
+  co2: 0,
+  range: 259,
+  charge120: 0,
+  charge240: 7.5,
+  battery: -1,
+};
+
+const SAFETY_VARIANTS = {
+  Count: 1,
+  Results: [{ VehicleDescription: "2012 Toyota Camry 4 DR FWD", VehicleId: 6270 }],
+};
+
+const SAFETY_RATINGS = {
+  Count: 1,
+  Results: [
+    {
+      OverallRating: "5",
+      OverallFrontCrashRating: "4",
+      OverallSideCrashRating: "5",
+      RolloverRating: "4",
+      SidePoleCrashRating: "5",
+      VehicleDescription: "2012 Toyota Camry 4 DR FWD",
+      VehicleId: 6270,
+    },
+  ],
 };
 
 describe("model extras parsers", () => {
@@ -280,6 +341,145 @@ describe("model extras parsers", () => {
       }),
       false,
     );
+    assert.ok(
+      composeModelExtras(ymm, {
+        safetyRatings: { overall: 5 },
+      }),
+    );
+    assert.equal(
+      composeModelExtras(ymm, {
+        safetyRatings: { vehicleDescription: "2012 Toyota Camry 4 DR FWD" },
+      }),
+      null,
+    );
+    assert.equal(composeModelExtras(ymm, { ev: { kind: "EV" } }), null);
+  });
+
+  it("reads NHTSA park-it / park-outside / OTA flags and Takata text only when present", () => {
+    const recalls = parseRecallsPayload({
+      Count: 3,
+      results: [
+        {
+          NHTSACampaignNumber: "21V560000",
+          Component: "ELECTRICAL SYSTEM",
+          parkIt: false,
+          parkOutSide: true,
+          overTheAirUpdate: false,
+          Notes: "Owners may also contact NHTSA.",
+        },
+        {
+          NHTSACampaignNumber: "22V037000",
+          Component: "ELECTRICAL SYSTEM:SOFTWARE",
+          parkIt: false,
+          parkOutSide: false,
+          overTheAirUpdate: true,
+        },
+        {
+          NHTSACampaignNumber: "19V182000",
+          Component: "AIR BAGS:FRONTAL:DRIVER SIDE:INFLATOR MODULE",
+          parkIt: false,
+          parkOutSide: false,
+          overTheAirUpdate: false,
+          Summary: "Takata inflators may rupture.",
+        },
+      ],
+    });
+    assert.ok(recalls);
+    assert.equal(recalls.parkIt, undefined);
+    assert.equal(recalls.parkOutSide, true);
+    assert.equal(recalls.overTheAirUpdate, true);
+    assert.equal(recalls.takata, true);
+    assert.deepEqual(
+      recallHeaderBadges(recalls).map((badge) => badge.key),
+      ["parkOutSide", "overTheAirUpdate", "takata"],
+    );
+    assert.deepEqual(
+      campaignBadges(recalls.campaigns[0]!).map((badge) => badge.key),
+      ["parkOutSide"],
+    );
+    assert.deepEqual(
+      campaignBadges(recalls.campaigns[1]!).map((badge) => badge.key),
+      ["overTheAirUpdate"],
+    );
+    assert.match(recalls.campaigns[2]?.takataNote ?? "", /Takata/i);
+    const quiet = parseRecallsPayload(RECALLS);
+    assert.ok(quiet);
+    assert.equal(quiet.parkIt, undefined);
+    assert.equal(quiet.takata, undefined);
+    assert.deepEqual(recallHeaderBadges(quiet), []);
+    assert.deepEqual(campaignBadges(quiet.campaigns[0]!), []);
+  });
+
+  it("omits NHTSA 5-Star ratings when every field is Not Rated or missing", () => {
+    assert.equal(
+      parseSafetyRatings({
+        Results: [
+          {
+            OverallRating: "Not Rated",
+            OverallFrontCrashRating: "Not Rated",
+            OverallSideCrashRating: "Not Rated",
+            RolloverRating: "Not Rated",
+            SidePoleCrashRating: "Not Rated",
+          },
+        ],
+      }),
+      null,
+    );
+    assert.deepEqual(parseSafetyVariants({ Count: 0, Results: [] }), []);
+    const parsed = parseSafetyRatings(SAFETY_RATINGS);
+    assert.ok(parsed);
+    assert.deepEqual(safetyFigureRows(parsed).map((row) => row.key), [
+      "overall",
+      "front",
+      "side",
+      "rollover",
+      "sidePole",
+    ]);
+    assert.equal(hasSafetyRatings(parsed), true);
+    assert.equal(pickSafetyRatings([]), undefined);
+    assert.deepEqual(pickSafetyRatings([parsed, { ...parsed, front: 3 }])?.overall, 5);
+    assert.equal(pickSafetyRatings([parsed, { ...parsed, front: 3 }])?.front, undefined);
+  });
+
+  it("keeps EPA ownership estimates and omits -1 / empty EV fields", () => {
+    const gas = parseEpaVehicle(EPA_25, "31765");
+    assert.ok(gas);
+    assert.equal(gas.fuelCost08, 2250);
+    assert.equal(gas.youSaveSpend, 0);
+    assert.equal(gas.feScore, undefined);
+    assert.equal(gas.co2, undefined);
+    assert.equal(evKindFromAtvType(gas.atvType), undefined);
+    assert.deepEqual(pickOwnership([gas], "2.5"), {
+      annualFuelCost: 2250,
+      youSaveSpend: 0,
+    });
+    assert.equal(pickEv([gas], "2.5"), undefined);
+
+    const ev = parseEpaVehicle(EPA_EV, "43955");
+    assert.ok(ev);
+    assert.equal(evKindFromAtvType(ev.atvType), "EV");
+    assert.equal(ev.range, 259);
+    assert.equal(ev.charge240, 7.5);
+    assert.equal(ev.charge120, undefined);
+    assert.equal(ev.batteryKwh, undefined);
+    const mpg = pickMpg([ev], "");
+    const card = pickEv([ev], "", mpg);
+    assert.ok(card);
+    assert.equal(card.kind, "EV");
+    assert.equal(card.range, 259);
+    assert.deepEqual(card.mpge, { city: 131, highway: 109, combined: 120 });
+    assert.equal(hasEvCard({ kind: "EV" }), false);
+    assert.equal(hasOwnership({}), false);
+  });
+
+  it("does not show an EV card for a regular hybrid", () => {
+    const hybrid = parseEpaVehicle(
+      { ...EPA_25, atvType: "Hybrid", range: 0 },
+      "1",
+    );
+    assert.ok(hybrid);
+    assert.equal(evKindFromAtvType(hybrid.atvType), undefined);
+    assert.equal(pickEv([hybrid], "2.5"), undefined);
   });
 });
 
@@ -326,6 +526,10 @@ describe("model extras copy", () => {
     assert.ok((extras.complaints?.samples.length ?? 0) >= 3);
     assert.match(extras.complaints?.samples[0]?.summary ?? "", /transmission shudder/i);
     assert.equal(extras.mpg?.combined, 28);
+    assert.equal(extras.ownership?.annualFuelCost, 2250);
+    assert.equal(extras.safetyRatings?.overall, 5);
+    assert.equal(extras.ev, undefined);
+    assert.deepEqual(recallHeaderBadges(extras.recalls!), []);
   });
 });
 
@@ -335,7 +539,7 @@ describe("model extras cache key", () => {
       fileURLToPath(new URL("../src/lib/model-extras.ts", import.meta.url)),
       "utf8",
     );
-    assert.match(source, /EXTRAS_CACHE_VERSION = "v3"/);
+    assert.match(source, /EXTRAS_CACHE_VERSION = "v4"/);
     assert.match(source, /\$\{EXTRAS_CACHE_VERSION\}\|\$\{ymmCacheKey/);
   });
 });
@@ -354,6 +558,12 @@ describe("model extras fetch and cache", () => {
       }
       if (href.includes("complaintsByVehicle")) {
         return new Response(JSON.stringify(COMPLAINTS), { status: 200 });
+      }
+      if (href.includes("/SafetyRatings/VehicleId/")) {
+        return new Response(JSON.stringify(SAFETY_RATINGS), { status: 200 });
+      }
+      if (href.includes("/SafetyRatings/")) {
+        return new Response(JSON.stringify(SAFETY_VARIANTS), { status: 200 });
       }
       if (href.includes("menu/options")) {
         return new Response(JSON.stringify(EPA_OPTIONS), { status: 200 });
@@ -390,8 +600,14 @@ describe("model extras fetch and cache", () => {
       combined: 28,
       fuelType: "Regular Gasoline",
     });
+    assert.deepEqual(first.ownership, {
+      annualFuelCost: 2250,
+      youSaveSpend: 0,
+    });
+    assert.equal(first.ev, undefined);
+    assert.equal(first.safetyRatings?.overall, 5);
     const afterFirst = calls;
-    assert.ok(afterFirst >= 4, `expected NHTSA + EPA calls, got ${afterFirst}`);
+    assert.ok(afterFirst >= 5, `expected NHTSA + EPA + safety calls, got ${afterFirst}`);
 
     const second = await extrasForReport({
       ...report,
@@ -509,9 +725,11 @@ describe("model extras fetch and cache", () => {
         ? "recalls"
         : href.includes("complaints")
           ? "complaints"
-          : href.includes("menu/options")
-            ? "epa"
-            : "other";
+          : href.includes("SafetyRatings")
+            ? "safety"
+            : href.includes("menu/options")
+              ? "epa"
+              : "other";
       seen[key] = (seen[key] ?? 0) + 1;
       return new Response("nope", { status: 404 });
     }) as typeof fetch;
@@ -520,6 +738,7 @@ describe("model extras fetch and cache", () => {
       assert.equal(extras, null);
       assert.equal(seen.recalls, 1);
       assert.equal(seen.complaints, 1);
+      assert.equal(seen.safety, 1);
       assert.equal(seen.epa, 1);
     } finally {
       globalThis.fetch = previous;
@@ -635,9 +854,11 @@ describe("model extras fetch and cache", () => {
         ? "recalls"
         : href.includes("complaints")
           ? "complaints"
-          : href.includes("menu/options")
-            ? "epa"
-            : "other";
+          : href.includes("SafetyRatings")
+            ? "safety"
+            : href.includes("menu/options")
+              ? "epa"
+              : "other";
       seen[key] = (seen[key] ?? 0) + 1;
       return new Response("down", { status: 503 });
     }) as typeof fetch;
@@ -646,6 +867,7 @@ describe("model extras fetch and cache", () => {
       assert.equal(extras, null);
       assert.equal(seen.recalls, MODEL_EXTRAS_FETCH_ATTEMPTS);
       assert.equal(seen.complaints, MODEL_EXTRAS_FETCH_ATTEMPTS);
+      assert.equal(seen.safety, MODEL_EXTRAS_FETCH_ATTEMPTS);
       assert.equal(seen.epa, MODEL_EXTRAS_FETCH_ATTEMPTS);
     } finally {
       globalThis.fetch = previous;

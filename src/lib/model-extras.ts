@@ -1,19 +1,28 @@
 /**
  * Public, model-level extras shown after VIN history, in a fenced model-only zone.
  *
- * NHTSA recalls, NHTSA owner complaints, and EPA fuel economy for the
- * report's year/make/model — never for this VIN. A buyer who skims must not
- * mistake a 2012 Camry complaint theme for something on the car in front of
- * them, so every surface that prints this data names the YMM and says it is
- * not this VIN.
+ * NHTSA recalls, NHTSA 5-Star safety ratings, NHTSA owner complaints, and EPA
+ * fuel economy / ownership / EV fields for the report's year/make/model —
+ * never for this VIN. A buyer who skims must not mistake a 2012 Camry
+ * complaint theme for something on the car in front of them, so every surface
+ * that prints this data names the YMM and says it is not this VIN.
  *
- * All three sources are free public APIs. Each outbound call is tried up to
- * three times with a short backoff on network errors, timeouts, 429 and 5xx.
- * After retries, missing data, a downed API or an ambiguous EPA match hides
- * that slice — and if nothing useful remains, the whole model zone is omitted.
- * The paid VIN history is unchanged.
- * Results are cached by YMM (and, for MPG, an engine hint) so two orders for
- * the same Camry do not re-hit the government on every page view.
+ * All sources are free public APIs:
+ *   - NHTSA recalls:    api.nhtsa.gov/recalls/recallsByVehicle
+ *   - NHTSA complaints: api.nhtsa.gov/complaints/complaintsByVehicle
+ *   - NHTSA 5-Star:     api.nhtsa.gov/SafetyRatings (YMM → VehicleId → ratings)
+ *   - EPA FuelEconomy:  fueleconomy.gov/ws/rest/vehicle (menu + vehicle record)
+ *
+ * Each outbound call is tried up to three times with a short backoff on
+ * network errors, timeouts, 429 and 5xx. After retries, missing data, a
+ * downed API or an ambiguous EPA match hides that slice — and if nothing
+ * useful remains, the whole model zone is omitted. The paid VIN history is
+ * unchanged.
+ *
+ * Cache (keeps incremental cost ~$0): keyed by `v4|{year}|{make}|{model}|{slice}`
+ * in memory and on the order store (not per VIN / order). Positive hits live
+ * 7 days. Empty or failed slices live 15 minutes so a blip cannot hide public
+ * data for a week. Two orders for the same Camry share one government round-trip.
  */
 import { exactYearMakeModel } from "@/lib/ai-brief";
 import { cleanCustomerLine } from "@/lib/customer-text";
@@ -21,6 +30,8 @@ import { formatEventDate, isoDate, type Field, type VehicleReport, type VehicleS
 
 const RECALLS_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle";
 const COMPLAINTS_URL = "https://api.nhtsa.gov/complaints/complaintsByVehicle";
+const SAFETY_VARIANTS_URL = "https://api.nhtsa.gov/SafetyRatings/modelyear";
+const SAFETY_VEHICLE_URL = "https://api.nhtsa.gov/SafetyRatings/VehicleId";
 const EPA_OPTIONS_URL = "https://www.fueleconomy.gov/ws/rest/vehicle/menu/options";
 const EPA_VEHICLE_URL = "https://www.fueleconomy.gov/ws/rest/vehicle";
 
@@ -36,15 +47,33 @@ const MAX_THEMES = 4;
 const MAX_COMPLAINT_SAMPLES = 5;
 const MAX_SUMMARY_CHARS = 480;
 const MAX_EPA_VEHICLES = 12;
+const MAX_SAFETY_VARIANTS = 8;
 
 /** Bump when the stored extras shape changes so a theme-only cache cannot stick. */
-const EXTRAS_CACHE_VERSION = "v3";
+const EXTRAS_CACHE_VERSION = "v4";
+
+/** NHTSA campaign flags we surface — only when the API set them. */
+export type RecallBadgeKey =
+  | "parkIt"
+  | "parkOutSide"
+  | "overTheAirUpdate"
+  | "takata";
+
+export type RecallBadge = {
+  key: RecallBadgeKey;
+  label: string;
+};
 
 export type ModelRecall = {
   campaign: string;
   title: string;
   consequence?: string;
   remedy?: string;
+  parkIt?: boolean;
+  parkOutSide?: boolean;
+  overTheAirUpdate?: boolean;
+  /** Clipped NHTSA text that already names Takata — never invented. */
+  takataNote?: string;
 };
 
 export type ModelComplaintTheme = {
@@ -69,9 +98,47 @@ export type ModelMpg = {
   fuelType: string;
 };
 
+/** EPA ownership / emissions fields. Fuel costs are estimates. */
+export type ModelOwnership = {
+  annualFuelCost?: number;
+  youSaveSpend?: number;
+  feScore?: number;
+  ghgScore?: number;
+  co2?: number;
+};
+
+export type ModelEvKind = "EV" | "PHEV";
+
+export type ModelEv = {
+  kind: ModelEvKind;
+  range?: number;
+  charge120?: number;
+  charge240?: number;
+  batteryKwh?: number;
+  mpge?: {
+    city: number;
+    highway: number;
+    combined: number;
+  };
+};
+
+/** NHTSA 5-Star ratings for this model year. Stars only — never invented. */
+export type ModelSafetyRatings = {
+  overall?: number;
+  front?: number;
+  side?: number;
+  rollover?: number;
+  sidePole?: number;
+  vehicleDescription?: string;
+};
+
 export type ModelRecalls = {
   total: number;
   campaigns: ModelRecall[];
+  parkIt?: boolean;
+  parkOutSide?: boolean;
+  overTheAirUpdate?: boolean;
+  takata?: boolean;
 };
 
 export type ModelComplaints = {
@@ -88,6 +155,9 @@ export type ModelExtras = {
   recalls?: ModelRecalls;
   complaints?: ModelComplaints;
   mpg?: ModelMpg;
+  ownership?: ModelOwnership;
+  ev?: ModelEv;
+  safetyRatings?: ModelSafetyRatings;
 };
 
 export type ModelExtrasCacheRecord = {
@@ -118,6 +188,19 @@ export type EpaVehicleMpg = {
   combined: number;
   fuelType: string;
   displacement?: string;
+  atvType?: string;
+  fuelCost08?: number;
+  youSaveSpend?: number;
+  feScore?: number;
+  ghgScore?: number;
+  co2?: number;
+  range?: number;
+  charge120?: number;
+  charge240?: number;
+  batteryKwh?: number;
+  phevCity?: number;
+  phevHwy?: number;
+  phevComb?: number;
 };
 
 /** Drops the in-process cache. Tests only. */
@@ -254,9 +337,51 @@ function trimDisplacement(value: string): string {
   return String(number);
 }
 
+export function hasOwnership(ownership: ModelOwnership | null | undefined): ownership is ModelOwnership {
+  if (!ownership) return false;
+  return (
+    ownership.annualFuelCost !== undefined ||
+    ownership.youSaveSpend !== undefined ||
+    ownership.feScore !== undefined ||
+    ownership.ghgScore !== undefined ||
+    ownership.co2 !== undefined
+  );
+}
+
+export function hasEvCard(ev: ModelEv | null | undefined): ev is ModelEv {
+  if (!ev) return false;
+  return Boolean(
+    ev.range !== undefined ||
+      ev.charge120 !== undefined ||
+      ev.charge240 !== undefined ||
+      ev.batteryKwh !== undefined ||
+      ev.mpge,
+  );
+}
+
+export function hasSafetyRatings(
+  ratings: ModelSafetyRatings | null | undefined,
+): ratings is ModelSafetyRatings {
+  if (!ratings) return false;
+  return (
+    ratings.overall !== undefined ||
+    ratings.front !== undefined ||
+    ratings.side !== undefined ||
+    ratings.rollover !== undefined ||
+    ratings.sidePole !== undefined
+  );
+}
+
 export function hasModelExtras(extras: ModelExtras | null | undefined): extras is ModelExtras {
   if (!extras) return false;
-  return Boolean(extras.recalls || extras.complaints || extras.mpg);
+  return Boolean(
+    extras.recalls ||
+      extras.complaints ||
+      extras.mpg ||
+      hasOwnership(extras.ownership) ||
+      hasEvCard(extras.ev) ||
+      hasSafetyRatings(extras.safetyRatings),
+  );
 }
 
 export function displayComponent(raw: string): string {
@@ -293,7 +418,64 @@ function numberish(value: unknown): number | undefined {
 
 function flag(value: unknown): boolean {
   if (value === true || value === 1 || value === "1" || value === "true") return true;
+  if (typeof value === "string" && /^(y|yes)$/i.test(value.trim())) return true;
   return false;
+}
+
+function nhtsaStar(value: unknown): number | undefined {
+  const textValue = text(value);
+  if (textValue && /^not rated$/i.test(textValue)) return undefined;
+  const parsed = numberish(value);
+  if (parsed === undefined || parsed < 1 || parsed > 5) return undefined;
+  return parsed;
+}
+
+function epaScore(value: unknown): number | undefined {
+  const parsed = numberish(value);
+  if (parsed === undefined || parsed < 1 || parsed > 10) return undefined;
+  return parsed;
+}
+
+function epaCost(value: unknown): number | undefined {
+  const parsed = numberish(value);
+  if (parsed === undefined || parsed <= 0) return undefined;
+  return parsed;
+}
+
+function epaSigned(value: unknown): number | undefined {
+  const parsed = numberish(value);
+  if (parsed === undefined) return undefined;
+  return parsed;
+}
+
+function epaNonNegative(value: unknown): number | undefined {
+  const parsed = numberish(value);
+  if (parsed === undefined || parsed < 0) return undefined;
+  return parsed;
+}
+
+function epaPositive(value: unknown): number | undefined {
+  const parsed = numberish(value);
+  if (parsed === undefined || parsed <= 0) return undefined;
+  return parsed;
+}
+
+export function evKindFromAtvType(atvType: string | undefined): ModelEvKind | undefined {
+  const value = (atvType ?? "").trim().toLowerCase();
+  if (!value) return undefined;
+  if (value === "ev" || value === "electric") return "EV";
+  if (value === "phev" || value === "plug-in hybrid" || value === "plugin hybrid") {
+    return "PHEV";
+  }
+  return undefined;
+}
+
+function takataNoteFrom(record: Record<string, unknown>): string | undefined {
+  for (const key of ["Notes", "notes", "Summary", "summary", "Consequence", "Remedy"]) {
+    const value = text(record[key]);
+    if (value && /takata/i.test(value)) return clip(value);
+  }
+  return undefined;
 }
 
 function complaintDate(row: Record<string, unknown>): string {
@@ -339,6 +521,10 @@ export function parseRecallsPayload(payload: unknown): ModelRecalls | null {
 
   const campaigns: ModelRecall[] = [];
   const seen = new Set<string>();
+  let parkIt = false;
+  let parkOutSide = false;
+  let overTheAirUpdate = false;
+  let takata = false;
   for (const row of rows) {
     if (!row || typeof row !== "object") continue;
     const record = row as Record<string, unknown>;
@@ -349,17 +535,37 @@ export function parseRecallsPayload(payload: unknown): ModelRecalls | null {
       displayComponent(text(record.Component)) || `Campaign ${campaign}`;
     const consequence = clip(text(record.Consequence));
     const remedy = clip(text(record.Remedy));
-    campaigns.push({
-      campaign,
-      title,
-      ...(consequence ? { consequence } : {}),
-      ...(remedy ? { remedy } : {}),
-    });
-    if (campaigns.length >= MAX_CAMPAIGNS) break;
+    const rowParkIt = flag(record.parkIt);
+    const rowParkOutSide = flag(record.parkOutSide);
+    const rowOta = flag(record.overTheAirUpdate);
+    const takataNote = takataNoteFrom(record);
+    parkIt = parkIt || rowParkIt;
+    parkOutSide = parkOutSide || rowParkOutSide;
+    overTheAirUpdate = overTheAirUpdate || rowOta;
+    takata = takata || Boolean(takataNote);
+    if (campaigns.length < MAX_CAMPAIGNS) {
+      campaigns.push({
+        campaign,
+        title,
+        ...(consequence ? { consequence } : {}),
+        ...(remedy ? { remedy } : {}),
+        ...(rowParkIt ? { parkIt: true } : {}),
+        ...(rowParkOutSide ? { parkOutSide: true } : {}),
+        ...(rowOta ? { overTheAirUpdate: true } : {}),
+        ...(takataNote ? { takataNote } : {}),
+      });
+    }
   }
 
   if (total === 0 && campaigns.length === 0) return null;
-  return { total: total || campaigns.length, campaigns };
+  return {
+    total: total || campaigns.length,
+    campaigns,
+    ...(parkIt ? { parkIt: true } : {}),
+    ...(parkOutSide ? { parkOutSide: true } : {}),
+    ...(overTheAirUpdate ? { overTheAirUpdate: true } : {}),
+    ...(takata ? { takata: true } : {}),
+  };
 }
 
 function complaintComponents(row: Record<string, unknown>): string[] {
@@ -453,6 +659,7 @@ export function parseEpaVehicle(payload: unknown, id: string): EpaVehicleMpg | n
   const fuelType =
     text(row.fuelType1) || text(row.fuelType) || text(row.fuelType2);
   const displacement = row.displ !== undefined ? trimDisplacement(String(row.displ)) : "";
+  const atvType = text(row.atvType) || text(row.atvtype);
   return {
     id,
     city,
@@ -460,7 +667,125 @@ export function parseEpaVehicle(payload: unknown, id: string): EpaVehicleMpg | n
     combined,
     fuelType,
     ...(displacement ? { displacement } : {}),
+    ...(atvType ? { atvType } : {}),
+    ...(epaCost(row.fuelCost08) !== undefined
+      ? { fuelCost08: epaCost(row.fuelCost08) }
+      : {}),
+    ...(epaSigned(row.youSaveSpend) !== undefined
+      ? { youSaveSpend: epaSigned(row.youSaveSpend) }
+      : {}),
+    ...(epaScore(row.feScore) !== undefined ? { feScore: epaScore(row.feScore) } : {}),
+    ...(epaScore(row.ghgScore) !== undefined ? { ghgScore: epaScore(row.ghgScore) } : {}),
+    ...(epaNonNegative(row.co2) !== undefined ? { co2: epaNonNegative(row.co2) } : {}),
+    ...(epaPositive(row.range) !== undefined ? { range: epaPositive(row.range) } : {}),
+    ...(epaPositive(row.charge120) !== undefined
+      ? { charge120: epaPositive(row.charge120) }
+      : {}),
+    ...(epaPositive(row.charge240) !== undefined
+      ? { charge240: epaPositive(row.charge240) }
+      : {}),
+    ...(epaPositive(row.battery) !== undefined
+      ? { batteryKwh: epaPositive(row.battery) }
+      : {}),
+    ...(epaPositive(row.phevCity) !== undefined
+      ? { phevCity: epaPositive(row.phevCity) }
+      : {}),
+    ...(epaPositive(row.phevHwy) !== undefined
+      ? { phevHwy: epaPositive(row.phevHwy) }
+      : {}),
+    ...(epaPositive(row.phevComb) !== undefined
+      ? { phevComb: epaPositive(row.phevComb) }
+      : {}),
   };
+}
+
+export type SafetyVariant = { id: string; description: string };
+
+export function parseSafetyVariants(payload: unknown): SafetyVariant[] {
+  if (!payload || typeof payload !== "object") return [];
+  const body = payload as { Results?: unknown; results?: unknown };
+  const rows = Array.isArray(body.Results)
+    ? body.Results
+    : Array.isArray(body.results)
+      ? body.results
+      : [];
+  const variants: SafetyVariant[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    if (!row || typeof row !== "object") continue;
+    const record = row as Record<string, unknown>;
+    const id = text(record.VehicleId) || (numberish(record.VehicleId) !== undefined
+      ? String(numberish(record.VehicleId))
+      : "");
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    variants.push({
+      id,
+      description: text(record.VehicleDescription),
+    });
+  }
+  return variants;
+}
+
+export function parseSafetyRatings(payload: unknown): ModelSafetyRatings | null {
+  if (!payload || typeof payload !== "object") return null;
+  const body = payload as { Results?: unknown; results?: unknown };
+  const rows = Array.isArray(body.Results)
+    ? body.Results
+    : Array.isArray(body.results)
+      ? body.results
+      : [];
+  const row = rows[0];
+  if (!row || typeof row !== "object") return null;
+  const record = row as Record<string, unknown>;
+  const ratings: ModelSafetyRatings = {
+    ...(nhtsaStar(record.OverallRating) !== undefined
+      ? { overall: nhtsaStar(record.OverallRating) }
+      : {}),
+    ...(nhtsaStar(record.OverallFrontCrashRating) !== undefined
+      ? { front: nhtsaStar(record.OverallFrontCrashRating) }
+      : {}),
+    ...(nhtsaStar(record.OverallSideCrashRating) !== undefined
+      ? { side: nhtsaStar(record.OverallSideCrashRating) }
+      : {}),
+    ...(nhtsaStar(record.RolloverRating) !== undefined
+      ? { rollover: nhtsaStar(record.RolloverRating) }
+      : {}),
+    ...(nhtsaStar(record.SidePoleCrashRating) !== undefined
+      ? { sidePole: nhtsaStar(record.SidePoleCrashRating) }
+      : {}),
+    ...(text(record.VehicleDescription)
+      ? { vehicleDescription: text(record.VehicleDescription) }
+      : {}),
+  };
+  return hasSafetyRatings(ratings) ? ratings : null;
+}
+
+export function pickSafetyRatings(
+  ratings: ModelSafetyRatings[],
+): ModelSafetyRatings | undefined {
+  const usable = ratings.filter(hasSafetyRatings);
+  if (usable.length === 0) return undefined;
+  const first = usable[0]!;
+  const pick = (key: keyof ModelSafetyRatings): number | undefined => {
+    if (key === "vehicleDescription") return undefined;
+    const values = usable.map((row) => row[key]);
+    const star = values[0];
+    if (typeof star !== "number") return undefined;
+    return values.every((value) => value === star) ? star : undefined;
+  };
+  const merged: ModelSafetyRatings = {
+    ...(pick("overall") !== undefined ? { overall: pick("overall") } : {}),
+    ...(pick("front") !== undefined ? { front: pick("front") } : {}),
+    ...(pick("side") !== undefined ? { side: pick("side") } : {}),
+    ...(pick("rollover") !== undefined ? { rollover: pick("rollover") } : {}),
+    ...(pick("sidePole") !== undefined ? { sidePole: pick("sidePole") } : {}),
+    ...(first.vehicleDescription &&
+    usable.every((row) => row.vehicleDescription === first.vehicleDescription)
+      ? { vehicleDescription: first.vehicleDescription }
+      : {}),
+  };
+  return hasSafetyRatings(merged) ? merged : undefined;
 }
 
 export function matchingEpaOptions(options: EpaOption[], hint: string): EpaOption[] {
@@ -474,21 +799,22 @@ function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
 
-export function pickMpg(vehicles: EpaVehicleMpg[], hint: string): ModelMpg | undefined {
+function epaPool(vehicles: EpaVehicleMpg[], hint: string): EpaVehicleMpg[] | undefined {
   if (vehicles.length === 0) return undefined;
+  if (!hint) return vehicles;
+  const needle = trimDisplacement(hint);
+  const matched = vehicles.filter(
+    (vehicle) =>
+      vehicle.displacement === needle ||
+      (vehicle.displacement !== undefined &&
+        trimDisplacement(vehicle.displacement) === needle),
+  );
+  return matched.length === 0 ? undefined : matched;
+}
 
-  let pool = vehicles;
-  if (hint) {
-    const needle = trimDisplacement(hint);
-    const matched = vehicles.filter(
-      (vehicle) =>
-        vehicle.displacement === needle ||
-        (vehicle.displacement !== undefined &&
-          trimDisplacement(vehicle.displacement) === needle),
-    );
-    if (matched.length === 0) return undefined;
-    pool = matched;
-  }
+export function pickMpg(vehicles: EpaVehicleMpg[], hint: string): ModelMpg | undefined {
+  const pool = epaPool(vehicles, hint);
+  if (!pool) return undefined;
 
   const first = pool[0];
   const same = pool.every(
@@ -507,12 +833,91 @@ export function pickMpg(vehicles: EpaVehicleMpg[], hint: string): ModelMpg | und
   };
 }
 
+function agreedNumber(
+  pool: EpaVehicleMpg[],
+  key: keyof EpaVehicleMpg,
+): number | undefined {
+  const values = pool.map((row) => row[key]);
+  const first = values[0];
+  if (typeof first !== "number") return undefined;
+  return values.every((value) => value === first) ? first : undefined;
+}
+
+export function pickOwnership(
+  vehicles: EpaVehicleMpg[],
+  hint: string,
+): ModelOwnership | undefined {
+  const pool = epaPool(vehicles, hint);
+  if (!pool) return undefined;
+  const ownership: ModelOwnership = {
+    ...(agreedNumber(pool, "fuelCost08") !== undefined
+      ? { annualFuelCost: agreedNumber(pool, "fuelCost08") }
+      : {}),
+    ...(agreedNumber(pool, "youSaveSpend") !== undefined
+      ? { youSaveSpend: agreedNumber(pool, "youSaveSpend") }
+      : {}),
+    ...(agreedNumber(pool, "feScore") !== undefined
+      ? { feScore: agreedNumber(pool, "feScore") }
+      : {}),
+    ...(agreedNumber(pool, "ghgScore") !== undefined
+      ? { ghgScore: agreedNumber(pool, "ghgScore") }
+      : {}),
+    ...(agreedNumber(pool, "co2") !== undefined
+      ? { co2: agreedNumber(pool, "co2") }
+      : {}),
+  };
+  return hasOwnership(ownership) ? ownership : undefined;
+}
+
+export function pickEv(
+  vehicles: EpaVehicleMpg[],
+  hint: string,
+  mpg?: ModelMpg,
+): ModelEv | undefined {
+  const pool = epaPool(vehicles, hint);
+  if (!pool) return undefined;
+  const kinds = pool.map((row) => evKindFromAtvType(row.atvType));
+  const kind = kinds[0];
+  if (!kind || kinds.some((value) => value !== kind)) return undefined;
+
+  const phevCity = agreedNumber(pool, "phevCity");
+  const phevHwy = agreedNumber(pool, "phevHwy");
+  const phevComb = agreedNumber(pool, "phevComb");
+  const mpge =
+    phevCity !== undefined && phevHwy !== undefined && phevComb !== undefined
+      ? { city: phevCity, highway: phevHwy, combined: phevComb }
+      : mpg
+        ? { city: mpg.city, highway: mpg.highway, combined: mpg.combined }
+        : undefined;
+
+  const ev: ModelEv = {
+    kind,
+    ...(agreedNumber(pool, "range") !== undefined
+      ? { range: agreedNumber(pool, "range") }
+      : {}),
+    ...(agreedNumber(pool, "charge120") !== undefined
+      ? { charge120: agreedNumber(pool, "charge120") }
+      : {}),
+    ...(agreedNumber(pool, "charge240") !== undefined
+      ? { charge240: agreedNumber(pool, "charge240") }
+      : {}),
+    ...(agreedNumber(pool, "batteryKwh") !== undefined
+      ? { batteryKwh: agreedNumber(pool, "batteryKwh") }
+      : {}),
+    ...(mpge ? { mpge } : {}),
+  };
+  return hasEvCard(ev) ? ev : undefined;
+}
+
 export function composeModelExtras(
   ymm: Ymm,
   slices: {
     recalls?: ModelRecalls | null;
     complaints?: ModelComplaints | null;
     mpg?: ModelMpg | null;
+    ownership?: ModelOwnership | null;
+    ev?: ModelEv | null;
+    safetyRatings?: ModelSafetyRatings | null;
   },
 ): ModelExtras | null {
   const extras: ModelExtras = {
@@ -529,6 +934,9 @@ export function composeModelExtras(
     };
   }
   if (slices.mpg) extras.mpg = slices.mpg;
+  if (hasOwnership(slices.ownership)) extras.ownership = slices.ownership;
+  if (hasEvCard(slices.ev)) extras.ev = slices.ev;
+  if (hasSafetyRatings(slices.safetyRatings)) extras.safetyRatings = slices.safetyRatings;
   return hasModelExtras(extras) ? extras : null;
 }
 
@@ -584,6 +992,72 @@ export function modelExtrasSummaryLine(extras: ModelExtras): string {
     );
   }
   return bits.join(" · ");
+}
+
+const BADGE_LABELS: Record<RecallBadgeKey, string> = {
+  parkIt: "Park it",
+  parkOutSide: "Park outside",
+  overTheAirUpdate: "Over-the-air update",
+  takata: "Takata",
+};
+
+export function campaignBadges(campaign: ModelRecall): RecallBadge[] {
+  const badges: RecallBadge[] = [];
+  if (campaign.parkIt) badges.push({ key: "parkIt", label: BADGE_LABELS.parkIt });
+  if (campaign.parkOutSide) {
+    badges.push({ key: "parkOutSide", label: BADGE_LABELS.parkOutSide });
+  }
+  if (campaign.overTheAirUpdate) {
+    badges.push({ key: "overTheAirUpdate", label: BADGE_LABELS.overTheAirUpdate });
+  }
+  if (campaign.takataNote) badges.push({ key: "takata", label: BADGE_LABELS.takata });
+  return badges;
+}
+
+export function recallHeaderBadges(recalls: ModelRecalls): RecallBadge[] {
+  const keys: RecallBadgeKey[] = [];
+  if (recalls.parkIt) keys.push("parkIt");
+  if (recalls.parkOutSide) keys.push("parkOutSide");
+  if (recalls.overTheAirUpdate) keys.push("overTheAirUpdate");
+  if (recalls.takata) keys.push("takata");
+  return keys.map((key) => ({ key, label: BADGE_LABELS[key] }));
+}
+
+export function formatUsdEstimate(amount: number): string {
+  const abs = Math.abs(Math.round(amount));
+  return `$${abs.toLocaleString("en-US")}`;
+}
+
+export function youSaveSpendCopy(amount: number): string {
+  if (amount > 0) return `Save ${formatUsdEstimate(amount)} over 5 years`;
+  if (amount < 0) return `Spend ${formatUsdEstimate(amount)} more over 5 years`;
+  return "About average over 5 years";
+}
+
+export type SafetyFigure = {
+  key: keyof ModelSafetyRatings;
+  label: string;
+  value: number;
+};
+
+export function safetyFigureRows(ratings: ModelSafetyRatings): SafetyFigure[] {
+  const rows: SafetyFigure[] = [];
+  if (ratings.overall !== undefined) {
+    rows.push({ key: "overall", label: "Overall", value: ratings.overall });
+  }
+  if (ratings.front !== undefined) {
+    rows.push({ key: "front", label: "Front", value: ratings.front });
+  }
+  if (ratings.side !== undefined) {
+    rows.push({ key: "side", label: "Side", value: ratings.side });
+  }
+  if (ratings.rollover !== undefined) {
+    rows.push({ key: "rollover", label: "Rollover", value: ratings.rollover });
+  }
+  if (ratings.sidePole !== undefined) {
+    rows.push({ key: "sidePole", label: "Side pole", value: ratings.sidePole });
+  }
+  return rows;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -838,6 +1312,55 @@ async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
   return sawEmptyMenu ? [] : null;
 }
 
+function safetyVariantsUrl(ymm: Ymm): string {
+  const year = encodeURIComponent(ymm.year);
+  const make = encodeURIComponent(ymm.make);
+  const model = encodeURIComponent(ymm.model);
+  return `${SAFETY_VARIANTS_URL}/${year}/make/${make}/model/${model}`;
+}
+
+async function loadSafetyRatingsFor(ymm: Ymm): Promise<ModelSafetyRatings | null> {
+  const variantsPayload = await getJson(safetyVariantsUrl(ymm));
+  if (!variantsPayload) return null;
+  const variants = parseSafetyVariants(variantsPayload).slice(0, MAX_SAFETY_VARIANTS);
+  if (variants.length === 0) return null;
+
+  const ratings = (
+    await Promise.all(
+      variants.map(async (variant) => {
+        const payload = await getJson(
+          `${SAFETY_VEHICLE_URL}/${encodeURIComponent(variant.id)}`,
+        );
+        return payload ? parseSafetyRatings(payload) : null;
+      }),
+    )
+  ).filter((row): row is ModelSafetyRatings => Boolean(row));
+
+  if (ratings.length === 0) return null;
+  return pickSafetyRatings(ratings) ?? null;
+}
+
+async function loadSafetyRatings(ymm: Ymm): Promise<ModelSafetyRatings | null> {
+  return firstMatchingSlice(ymm, (candidate) => loadSafetyRatingsFor(candidate));
+}
+
+function epaSlices(
+  vehicles: EpaVehicleMpg[] | null,
+  hint: string,
+): {
+  mpg?: ModelMpg;
+  ownership?: ModelOwnership;
+  ev?: ModelEv;
+} {
+  if (!vehicles) return {};
+  const mpg = pickMpg(vehicles, hint);
+  return {
+    mpg,
+    ownership: pickOwnership(vehicles, hint),
+    ev: pickEv(vehicles, hint, mpg),
+  };
+}
+
 async function peekSlice<T>(
   key: string,
   store: ModelExtrasCache | undefined,
@@ -872,25 +1395,32 @@ export async function cachedExtrasForReport(
   const hint = engineDisplacementHint(report.vehicle, report.specifications);
   const base = `${EXTRAS_CACHE_VERSION}|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
 
-  const [recalls, complaints, vehicles] = await Promise.all([
+  const [recalls, complaints, vehicles, safetyRatings] = await Promise.all([
     peekSlice<ModelRecalls>(`${base}|recalls`, store),
     peekSlice<ModelComplaints>(`${base}|complaints`, store),
     peekSlice<EpaVehicleMpg[]>(`${base}|epa`, store),
+    peekSlice<ModelSafetyRatings>(`${base}|safety`, store),
   ]);
 
-  if (recalls === undefined || complaints === undefined || vehicles === undefined) {
+  if (
+    recalls === undefined ||
+    complaints === undefined ||
+    vehicles === undefined ||
+    safetyRatings === undefined
+  ) {
     return null;
   }
 
   return composeModelExtras(ymm, {
     recalls,
     complaints,
-    mpg: vehicles ? pickMpg(vehicles, hint) : undefined,
+    safetyRatings,
+    ...epaSlices(vehicles, hint),
   });
 }
 
 /**
- * Pulls the three public slices for one report's year/make/model.
+ * Pulls the public slices for one report's year/make/model.
  *
  * Never throws. Each public API is retried on transient failure. A missing
  * YMM, a still-down API or an ambiguous MPG match all resolve to `null` or
@@ -907,15 +1437,17 @@ export async function extrasForReport(
   const hint = engineDisplacementHint(report.vehicle, report.specifications);
   const base = `${EXTRAS_CACHE_VERSION}|${ymmCacheKey(ymm.year, ymm.make, ymm.model)}`;
 
-  const [recalls, complaints, vehicles] = await Promise.all([
+  const [recalls, complaints, vehicles, safetyRatings] = await Promise.all([
     cachedSlice<ModelRecalls>(`${base}|recalls`, store, () => loadRecalls(ymm)),
     cachedSlice<ModelComplaints>(`${base}|complaints`, store, () => loadComplaints(ymm)),
     cachedSlice<EpaVehicleMpg[]>(`${base}|epa`, store, () => loadEpaVehicles(ymm)),
+    cachedSlice<ModelSafetyRatings>(`${base}|safety`, store, () => loadSafetyRatings(ymm)),
   ]);
 
   return composeModelExtras(ymm, {
     recalls,
     complaints,
-    mpg: vehicles ? pickMpg(vehicles, hint) : undefined,
+    safetyRatings,
+    ...epaSlices(vehicles, hint),
   });
 }

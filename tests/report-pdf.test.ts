@@ -152,6 +152,14 @@ describe("report PDF", () => {
     assert.match(source, /SPEC_MPG_TITLE/);
     assert.match(source, /SPEC_MPG_NOTE/);
     assert.match(source, /function EpaMpgFigures/);
+    assert.match(source, /SAFETY_RATINGS_TITLE/);
+    assert.match(source, /function SafetyRatingsBlock/);
+    assert.match(source, /EPA_OWNERSHIP_TITLE/);
+    assert.match(source, /function OwnershipBlock/);
+    assert.match(source, /function EvBlock/);
+    assert.match(source, /hasEvCard\(extras\.ev\)/);
+    assert.match(source, /recallHeaderBadges/);
+    assert.match(source, /campaignBadges/);
     assert.doesNotMatch(
       source,
       /modelExtrasSummaryLine/,
