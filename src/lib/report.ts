@@ -1140,6 +1140,8 @@ export function hasOdometerRollback(readings: OdometerReading[]): boolean {
  * Copart and IAA also sell fleet, repo and Clean Title Front Line cars.
  * A JSI or auction row is not salvage-history by itself — only when its
  * disposition or title type is branded or a true total-loss outcome.
+ * VinAudit's `clean` flag is ignored either way: `true` is how a thin
+ * titles feed arrives, and `false` is often just "a JSI row exists".
  */
 export type TitleHistoryStatus =
   | "clean"
@@ -1157,6 +1159,7 @@ export const TITLE_KIND_LABELS = [
   "Disposition",
   "Vehicle disposition",
   "Brand",
+  "Brand title",
   "Event",
   "Title type",
   "Title",
@@ -1241,33 +1244,85 @@ function titleRecordsLookBranded(report: VehicleReport): boolean {
   );
 }
 
-function salvageChannelOnFile(report: VehicleReport): boolean {
-  const records = sectionByKey(report, "jsi")?.records ?? [];
-  return records.some((fields) => jsiRecordLooksAdverse(fields));
+function rawPayload(report: VehicleReport): Record<string, unknown> | undefined {
+  const raw = report.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
+}
+
+function rawRows(report: VehicleReport, key: string): Record<string, unknown>[] {
+  const value = rawPayload(report)?.[key];
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null && !Array.isArray(item),
+    );
+  }
+  if (typeof value === "object" && value !== null) {
+    return [value as Record<string, unknown>];
+  }
+  return [];
+}
+
+function rawText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return "";
+}
+
+function rawField(row: Record<string, unknown>, ...keys: string[]): string {
+  const lowered = new Map(
+    Object.entries(row).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ""), value]),
+  );
+  for (const key of keys) {
+    const text = rawText(lowered.get(key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * VinAudit `checks[]` rows are NMVTIS brand records. Title rows often omit
+ * the brand even when a state has already recorded one — the Beetle case.
+ */
+function rawCheckLooksBranded(row: Record<string, unknown>): boolean {
+  const brand = rawField(row, "brand_title", "brandtitle", "brand");
+  const code = rawField(row, "brand_code", "brandcode");
+  if (titleKindFromText(`${brand} ${code}`) === "adverse") return true;
+  return Boolean(brand || code);
+}
+
+function rawSalvageLooksAdverse(row: Record<string, unknown>): boolean {
+  return (
+    titleKindFromText(
+      [
+        rawField(row, "type"),
+        rawField(row, "brand"),
+        rawField(row, "title"),
+        rawField(row, "brand_title", "brandtitle"),
+        rawField(row, "disposition", "vehicle_disposition"),
+      ].join(" "),
+    ) === "adverse"
+  );
 }
 
 function brandedOnFile(report: VehicleReport): boolean {
   const branded = checkByKey(report, "branded");
   if (branded?.status === "found") return true;
-  return titleRecordsLookBranded(report);
+  if (titleRecordsLookBranded(report)) return true;
+  return rawRows(report, "checks").some(rawCheckLooksBranded);
 }
 
-/**
- * VinAudit's `clean` boolean is only a veto: false means do not claim clean.
- * true is ignored — that is also how a thin titles feed is labelled.
- */
-function providerSaysNotClean(report: VehicleReport): boolean {
-  const raw = report.raw;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const flag = (raw as Record<string, unknown>).clean;
-  return flag === false || flag === "false" || flag === 0 || flag === "0";
+function salvageChannelOnFile(report: VehicleReport): boolean {
+  const records = sectionByKey(report, "jsi")?.records ?? [];
+  if (records.some((fields) => jsiRecordLooksAdverse(fields))) return true;
+  return rawRows(report, "salvage").some(rawSalvageLooksAdverse);
 }
 
 export function titleHistoryStatus(report: VehicleReport): TitleHistoryStatus {
   if (brandedOnFile(report)) return "branded";
-  if (salvageChannelOnFile(report) || providerSaysNotClean(report)) {
-    return "salvage-history";
-  }
+  if (salvageChannelOnFile(report)) return "salvage-history";
   if (titleRecordCount(report) > 0) return "clean";
   return "unknown";
 }

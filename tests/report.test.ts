@@ -27,6 +27,7 @@ import {
   issueChecksEmptyLabel,
   preferResolvedDisposition,
   recordCalendarDay,
+  withResolvedDispositions,
   reportChips,
   reportHeadline,
   titleHistoryStatus,
@@ -272,6 +273,40 @@ describe("same-day pending vs resolved salvage dispositions", () => {
       copart("May 11, 2026", "Sold", "IAA"),
     ]);
     assert.equal(kept.length, 2);
+  });
+
+  it("collapses same-day IAA TBD once Sold is on the row, even after the house is lifted", () => {
+    const stored = report({
+      sections: [
+        section({
+          key: "jsi",
+          shared: [
+            { label: "Brander name", value: "IAA" },
+            { label: "Record type", value: "Junk And Salvage" },
+          ],
+          records: [
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "Sold" },
+              { label: "Intended for export", value: "Y" },
+            ],
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "To be determined" },
+              { label: "Intended for export", value: "N" },
+            ],
+          ],
+        }),
+      ],
+    });
+    const jsi = withResolvedDispositions(stored).sections.find(
+      (entry) => entry.key === "jsi",
+    );
+    assert.equal(jsi?.records.length, 1);
+    assert.equal(
+      jsi?.records[0].find((field) => field.label === "Vehicle disposition")?.value,
+      "Sold",
+    );
   });
 
   it("does not invent a sale by dropping a lone dealer TBD listing", () => {
@@ -1303,6 +1338,95 @@ describe("the header of a report", () => {
       false,
     );
     assert.ok(chips.some((chip) => chip.key === "jsi"));
+  });
+
+  it("still says Clean title when VinAudit clean:false is only the IAA/JSI flag", () => {
+    const iaaSold = report({
+      checks: [
+        { key: "titles", label: "Title records", status: "found", count: 5, detail: "" },
+        { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+        { key: "jsi", label: "Junk & salvage", status: "found", count: 1, detail: "" },
+      ],
+      raw: { clean: false, jsi: [{ brander_name: "IAA", vehicle_disposition: "SOLD" }] },
+      sections: [
+        section({
+          key: "titles",
+          records: [[{ label: "State", value: "CA" }]],
+        }),
+        section({
+          key: "jsi",
+          shared: [{ label: "Record type", value: "Junk And Salvage" }],
+          records: [
+            [
+              { label: "Obtained from", value: "IAA" },
+              { label: "Vehicle disposition", value: "Sold" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(titleHistoryStatus(iaaSold), "clean");
+    assert.ok(reportChips(iaaSold).some((chip) => chip.label === "Clean title"));
+    assert.ok(sectionsWithRecords(iaaSold).some((entry) => entry.key === "jsi"));
+  });
+
+  it("reads a stored CA salvage check as branded even when title rows and the branded check are clear", () => {
+    const beetle = report({
+      vin: "3VW5DAAT4JM515636",
+      isSample: false,
+      checks: [
+        { key: "titles", label: "Title records", status: "found", count: 5, detail: "" },
+        { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+        { key: "jsi", label: "Junk & salvage", status: "found", count: 2, detail: "" },
+      ],
+      raw: {
+        clean: false,
+        titles: [{ state: "CA", date: "2026-07-07", current: true }],
+        jsi: [
+          { date: "2026-06-03", brander_name: "IAA", vehicle_disposition: "SOLD" },
+          { date: "2026-06-03", brander_name: "IAA", vehicle_disposition: "TO BE DETERMINED" },
+        ],
+        salvage: [{ date: "2026-07-09", type: "salvage" }],
+        checks: [
+          {
+            date: "2026-07-07",
+            brand_code: "11",
+            brand_title: "Salvage: Damage or Not Specified",
+            brander_name: "CALIFORNIA",
+            brander_type: "State",
+          },
+        ],
+      },
+      sections: [
+        section({
+          key: "titles",
+          records: [[{ label: "Date", value: "Jul 7, 2026" }, { label: "State", value: "CA" }]],
+        }),
+        section({
+          key: "jsi",
+          shared: [{ label: "Record type", value: "Junk And Salvage" }],
+          records: [
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "Sold" },
+            ],
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "To be determined" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(titleHistoryStatus(beetle), "branded");
+    assert.match(reportHeadline(beetle), /Branded-title/);
+    const chips = reportChips(beetle);
+    assert.ok(chips.some((chip) => chip.label === "Branded title"));
+    assert.equal(
+      chips.some((chip) => /clean title/i.test(chip.label)),
+      false,
+    );
+    assert.ok(sectionsWithRecords(beetle).some((entry) => entry.key === "jsi"));
   });
 
   it("says Clean title when Copart JSI is a clear-title sale and titles are unbranded", () => {
