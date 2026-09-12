@@ -139,6 +139,10 @@ function faqItems(price: string) {
       q: "Can I see a report before I pay?",
       a: "Yes. We publish a complete, clearly labelled sample so you can judge the depth and layout. It is marked SAMPLE on every screen and is never served in place of a report you paid for.",
     },
+    {
+      q: "What can I check for free first?",
+      a: "NICB VINCheck is typically free for theft, salvage and insurance total-loss flags. NHTSA’s recall lookup is typically free for open safety recalls. Neither is a full history report. Use them as a first screen, then read a labelled sample here if you want title brands, odometer, listings and the rest in one place.",
+    },
   ];
 }
 
@@ -233,10 +237,10 @@ export default function IsCarfaxWorthItPage() {
                   href="/sample"
                   className="inline-flex items-center gap-2 rounded-xl bg-white px-5 py-3 text-sm font-semibold text-slate-900 transition hover:bg-slate-100"
                 >
-                  Read the sample report
+                  See a free sample report
                 </Link>
                 <StartReportLink className="inline-flex items-center gap-2 rounded-xl border border-white/20 bg-white/5 px-5 py-3 text-sm font-semibold text-white transition hover:bg-white/10">
-                  Check a VIN
+                  Check a VIN — {price}
                 </StartReportLink>
               </div>
               <p className="mt-4 text-xs text-slate-400">
@@ -414,10 +418,10 @@ export default function IsCarfaxWorthItPage() {
           </div>
 
           <div className="mt-10 overflow-x-auto rounded-2xl border border-slate-200 bg-white">
-            <table className="min-w-[44rem] text-left text-sm">
+            <table className="min-w-[56rem] text-left text-sm">
               <caption className="sr-only">
-                Typical 2026 retail prices for Carfax, AutoCheck, and{" "}
-                {BRAND.name}
+                Typical 2026 prices for Carfax, AutoCheck, free public checks,
+                and {BRAND.name}
               </caption>
               <thead className="border-b border-slate-200 bg-slate-50 text-xs font-semibold uppercase tracking-wider text-slate-500">
                 <tr>
@@ -428,7 +432,10 @@ export default function IsCarfaxWorthItPage() {
                     Typical price
                   </th>
                   <th scope="col" className="px-5 py-3.5">
-                    What you are usually paying for
+                    Best for
+                  </th>
+                  <th scope="col" className="px-5 py-3.5">
+                    Watch-outs
                   </th>
                 </tr>
               </thead>
@@ -439,8 +446,12 @@ export default function IsCarfaxWorthItPage() {
                   </th>
                   <td className="px-5 py-4">typically about $40–$45</td>
                   <td className="px-5 py-4">
-                    Brand-name report; strongest on participating service
-                    records
+                    Participating service records and a name lenders already
+                    know
+                  </td>
+                  <td className="px-5 py-4">
+                    The expensive way to buy a single VIN at retail. Still
+                    misses unreported damage.
                   </td>
                 </tr>
                 <tr>
@@ -449,8 +460,10 @@ export default function IsCarfaxWorthItPage() {
                   </th>
                   <td className="px-5 py-4">typically about $60–$110 for a pack</td>
                   <td className="px-5 py-4">
-                    Lower per-VIN cost if you will actually use the extra
-                    reports
+                    Shoppers who will actually run several VINs
+                  </td>
+                  <td className="px-5 py-4">
+                    Per-report savings disappear if the extra reports sit unused
                   </td>
                 </tr>
                 <tr>
@@ -459,7 +472,35 @@ export default function IsCarfaxWorthItPage() {
                   </th>
                   <td className="px-5 py-4">typically about $25</td>
                   <td className="px-5 py-4">
-                    Experian report; often a score plus history
+                    A score plus history from Experian’s network
+                  </td>
+                  <td className="px-5 py-4">
+                    Different sources than Carfax. Not a substitute for a PPI.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="px-5 py-4 font-semibold text-slate-900">
+                    NICB VINCheck
+                  </th>
+                  <td className="px-5 py-4">typically free</td>
+                  <td className="px-5 py-4">
+                    A first-pass theft, salvage, or insurance total-loss flag
+                  </td>
+                  <td className="px-5 py-4">
+                    Not a history report. No odometer timeline, listings, or
+                    service records.
+                  </td>
+                </tr>
+                <tr>
+                  <th scope="row" className="px-5 py-4 font-semibold text-slate-900">
+                    NHTSA recall lookup
+                  </th>
+                  <td className="px-5 py-4">typically free</td>
+                  <td className="px-5 py-4">
+                    Open safety recalls by VIN on NHTSA’s own site
+                  </td>
+                  <td className="px-5 py-4">
+                    Recalls only. Nothing about title, accidents, or liens.
                   </td>
                 </tr>
                 <tr className="bg-brand-50/70">
@@ -470,8 +511,12 @@ export default function IsCarfaxWorthItPage() {
                     {price}, one-time
                   </td>
                   <td className="px-5 py-4">
-                    Independent single-VIN report. No subscription, no pack to
-                    finish.
+                    One VIN: title brands, accidents, listings, recalls, plus
+                    NHTSA 5-Star and EPA ownership extras
+                  </td>
+                  <td className="px-5 py-4">
+                    Not Carfax service records. Safety and EPA cards are
+                    model-year listings, not this VIN. Still get a PPI.
                   </td>
                 </tr>
               </tbody>
@@ -552,13 +597,17 @@ export default function IsCarfaxWorthItPage() {
                 vehicle first, then pull title brands, salvage and junk records,
                 odometer history, reported accidents, liens, prior listings and
                 open recalls — readable in about a minute, with a written brief
-                on every paid report.
+                on every paid report. Paid reports also include NHTSA 5-Star
+                safety ratings and EPA ownership / fuel-economy extras for the
+                year, make and model, labelled as model-year listings rather
+                than facts about this VIN.
               </p>
               <ul className="mt-6 space-y-3 text-sm leading-relaxed text-slate-600">
                 {[
                   `${price} through Stripe. One-time. Nothing to cancel.`,
                   "Enter the VIN on the homepage. You see year, make and model before you pay.",
                   "A complete labelled sample so you can judge the layout first.",
+                  "NHTSA 5-Star ratings and EPA ownership extras ship on the paid report when those public APIs return a match — never invented.",
                   "We do not claim Carfax’s participating service-record network.",
                   "We are not affiliated with Carfax, AutoCheck, or any manufacturer or agency.",
                 ].map((line) => (
@@ -584,10 +633,10 @@ export default function IsCarfaxWorthItPage() {
                   href="/sample"
                   className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-5 py-3 text-sm font-semibold text-white transition hover:bg-slate-800"
                 >
-                  View the full sample report
+                  See a free sample report
                 </Link>
                 <StartReportLink className="inline-flex items-center gap-2 rounded-xl border border-slate-300 bg-white px-5 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-100">
-                  Check my VIN
+                  Check a VIN — {price}
                 </StartReportLink>
               </div>
             </div>

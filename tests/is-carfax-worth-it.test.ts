@@ -42,17 +42,24 @@ describe("/is-carfax-worth-it", () => {
     assert.match(page, /typically about \$40–\$45/);
     assert.match(page, /typically about \$60–\$110 for a pack/);
     assert.match(page, /typically about \$25/);
+    assert.match(page, /NICB VINCheck/);
+    assert.match(page, /NHTSA recall lookup/);
+    assert.match(page, /typically free/);
+    assert.match(page, /Best for/);
+    assert.match(page, /Watch-outs/);
     assert.match(page, /Typical retail ranges, not a live price list/);
     assert.equal(
       page.match(/typically about \$/g)?.length,
       3,
-      "every competitor price cell should say typically",
+      "every paid competitor price cell should say typically",
     );
   });
 
   it("keeps CTAs soft: sample report and homepage VIN checkout", async () => {
     const page = await readSrc("app/is-carfax-worth-it/page.tsx");
     assert.match(page, /href="\/sample"/);
+    assert.match(page, /See a free sample report/);
+    assert.match(page, /Check a VIN — \{price\}/);
     assert.match(page, /<StartReportLink/);
     assert.match(page, /<VinForm variant="on-light"/);
     assert.match(page, /<SampleTeaser/);
@@ -62,12 +69,14 @@ describe("/is-carfax-worth-it", () => {
 
   it("stays legally honest: clean report, PPI, no affiliation, no fake reviews", async () => {
     const page = await readSrc("app/is-carfax-worth-it/page.tsx");
+    assert.match(page, /NHTSA 5-Star/);
+    assert.match(page, /EPA ownership/);
     assert.match(page, /A clean report is not a clean car/);
     assert.match(page, /pre-purchase inspection/);
     assert.match(page, /We are not affiliated with Carfax or AutoCheck/);
     assert.match(page, /not affiliated with, endorsed by, or sponsored by/);
     assert.match(page, /without a fake review/);
-    assert.doesNotMatch(page, /★★|⭐|star rating|5\/5|John from|verified buyer/i);
+    assert.doesNotMatch(page, /★★|⭐|5\/5|John from|verified buyer|customer review/i);
     assert.doesNotMatch(page, /PullVinReport|Pull Vin Report|pullvinreport\.com/i);
     assert.doesNotMatch(page, /(?<![\w/])vinaudit(?!\w)/i);
   });
