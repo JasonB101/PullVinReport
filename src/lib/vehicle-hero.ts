@@ -127,7 +127,7 @@ function canonicalOpenTopToken(value: string): string {
 }
 
 /**
- * VinAudit's `Style` is often a long catalog line (`2.0T S Convertible 2D`).
+ * A catalog `Style` is often a long line (`2.0T S Convertible 2D`).
  * When a short body token is also on the record, that is what Recraft
  * should see.
  */
