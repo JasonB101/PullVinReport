@@ -203,10 +203,10 @@ details.
 - Recraft V3 does not return alpha. After the drawing, `fal-ai/imageutils/rembg`
   cuts the background to a transparent PNG. If that pass fails, no hero is
   stored (we will not keep an opaque studio plate).
-- Cached once per `cutout-v1|year|make|model|trim|color|body|engine` on the
+- Cached once per `cutout-v2|year|make|model|trim|color|body|engine` on the
   store (`pullvinreport_vehicle_heroes` in Postgres, `.data/vehicle-heroes.json`
   on the file store). Another order for the same example reuses the drawing.
-  Keys that do not start with `cutout-v1|` are dropped on the next report view
+  Keys that do not start with `cutout-v2|` are dropped on the next report view
   so a previous white studio shot cannot come back.
 - The sample report uses a static transparent PNG cutout at
   `/sample-vehicle-hero.png` and never calls fal. Paid reports still draw
@@ -222,7 +222,7 @@ After Baloo pulls this branch:
    - Postgres: `DELETE FROM pullvinreport_vehicle_heroes;`
    - File store: delete `.data/vehicle-heroes.json`
    The app also ignores (and prunes) any key that does not start with
-   `cutout-v1|`, so a missed delete still will not show the old white image.
+   `cutout-v2|`, so a missed delete still will not show the old white image.
 2. Hard-refresh the paid report (Cmd/Ctrl-Shift-R).
 3. With `FAL_KEY` set you should see a Magnetite Gray (or the listing's
    `Vehicle color`) cutout to the right of the details, with no on-image

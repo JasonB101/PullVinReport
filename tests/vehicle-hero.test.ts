@@ -16,6 +16,7 @@ import {
   HERO_DRAFT_COPY,
   HERO_ILLUSTRATION_LABEL,
   SAMPLE_HERO_SRC,
+  isOpenTopHero,
 } from "../src/lib/vehicle-hero.ts";
 import { buildSampleReport } from "../src/lib/sample-report.ts";
 import { fal, isFalConfigured } from "../src/lib/config.ts";
@@ -152,8 +153,86 @@ describe("the illustration prompt", () => {
     assert.match(prompt, /Transparent background/i);
     assert.match(prompt, /2\.5L L4/);
     assert.doesNotMatch(prompt, new RegExp(buildSampleReport().vin, "i"));
+    assert.doesNotMatch(prompt, /not a hardtop coupe/i);
+    assert.equal(isOpenTopHero(facts), false);
     assert.match(heroAlt(facts), /^Illustrated 2012 Toyota Camry SE/);
     assert.doesNotMatch(heroAlt(facts), /not this VIN/i);
+  });
+
+  it("adds an explicit open-top clause and prefers Convertible over the catalog Style", () => {
+    const vin = "3VW5DAAT4JM515636";
+    const report = normalizeVinAuditReport(
+      {
+        attributes: {
+          Year: "2018",
+          Make: "Volkswagen",
+          Model: "Beetle",
+          Trim: "S",
+          Style: "2.0T S Convertible 2D",
+          "Body Type": "Convertible",
+        },
+      },
+      vin,
+    );
+
+    const facts = heroFacts(report);
+    assert.ok(facts);
+    assert.equal(facts.bodyStyle, "Convertible");
+    assert.equal(isOpenTopHero(facts), true);
+    assert.match(facts.cacheKey, new RegExp(`^${HERO_CACHE_VERSION}\\|`));
+    assert.match(facts.cacheKey, /convertible/);
+    assert.doesNotMatch(facts.cacheKey, /2\.0t s convertible 2d/);
+
+    const prompt = heroPrompt(facts);
+    assert.match(prompt, /2018 Volkswagen Beetle S, Convertible/);
+    assert.match(
+      prompt,
+      /convertible cabriolet with folding fabric soft-top; not a hardtop coupe; show the open-top body or convertible roofline/,
+    );
+    assert.doesNotMatch(prompt, /2\.0T S Convertible 2D/);
+    assert.doesNotMatch(prompt, new RegExp(vin, "i"));
+  });
+
+  it("still adds the open-top clause when only the catalog Style names Convertible", () => {
+    const report = normalizeVinAuditReport(
+      {
+        attributes: {
+          Year: "2018",
+          Make: "Volkswagen",
+          Model: "Beetle",
+          Trim: "S",
+          Style: "2.0T S Convertible 2D",
+        },
+      },
+      VIN,
+    );
+
+    const facts = heroFacts(report);
+    assert.ok(facts);
+    assert.equal(facts.bodyStyle, "2.0T S Convertible 2D");
+    assert.equal(isOpenTopHero(facts), true);
+    assert.match(heroPrompt(facts), /not a hardtop coupe/i);
+  });
+
+  it("adds the open-top clause when the trim is a roadster", () => {
+    const report = normalizeVinAuditReport(
+      {
+        attributes: {
+          Year: "2005",
+          Make: "Mercedes-Benz",
+          Model: "SLK-Class",
+          Trim: "SLK350 Roadster",
+          Style: "2D Coupe",
+        },
+      },
+      VIN,
+    );
+
+    const facts = heroFacts(report);
+    assert.ok(facts);
+    assert.equal(isOpenTopHero(facts), true);
+    assert.match(heroPrompt(facts), /not a hardtop coupe/i);
+    assert.match(heroPrompt(facts), /open-top body or convertible roofline/);
   });
 });
 
