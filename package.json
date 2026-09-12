@@ -1,5 +1,5 @@
 {
-  "name": "pullvinreport",
+  "name": "vehiclehistorybyvin",
   "version": "0.1.0",
   "private": true,
   "description": "Vehicle History by VIN — consumer VIN history reports",
