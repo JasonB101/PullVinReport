@@ -895,10 +895,16 @@ export function dedupeConsecutiveRecords(records: Field[][]): Field[][] {
   return kept;
 }
 
-const DISPOSITION_LABELS = ["Disposition", "Status", "Result"];
+const DISPOSITION_LABELS = [
+  "Disposition",
+  "Vehicle disposition",
+  "Status",
+  "Result",
+];
 const CHANNEL_LABELS = [
   "Obtained from",
   "Reporting entity",
+  "Brander name",
   "Source",
   "Seller",
   "Channel",
@@ -1118,6 +1124,106 @@ export function hasOdometerRollback(readings: OdometerReading[]): boolean {
 }
 
 /* -------------------------------------------------------------------------- */
+/* Title history: clean vs branded/salvage vs unknown                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * What we can honestly say about the title.
+ *
+ * VinAudit does not send a certified-clean flag we can trust on its own.
+ * `payload.clean === true` is "no brand/salvage/insurance rows in this
+ * payload", which is also how an empty titles feed arrives. We only call a
+ * title clean when we actually read title rows and those rows, plus junk/
+ * salvage, show no brand. Empty titles are unknown, not clean. Salvage or
+ * junk records mean the title is not clean even when the title rows
+ * themselves carry no brand text.
+ */
+export type TitleHistoryStatus =
+  | "clean"
+  | "branded"
+  | "salvage-history"
+  | "unknown";
+
+const TITLE_BRAND_TEXT =
+  /salvage|junk|rebuilt|flood|lemon|fire|hail|total loss|reconstruct/i;
+
+function checkByKey(report: VehicleReport, key: string): ReportCheck | undefined {
+  return report.checks.find((entry) => entry.key === key);
+}
+
+function sectionByKey(report: VehicleReport, key: string): ReportSection | undefined {
+  return report.sections.find((section) => section.key === key);
+}
+
+export function titleRecordCount(report: VehicleReport): number {
+  const titles = checkByKey(report, "titles");
+  if (titles) return titles.count;
+  return sectionByKey(report, "titles")?.records.length ?? 0;
+}
+
+function titleRecordsLookBranded(report: VehicleReport): boolean {
+  const titles = sectionByKey(report, "titles")?.records ?? [];
+  return titles.some((fields) =>
+    TITLE_BRAND_TEXT.test(fields.map((field) => field.value).join(" ")),
+  );
+}
+
+function salvageChannelOnFile(report: VehicleReport): boolean {
+  const jsi = checkByKey(report, "jsi");
+  if (jsi?.status === "found" && jsi.count > 0) return true;
+  return (sectionByKey(report, "jsi")?.records.length ?? 0) > 0;
+}
+
+function brandedOnFile(report: VehicleReport): boolean {
+  const branded = checkByKey(report, "branded");
+  if (branded?.status === "found") return true;
+  return titleRecordsLookBranded(report);
+}
+
+/**
+ * VinAudit's `clean` boolean is only a veto: false means do not claim clean.
+ * true is ignored — that is also how a thin titles feed is labelled.
+ */
+function providerSaysNotClean(report: VehicleReport): boolean {
+  const raw = report.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
+  const flag = (raw as Record<string, unknown>).clean;
+  return flag === false || flag === "false" || flag === 0 || flag === "0";
+}
+
+export function titleHistoryStatus(report: VehicleReport): TitleHistoryStatus {
+  if (brandedOnFile(report)) return "branded";
+  if (salvageChannelOnFile(report) || providerSaysNotClean(report)) {
+    return "salvage-history";
+  }
+  if (titleRecordCount(report) > 0) return "clean";
+  return "unknown";
+}
+
+export function reportHeadline(report: VehicleReport): string {
+  switch (titleHistoryStatus(report)) {
+    case "branded":
+      return "Branded-title activity was reported for this VIN.";
+    case "salvage-history":
+      return "Junk, salvage or insurance-loss activity was reported for this VIN.";
+    case "unknown":
+      return "No title records came back, so we cannot say whether the title is clean.";
+    case "clean":
+      return report.isSample
+        ? "No salvage, junk or insurance-loss brand was reported for this sample VIN."
+        : "No salvage, junk or insurance-loss brand was reported on the title records we have for this VIN.";
+  }
+}
+
+/** Green "nothing found" copy — never used when title history is unknown. */
+export function issueChecksEmptyLabel(report: VehicleReport): string {
+  if (titleHistoryStatus(report) === "unknown") {
+    return "Title records did not come back — we cannot treat this as a clean title.";
+  }
+  return "None of the issue checks came back with a record for this VIN.";
+}
+
+/* -------------------------------------------------------------------------- */
 /* What the renderers put at the top of a report                               */
 /* -------------------------------------------------------------------------- */
 
@@ -1161,12 +1267,14 @@ export function reportChips(report: VehicleReport): ReportChip[] {
   const check = (key: string) => report.checks.find((entry) => entry.key === key);
 
   const titles = check("titles");
-  const branded = check("branded");
+  const titleStatus = titleHistoryStatus(report);
 
-  if (branded?.status === "found") {
+  if (titleStatus === "branded") {
     chips.push({ key: "branded", label: "Branded title", tone: "flag" });
-  } else if (branded && titles && titles.count > 0) {
+  } else if (titleStatus === "clean") {
     chips.push({ key: "branded", label: "Clean title", tone: "clear" });
+  } else if (titleStatus === "unknown") {
+    chips.push({ key: "branded", label: "Title history unknown", tone: "neutral" });
   }
 
   if (report.odometer.length > 0) {
@@ -1183,6 +1291,19 @@ export function reportChips(report: VehicleReport): ReportChip[] {
     chips.push({
       key: entry.key,
       label: countChipLabel(entry.key, entry.label, entry.count),
+      tone: "flag",
+    });
+  }
+
+  if (titleStatus === "salvage-history" && !chips.some((chip) => chip.key === "jsi")) {
+    const jsiCount =
+      check("jsi")?.count || sectionByKey(report, "jsi")?.records.length || 0;
+    chips.push({
+      key: "jsi",
+      label:
+        jsiCount > 0
+          ? countChipLabel("jsi", "Junk & salvage", jsiCount)
+          : "Salvage or insurance history",
       tone: "flag",
     });
   }

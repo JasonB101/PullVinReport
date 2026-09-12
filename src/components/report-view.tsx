@@ -28,7 +28,10 @@ import {
   hasOdometerRollback,
   headerSpecifications,
   headerSpecSummary,
+  issueChecksEmptyLabel,
   reportChips,
+  reportHeadline,
+  titleHistoryStatus,
   reportNavItems,
   searchedAndEmpty,
   withResolvedDispositions,
@@ -111,9 +114,13 @@ function findingLabel(check: ReportCheck): string {
 function FindingsStrip({
   flags,
   clear,
+  emptyLabel,
+  titleUnknown,
 }: {
   flags: ReportCheck[];
   clear: string[];
+  emptyLabel: string;
+  titleUnknown: boolean;
 }) {
   return (
     <div>
@@ -129,8 +136,14 @@ function FindingsStrip({
           ))}
         </ul>
       ) : (
-        <p className="rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900">
-          None of the issue checks came back with a record for this VIN.
+        <p
+          className={
+            titleUnknown
+              ? "rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700"
+              : "rounded-xl border border-emerald-200 bg-emerald-50/60 px-4 py-3 text-sm text-emerald-900"
+          }
+        >
+          {emptyLabel}
         </p>
       )}
 
@@ -184,7 +197,12 @@ function WhatToKnow({
       </div>
 
       <div className="mt-4">
-        <FindingsStrip flags={flags} clear={clear} />
+        <FindingsStrip
+          flags={flags}
+          clear={clear}
+          emptyLabel={issueChecksEmptyLabel(report)}
+          titleUnknown={titleHistoryStatus(report) === "unknown"}
+        />
       </div>
 
       <AiBrief brief={brief} token={briefToken} />
@@ -822,7 +840,7 @@ export function ReportView({
               {flags.length > 0 && (
                 <p className="mt-3 border-l-4 border-amber-400 bg-amber-50/80 px-3 py-2 text-sm leading-relaxed text-slate-800">
                   <span className="font-semibold text-slate-900">Summary. </span>
-                  {report.headline}
+                  {reportHeadline(report)}
                 </p>
               )}
               <p className="mt-2 font-mono text-sm tracking-wider text-slate-500">
@@ -860,7 +878,7 @@ export function ReportView({
           <div className="border-t border-slate-200 bg-white px-5 py-5 sm:px-7">
             <p className="text-sm leading-relaxed text-slate-700">
               <span className="font-semibold text-slate-900">Summary. </span>
-              {report.headline}
+              {reportHeadline(report)}
             </p>
           </div>
         )}

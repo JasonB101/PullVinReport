@@ -19,6 +19,7 @@ import {
   isoDate,
   liftSharedFields,
   preferResolvedDisposition,
+  reportHeadline,
 } from "@/lib/report";
 import { cleanCustomerText } from "@/lib/customer-text";
 import { normalizeVin } from "@/lib/vin";
@@ -93,6 +94,14 @@ const KEY_LABELS: Record<string, string> = {
   msrp: "MSRP",
   reportingentity: "Reporting entity",
   obtainedfrom: "Obtained from",
+  vehicledisposition: "Disposition",
+  brandername: "Obtained from",
+  brandercity: "City",
+  branderstate: "State",
+  brandercode: "Brander code",
+  brandcode: "Brand",
+  brandertype: "Brander type",
+  recordtype: "Record type",
   intendedforexport: "Intended for export",
   sellertype: "Seller type",
   sellername: "Seller",
@@ -370,19 +379,52 @@ function check(
   };
 }
 
-function checkFound(checks: ReportCheck[], key: string): boolean {
-  return checks.some((entry) => entry.key === key && entry.status === "found");
+function brandedCheck(
+  brandedCount: number,
+  titleCount: number,
+  providerNotClean: boolean,
+): ReportCheck {
+  if (brandedCount > 0) {
+    return check(
+      "branded",
+      "Branded title",
+      brandedCount,
+      "A salvage, junk or other brand is on the title records",
+      "No salvage, junk or insurance brand found",
+    );
+  }
+  if (providerNotClean) {
+    return {
+      key: "branded",
+      label: "Branded title",
+      status: "found",
+      count: 0,
+      detail: "Title brand, salvage or insurance activity was reported",
+    };
+  }
+  if (titleCount === 0) {
+    return {
+      key: "branded",
+      label: "Branded title",
+      status: "unavailable",
+      count: 0,
+      detail: "No title records came back to read for brands",
+    };
+  }
+  return check(
+    "branded",
+    "Branded title",
+    0,
+    "A salvage, junk or other brand is on the title records",
+    "No salvage, junk or insurance brand found",
+  );
 }
 
-/** Title brands and NMVTIS salvage are separate facts; the headline says which. */
-function brandedOrSalvageHeadline(checks: ReportCheck[]): string {
-  const branded = checkFound(checks, "branded");
-  const salvage = checkFound(checks, "jsi");
-  if (branded) return "Branded-title activity was reported for this VIN.";
-  if (salvage) {
-    return "Junk, salvage or insurance-loss activity was reported for this VIN.";
-  }
-  return "No salvage, junk or insurance-loss brand was reported for this VIN.";
+function providerCleanFlag(payload: Record<string, unknown>): boolean | undefined {
+  const flag = payload.clean;
+  if (flag === true || flag === "true" || flag === 1 || flag === "1") return true;
+  if (flag === false || flag === "false" || flag === 0 || flag === "0") return false;
+  return undefined;
 }
 
 /**
@@ -434,7 +476,13 @@ export function normalizeVinAuditReport(
   };
 
   const titles = asRecordArray(payload.titles);
-  const jsi = asRecordArray(payload.jsi);
+  const brandChecks = asRecordArray(payload.checks).filter(
+    (row) =>
+      stringify(row.brand_code) ||
+      stringify(row.brandcode) ||
+      stringify(row.brand),
+  );
+  const jsi = [...asRecordArray(payload.jsi), ...asRecordArray(payload.salvage)];
   const accidents = asRecordArray(payload.accidents);
   const thefts = asRecordArray(payload.thefts);
   const liens = asRecordArray(payload.liens);
@@ -449,6 +497,11 @@ export function normalizeVinAuditReport(
       brand,
     );
   });
+  const providerClean = providerCleanFlag(payload);
+  // `clean: true` is not proof — that is also how a thin titles feed arrives.
+  // `clean: false` is a veto: never claim clean even if we cannot show the row.
+  const providerNotClean =
+    providerClean === false && brandedTitles.length === 0 && brandChecks.length === 0;
 
   const checks: ReportCheck[] = [
     check(
@@ -458,12 +511,10 @@ export function normalizeVinAuditReport(
       `${titles.length} title record${titles.length === 1 ? "" : "s"} on file`,
       "No title records returned",
     ),
-    check(
-      "branded",
-      "Branded title",
-      brandedTitles.length,
-      "A salvage, junk or other brand is on the title records",
-      "No salvage, junk or insurance brand found",
+    brandedCheck(
+      brandedTitles.length + brandChecks.length,
+      titles.length,
+      providerNotClean && jsi.length === 0,
     ),
     check(
       "jsi",
@@ -527,7 +578,7 @@ export function normalizeVinAuditReport(
         emptyLabel: "No title or registration events came back for this VIN.",
         columns: ["Date", "State", "Mileage", "Event", "Brand", "Current"],
       },
-      titles,
+      [...titles, ...brandChecks],
     ),
     buildSection(
       {
@@ -645,13 +696,13 @@ export function normalizeVinAuditReport(
 
   const providerReportUrl = stringify(payload.reportlink) || undefined;
 
-  return {
+  const report = {
     vin: normalizeVin(vin),
-    source: "vinaudit",
+    source: "vinaudit" as const,
     isSample: false,
     generatedAt: new Date().toISOString(),
     vehicle,
-    headline: brandedOrSalvageHeadline(checks),
+    headline: "",
     specifications,
     checks,
     sections,
@@ -659,6 +710,8 @@ export function normalizeVinAuditReport(
     providerReportUrl,
     raw: payload,
   };
+  report.headline = reportHeadline(report);
+  return report;
 }
 
 /* -------------------------------------------------------------------------- */

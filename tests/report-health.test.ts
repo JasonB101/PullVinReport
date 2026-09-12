@@ -212,15 +212,20 @@ describe("report health", () => {
       report({
         checks: [
           { key: "titles", label: "Title records", status: "clear", count: 0, detail: "" },
+          { key: "branded", label: "Branded title", status: "unavailable", count: 0, detail: "" },
         ],
         sections: [section({ key: "titles", records: [] })],
         odometer: [],
       }),
     );
     const titles = health.factors.find((factor) => factor.key === "titles");
+    const salvage = health.factors.find((factor) => factor.key === "salvage");
     assert.equal(health.score >= 0 && health.score <= 100, true);
     assert.equal(titles?.delta, -8);
     assert.match(titles?.reason ?? "", /thin/i);
+    assert.equal(salvage?.impact, "neutral");
+    assert.match(salvage?.reason ?? "", /cannot say the title is clean/i);
+    assert.doesNotMatch(salvage?.reason ?? "", /no salvage, junk or insurance-loss brand/i);
   });
 
   it("labels bands without using a market-value word", () => {

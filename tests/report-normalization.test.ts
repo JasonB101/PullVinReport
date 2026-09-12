@@ -431,6 +431,87 @@ describe("provider report normalization", () => {
     assert.equal(jsi?.count, 1);
     assert.match(salvageOnly.headline, /Junk, salvage or insurance-loss/);
     assert.doesNotMatch(salvageOnly.headline, /Branded-title/);
+    assert.doesNotMatch(salvageOnly.headline, /clean/i);
+  });
+
+  it("does not treat an empty titles feed as a clean title", () => {
+    const thin = normalizeVinAuditReport(
+      { attributes: { Year: "2016", Make: "Mini", Model: "Clubman" }, clean: true },
+      VIN,
+    );
+    const branded = thin.checks.find((entry) => entry.key === "branded");
+    assert.equal(branded?.status, "unavailable");
+    assert.match(thin.headline, /cannot say whether the title is clean/i);
+    assert.doesNotMatch(thin.headline, /no salvage, junk or insurance-loss brand was reported/i);
+  });
+
+  it("treats VinAudit brand-check rows as branded, not clean", () => {
+    const withChecks = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        checks: [
+          {
+            date: "2015-02-10",
+            brand_code: "11",
+            brander_type: "State",
+            brander_name: "NEW YORK",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = withChecks.checks.find((entry) => entry.key === "branded");
+    assert.equal(branded?.status, "found");
+    assert.match(withChecks.headline, /Branded-title/);
+  });
+
+  it("never claims clean when the provider clean flag is false", () => {
+    const flagged = normalizeVinAuditReport(
+      { ...PAYLOAD, clean: false },
+      VIN,
+    );
+    const branded = flagged.checks.find((entry) => entry.key === "branded");
+    assert.equal(branded?.status, "found");
+    assert.doesNotMatch(flagged.headline, /no salvage, junk or insurance-loss brand was reported/i);
+  });
+
+  it("collapses official vehicle_disposition TBD once Sold is on the same day", () => {
+    const official = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            record_type: "Junk And Salvage",
+            brander_name: "Copart",
+            vehicle_disposition: "TO BE DETERMINED",
+            brander_city: "Denver",
+            brander_state: "CO",
+          },
+          {
+            date: "2026-05-11",
+            record_type: "Junk And Salvage",
+            brander_name: "Copart",
+            vehicle_disposition: "SOLD",
+            brander_city: "Denver",
+            brander_state: "CO",
+          },
+        ],
+      },
+      VIN,
+    );
+    const jsi = find(official.sections, "jsi");
+    assert.equal(jsi.records.length, 1);
+    assert.equal(
+      jsi.records[0].find((field) => field.label === "Disposition")?.value,
+      "Sold",
+    );
+    assert.equal(
+      jsi.records.some((record) =>
+        record.some((field) => /to be determined|^tbd$/i.test(field.value)),
+      ),
+      false,
+    );
   });
 
   it("describes empty sections in our own voice", () => {

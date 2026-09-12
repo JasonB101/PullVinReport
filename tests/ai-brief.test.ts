@@ -369,6 +369,47 @@ describe("reading a brief out of a reply", () => {
     ]);
   });
 
+  it("drops a clean-title bullet when junk or salvage is already on file", () => {
+    const report = normalizeVinAuditReport(
+      {
+        attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+        titles: [
+          { date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" },
+        ],
+        jsi: [{ date: "2026-05-11", obtainedfrom: "Copart", disposition: "SOLD" }],
+      },
+      VIN,
+    );
+    const facts = briefFacts(report);
+    assert.equal(factsIndicateSalvageChannel(facts), true);
+
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "Clean title history.",
+          "A Copart salvage record from May 2026 shows Sold.",
+        ],
+      }),
+      "test-model",
+      report.vehicle,
+      facts,
+    );
+    assert.doesNotMatch(brief?.fromReport.join(" ") ?? "", /clean title/i);
+    assert.match(brief?.fromReport.join(" ") ?? "", /Copart salvage record/);
+
+    const stored = presentBrief(
+      {
+        fromReport: ["Clean title history."],
+        commonForModel: [],
+        questions: [],
+        model: "cached",
+      },
+      report,
+    );
+    assert.doesNotMatch(stored.fromReport.join(" "), /clean title/i);
+    assert.match(stored.fromReport.join(" "), /salvage history/i);
+  });
+
   it("still allows no-brands copy when title records exist", () => {
     const facts = briefFacts(paidReport());
     assert.equal(factsIndicateEmptyTitles(facts), false);
