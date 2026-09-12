@@ -49,8 +49,8 @@ const MAX_SUMMARY_CHARS = 480;
 const MAX_EPA_VEHICLES = 12;
 const MAX_SAFETY_VARIANTS = 8;
 
-/** Bump when the stored extras shape changes so a theme-only cache cannot stick. */
-const EXTRAS_CACHE_VERSION = "v4";
+/** Bump when the stored extras shape or YMM lookup aliases change. */
+const EXTRAS_CACHE_VERSION = "v5";
 
 /** NHTSA campaign flags we surface — only when the API set them. */
 export type RecallBadgeKey =
@@ -306,6 +306,44 @@ export function nhtsaModelCandidates(model: string): string[] {
     leading = leading.slice(1);
   }
   add(leading.join(" "));
+
+  return out;
+}
+
+/**
+ * EPA FuelEconomy and NHTSA SafetyRatings menus often prefix Mini body
+ * names with Cooper. vPIC and the report print `Clubman`; those menus
+ * list `Cooper Clubman` (and `Cooper S Clubman`). Recalls already match
+ * `Clubman`, so this list is only for the two menu lookups.
+ *
+ * Soft-omit stays: if every alias still misses, that slice is hidden.
+ */
+export function epaSafetyModelCandidates(make: string, model: string): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (value: string) => {
+    const normalized = value.trim().replace(/\s+/g, " ");
+    const key = normalized.toLowerCase();
+    if (!key || seen.has(key)) return;
+    seen.add(key);
+    out.push(normalized);
+  };
+
+  for (const candidate of nhtsaModelCandidates(model)) add(candidate);
+  if (!/^mini$/i.test(make.trim())) return out;
+
+  const parts = model
+    .trim()
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean);
+  const clubmanAt = parts.indexOf("clubman");
+  if (clubmanAt < 0) return out;
+
+  const cooperAt = parts.indexOf("cooper");
+  const alreadyCooperPrefixed = cooperAt >= 0 && cooperAt < clubmanAt;
+  if (parts.includes("s")) add("Cooper S Clubman");
+  if (!alreadyCooperPrefixed) add("Cooper Clubman");
 
   return out;
 }
@@ -1250,8 +1288,9 @@ function nhtsaQuery(ymm: Ymm): string {
 async function firstMatchingSlice<T>(
   ymm: Ymm,
   load: (candidate: Ymm) => Promise<T | null>,
+  models: string[] = nhtsaModelCandidates(ymm.model),
 ): Promise<T | null> {
-  for (const model of nhtsaModelCandidates(ymm.model)) {
+  for (const model of models) {
     const parsed = await load({ ...ymm, model });
     if (parsed) return parsed;
   }
@@ -1304,7 +1343,7 @@ async function loadEpaVehiclesFor(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
 
 async function loadEpaVehicles(ymm: Ymm): Promise<EpaVehicleMpg[] | null> {
   let sawEmptyMenu = false;
-  for (const model of nhtsaModelCandidates(ymm.model)) {
+  for (const model of epaSafetyModelCandidates(ymm.make, ymm.model)) {
     const vehicles = await loadEpaVehiclesFor({ ...ymm, model });
     if (vehicles && vehicles.length > 0) return vehicles;
     if (vehicles) sawEmptyMenu = true;
@@ -1341,7 +1380,11 @@ async function loadSafetyRatingsFor(ymm: Ymm): Promise<ModelSafetyRatings | null
 }
 
 async function loadSafetyRatings(ymm: Ymm): Promise<ModelSafetyRatings | null> {
-  return firstMatchingSlice(ymm, (candidate) => loadSafetyRatingsFor(candidate));
+  return firstMatchingSlice(
+    ymm,
+    (candidate) => loadSafetyRatingsFor(candidate),
+    epaSafetyModelCandidates(ymm.make, ymm.model),
+  );
 }
 
 function epaSlices(
