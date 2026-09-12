@@ -11,6 +11,8 @@ import {
   formatEventDate,
   hasOdometerRollback,
   isoDate,
+  titleHistoryStatus,
+  titleRecordCount,
   withResolvedDispositions,
 } from "@/lib/report";
 
@@ -331,10 +333,9 @@ function odometerUnit(readings: OdometerReading[]): string {
 export function reportHealth(incoming: VehicleReport): ReportHealth {
   const report = withResolvedDispositions(incoming);
   const factors: HealthFactor[] = [];
-  const titles = checkOf(report, "titles");
-  const titleCount = titles?.count ?? sectionOf(report, "titles")?.records.length ?? 0;
-  const branded = checkOf(report, "branded");
-  const salvage = salvagePresent(report);
+  const titleCount = titleRecordCount(report);
+  const titleStatus = titleHistoryStatus(report);
+  const salvage = salvagePresent(report) || titleStatus === "salvage-history" || titleStatus === "branded";
 
   if (titleCount === 0) {
     factors.push({
@@ -364,13 +365,21 @@ export function reportHealth(incoming: VehicleReport): ReportHealth {
     });
     const after = postSalvageFactor(report);
     if (after) factors.push(after);
-  } else if (titleCount > 0 || branded?.status === "clear") {
+  } else if (titleStatus === "clean") {
     factors.push({
       key: "salvage",
       label: "Salvage & title brand",
       impact: "helps",
       delta: 0,
-      reason: `No salvage, junk or insurance-loss brand on ${titleCount || "the"} title record${titleCount === 1 ? "" : "s"}.`,
+      reason: `No salvage, junk or insurance-loss brand on ${titleCount} title record${titleCount === 1 ? "" : "s"}.`,
+    });
+  } else if (titleStatus === "unknown") {
+    factors.push({
+      key: "salvage",
+      label: "Salvage & title brand",
+      impact: "neutral",
+      delta: 0,
+      reason: "No title records came back, so we cannot say the title is clean.",
     });
   }
 

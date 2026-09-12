@@ -209,7 +209,10 @@ function checkResult(
   }
   // An empty titles feed is not a clean branded-title check. Saying
   // "nothing on file" here is how the model writes "no title brands".
-  if (check.key === "branded" && titlesOnFile === 0) {
+  if (
+    check.key === "branded" &&
+    (check.status === "unavailable" || titlesOnFile === 0)
+  ) {
     return "unknown — no title records came back to read";
   }
   return "nothing on file";
@@ -278,7 +281,7 @@ Rules, in order of importance:
 3. Never estimate a price, market value, condition grade, score or rating. That data does not exist here.
 4. Never mention data providers, databases, agencies or where the records came from.
 5. Never leave a trade term standing on its own. A disposition code, a claim type, a salvage yard's name, an auction house's name and a brand code mean nothing to a buyer. Say what the record is in ordinary words.
-6. A report with nothing on file is good news — except title history. If Title records are nothing on file, that is a thin or missing titles feed, not a clean title. Never say there are no title brands, that brands are nothing on file, or that the title is clean. Say the title records did not come back.
+6. A report with nothing on file is good news — except title history. If Title records are nothing on file, that is a thin or missing titles feed, not a clean title. Never say there are no title brands, that brands are nothing on file, or that the title is clean. Say the title records did not come back. If FACTS include junk, salvage, rebuilt, a total loss, or a branded title, never say the title is clean.
 7. Plain English. No preamble, no marketing, no hedging boilerplate.
 8. When FACTS include junk, salvage, rebuilt, a total loss, or a salvage auction house (Copart, IAA, Insurance Auto Auctions), never say there were no accidents, that the picture is clean, or that nothing is worrying on the accident, theft or lien fronts. Those records already mean the vehicle entered the total-loss or salvage channel — even when a separate accident row is absent. You may say no separate accident, theft or lien row appears; do not call that clean.
 
@@ -420,6 +423,9 @@ const CLEAN_TITLE_WITHOUT_RECORDS = [
 const THIN_TITLE_HISTORY =
   "No title records came back — that is a thin title history, not a finding that the title is clean.";
 
+const SALVAGE_NOT_CLEAN =
+  "Junk or salvage records are on file — that is salvage history, not a clear title.";
+
 /** True when FACTS have no title rows to read brands from. */
 export function factsIndicateEmptyTitles(facts: BriefFacts): boolean {
   const hasTitleRows = facts.records.some((entry) => /title/i.test(entry.section));
@@ -439,6 +445,17 @@ function dropCleanTitleWhenEmptyTitles(
   return kept.length > 0 ? kept : [THIN_TITLE_HISTORY];
 }
 
+function dropCleanTitleWhenSalvage(
+  fromReport: string[],
+  salvage: boolean,
+): string[] {
+  if (!salvage) return fromReport;
+  const kept = fromReport.filter(
+    (bullet) => !CLEAN_TITLE_WITHOUT_RECORDS.some((pattern) => pattern.test(bullet)),
+  );
+  return kept.length > 0 ? kept : [SALVAGE_NOT_CLEAN];
+}
+
 /**
  * Applies stored-brief copy guards so an already-written brief cannot keep
  * saying "no title brands" on an empty titles feed.
@@ -447,9 +464,12 @@ export function presentBrief(brief: VehicleBrief, report: VehicleReport): Vehicl
   const facts = briefFacts(report);
   return {
     ...brief,
-    fromReport: dropCleanTitleWhenEmptyTitles(
-      brief.fromReport,
-      factsIndicateEmptyTitles(facts),
+    fromReport: dropCleanTitleWhenSalvage(
+      dropCleanTitleWhenEmptyTitles(
+        brief.fromReport,
+        factsIndicateEmptyTitles(facts),
+      ),
+      factsIndicateSalvageChannel(facts),
     ),
   };
 }
@@ -680,15 +700,19 @@ export function parseBrief(
   if (typeof parsed !== "object" || parsed === null) return null;
 
   const payload = parsed as Record<string, unknown>;
-  const fromReport = dropCleanTitleWhenEmptyTitles(
-    dropCleanFrontWhenSalvage(
-      bullets(payload.fromReport, LIMITS.fromReport, {
-        allowAmounts: true,
-        rejectListingFiction: true,
-      }),
-      Boolean(facts && factsIndicateSalvageChannel(facts)),
+  const salvage = Boolean(facts && factsIndicateSalvageChannel(facts));
+  const fromReport = dropCleanTitleWhenSalvage(
+    dropCleanTitleWhenEmptyTitles(
+      dropCleanFrontWhenSalvage(
+        bullets(payload.fromReport, LIMITS.fromReport, {
+          allowAmounts: true,
+          rejectListingFiction: true,
+        }),
+        salvage,
+      ),
+      Boolean(facts && factsIndicateEmptyTitles(facts)),
     ),
-    Boolean(facts && factsIndicateEmptyTitles(facts)),
+    salvage,
   );
   if (fromReport.length === 0) return null;
 

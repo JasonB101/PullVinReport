@@ -24,9 +24,12 @@ import {
   hasOdometerRollback,
   isoDate,
   liftSharedFields,
+  issueChecksEmptyLabel,
   preferResolvedDisposition,
   recordCalendarDay,
   reportChips,
+  reportHeadline,
+  titleHistoryStatus,
   reportPaintColor,
   reportNavItems,
   searchedAndEmpty,
@@ -1270,6 +1273,54 @@ describe("the header of a report", () => {
     assert.ok(chips.some((chip) => chip.key === "branded" && chip.label === "Branded title"));
     assert.ok(
       chips.some((chip) => chip.key === "jsi" && chip.label === "2 junk/salvage records"),
+    );
+  });
+
+  it("never says Clean title when junk/salvage records are on file", () => {
+    const salvageOnUnbrandedTitles = report({
+      checks: [
+        { key: "titles", label: "Title records", status: "found", count: 4, detail: "" },
+        { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+        { key: "jsi", label: "Junk & salvage", status: "found", count: 2, detail: "" },
+      ],
+      sections: [
+        section({
+          key: "titles",
+          records: [[{ label: "Event", value: "Title transfer" }]],
+        }),
+        section({
+          key: "jsi",
+          records: [[{ label: "Disposition", value: "Sold" }]],
+        }),
+      ],
+    });
+    assert.equal(titleHistoryStatus(salvageOnUnbrandedTitles), "salvage-history");
+    assert.match(reportHeadline(salvageOnUnbrandedTitles), /Junk, salvage or insurance-loss/);
+    const chips = reportChips(salvageOnUnbrandedTitles);
+    assert.equal(
+      chips.some((chip) => /clean title/i.test(chip.label)),
+      false,
+    );
+    assert.ok(chips.some((chip) => chip.key === "jsi"));
+  });
+
+  it("says Title history unknown when the titles feed is empty, not Clean title", () => {
+    const emptyTitles = report({
+      checks: [
+        { key: "titles", label: "Title records", status: "clear", count: 0, detail: "" },
+        { key: "branded", label: "Branded title", status: "unavailable", count: 0, detail: "" },
+      ],
+      odometer: [],
+      sections: [section({ key: "titles", records: [] })],
+    });
+    assert.equal(titleHistoryStatus(emptyTitles), "unknown");
+    assert.match(reportHeadline(emptyTitles), /cannot say whether the title is clean/i);
+    assert.match(issueChecksEmptyLabel(emptyTitles), /cannot treat this as a clean title/i);
+    const chips = reportChips(emptyTitles);
+    assert.ok(chips.some((chip) => chip.label === "Title history unknown"));
+    assert.equal(
+      chips.some((chip) => /clean title/i.test(chip.label)),
+      false,
     );
   });
 });

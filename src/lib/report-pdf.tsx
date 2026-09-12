@@ -97,7 +97,9 @@ import {
   headerSpecifications,
   partitionSpecMpg,
   specMeasureFigures,
+  issueChecksEmptyLabel,
   reportChips,
+  reportHeadline,
   reportNavItems,
   searchedAndEmpty,
   sectionListingGroups,
@@ -455,9 +457,11 @@ function Chips({ report }: { report: VehicleReport }) {
 function Findings({
   flags,
   clear,
+  emptyLabel,
 }: {
   flags: ReportCheck[];
   clear: string[];
+  emptyLabel: string;
 }) {
   return (
     <View>
@@ -470,9 +474,7 @@ function Findings({
             .join("  ·  ")}
         </Text>
       ) : (
-        <Text style={styles.sectionNote}>
-          None of the issue checks came back with a record for this VIN.
-        </Text>
+        <Text style={styles.sectionNote}>{emptyLabel}</Text>
       )}
       {clear.length > 0 && (
         <Text style={styles.clearNote}>
@@ -530,7 +532,11 @@ function Brief({
         <Text style={styles.sectionTitle}>What to know</Text>
         <Text style={styles.sectionNote}>{THIS_VIN_CHIP} — from the records in this report.</Text>
         <Health report={report} />
-        <Findings flags={flags} clear={clear} />
+        <Findings
+          flags={flags}
+          clear={clear}
+          emptyLabel={issueChecksEmptyLabel(report)}
+        />
       </View>
 
       {brief && (
@@ -1122,7 +1128,7 @@ export function ReportDocument({
         <Text style={styles.contents}>In this report: {contents.join("  ·  ")}</Text>
 
         <View style={[styles.summary, { marginTop: 16 }]}>
-          <Text>{report.headline}</Text>
+          <Text>{reportHeadline(report)}</Text>
         </View>
 
         <Brief report={report} brief={brief} flags={flags} clear={clear} />
