@@ -102,6 +102,7 @@ const KEY_LABELS: Record<string, string> = {
   brandcode: "Brand",
   brandertype: "Brander type",
   recordtype: "Record type",
+  saledocument: "Sale document",
   intendedforexport: "Intended for export",
   sellertype: "Seller type",
   sellername: "Seller",
@@ -379,11 +380,7 @@ function check(
   };
 }
 
-function brandedCheck(
-  brandedCount: number,
-  titleCount: number,
-  providerNotClean: boolean,
-): ReportCheck {
+function brandedCheck(brandedCount: number, titleCount: number): ReportCheck {
   if (brandedCount > 0) {
     return check(
       "branded",
@@ -392,15 +389,6 @@ function brandedCheck(
       "A salvage, junk or other brand is on the title records",
       "No salvage, junk or insurance brand found",
     );
-  }
-  if (providerNotClean) {
-    return {
-      key: "branded",
-      label: "Branded title",
-      status: "found",
-      count: 0,
-      detail: "Title brand, salvage or insurance activity was reported",
-    };
   }
   if (titleCount === 0) {
     return {
@@ -418,13 +406,6 @@ function brandedCheck(
     "A salvage, junk or other brand is on the title records",
     "No salvage, junk or insurance brand found",
   );
-}
-
-function providerCleanFlag(payload: Record<string, unknown>): boolean | undefined {
-  const flag = payload.clean;
-  if (flag === true || flag === "true" || flag === 1 || flag === "1") return true;
-  if (flag === false || flag === "false" || flag === 0 || flag === "0") return false;
-  return undefined;
 }
 
 /**
@@ -497,12 +478,6 @@ export function normalizeVinAuditReport(
       brand,
     );
   });
-  const providerClean = providerCleanFlag(payload);
-  // `clean: true` is not proof — that is also how a thin titles feed arrives.
-  // `clean: false` is a veto: never claim clean even if we cannot show the row.
-  const providerNotClean =
-    providerClean === false && brandedTitles.length === 0 && brandChecks.length === 0;
-
   const checks: ReportCheck[] = [
     check(
       "titles",
@@ -511,11 +486,7 @@ export function normalizeVinAuditReport(
       `${titles.length} title record${titles.length === 1 ? "" : "s"} on file`,
       "No title records returned",
     ),
-    brandedCheck(
-      brandedTitles.length + brandChecks.length,
-      titles.length,
-      providerNotClean && jsi.length === 0,
-    ),
+    brandedCheck(brandedTitles.length + brandChecks.length, titles.length),
     check(
       "jsi",
       "Junk & salvage",

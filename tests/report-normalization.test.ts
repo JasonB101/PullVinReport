@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 
-import { sectionListings, sectionTable } from "@/lib/report";
+import { sectionListings, sectionTable, titleHistoryStatus } from "@/lib/report";
 import type { ReportSection } from "@/lib/report";
 import { normalizeVinAuditReport } from "@/lib/vinaudit";
 
@@ -48,6 +48,58 @@ const PAYLOAD = {
       meterunit: "M",
       current: false,
       vehicleuse: "Personal",
+    },
+  ],
+};
+
+/** 2018 VW Beetle order f485be84 — CA salvage check + IAA Sold/TBD, titles unbranded. */
+const BEETLE_VIN = "3VW5DAAT4JM515636";
+const BEETLE_PAYLOAD = {
+  clean: false,
+  attributes: {
+    Year: "2018",
+    Make: "Volkswagen",
+    Model: "Beetle",
+    Trim: "SE",
+  },
+  titles: [
+    { vin: BEETLE_VIN, date: "2026-07-07", meter: "76251", state: "CA", current: true, meter_unit: "M" },
+    { vin: BEETLE_VIN, date: "2023-07-24", meter: "66980", state: "CA", current: false, meter_unit: "M" },
+    { vin: BEETLE_VIN, date: "2022-12-15", meter: "34854", state: "CA", current: false, meter_unit: "M" },
+    { vin: BEETLE_VIN, date: "2021-09-01", meter: "34854", state: "CA", current: false, meter_unit: "M" },
+    { vin: BEETLE_VIN, date: "2018-08-06", meter: "7", state: "CA", current: false, meter_unit: "M" },
+  ],
+  jsi: [
+    {
+      date: "2026-06-03",
+      record_type: "Junk And Salvage",
+      brander_city: "WESTCHESTER",
+      brander_code: "P000116",
+      brander_name: "IAA",
+      brander_state: "IL",
+      intended_for_export: "Y",
+      vehicle_disposition: "SOLD",
+    },
+    {
+      date: "2026-06-03",
+      record_type: "Junk And Salvage",
+      brander_city: "WESTCHESTER",
+      brander_code: "P000116",
+      brander_name: "IAA",
+      brander_state: "IL",
+      intended_for_export: "N",
+      vehicle_disposition: "TO BE DETERMINED",
+    },
+  ],
+  salvage: [{ vin: BEETLE_VIN, date: "2026-07-09", type: "salvage" }],
+  checks: [
+    {
+      date: "2026-07-07",
+      brand_code: "11",
+      brand_title: "Salvage: Damage or Not Specified",
+      brander_code: "CA",
+      brander_name: "CALIFORNIA",
+      brander_type: "State",
     },
   ],
 };
@@ -417,7 +469,7 @@ describe("provider report normalization", () => {
           {
             date: "2026-05-11",
             obtainedfrom: "Copart",
-            disposition: "SOLD",
+            disposition: "Salvage",
           },
         ],
       },
@@ -432,6 +484,47 @@ describe("provider report normalization", () => {
     assert.match(salvageOnly.headline, /Junk, salvage or insurance-loss/);
     assert.doesNotMatch(salvageOnly.headline, /Branded-title/);
     assert.doesNotMatch(salvageOnly.headline, /clean/i);
+  });
+
+  it("does not treat a bare Copart Sold row as salvage-history", () => {
+    const auctionOnly = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.match(auctionOnly.headline, /on the title records we have/);
+    assert.doesNotMatch(auctionOnly.headline, /Junk, salvage or insurance-loss/);
+  });
+
+  it("treats Copart clear-title JSI plus ordinary titles as a clean title", () => {
+    const copartClean = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "CT",
+            sale_document: "Clean Title Front Line",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = copartClean.checks.find((entry) => entry.key === "branded");
+    const jsi = copartClean.checks.find((entry) => entry.key === "jsi");
+    assert.equal(branded?.status, "clear");
+    assert.equal(jsi?.status, "found");
+    assert.match(copartClean.headline, /on the title records we have/);
+    assert.doesNotMatch(copartClean.headline, /Junk, salvage or insurance-loss/);
   });
 
   it("does not treat an empty titles feed as a clean title", () => {
@@ -465,14 +558,81 @@ describe("provider report normalization", () => {
     assert.match(withChecks.headline, /Branded-title/);
   });
 
-  it("never claims clean when the provider clean flag is false", () => {
+  it("does not treat VinAudit clean:false as a brand when titles are unbranded", () => {
     const flagged = normalizeVinAuditReport(
       { ...PAYLOAD, clean: false },
       VIN,
     );
     const branded = flagged.checks.find((entry) => entry.key === "branded");
+    assert.equal(branded?.status, "clear");
+    assert.match(flagged.headline, /on the title records we have/);
+  });
+
+  it("keeps Clean on a bare IAA Sold row when clean:false is only the JSI flag", () => {
+    const iaa = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        clean: false,
+        jsi: [
+          {
+            date: "2026-06-03",
+            brander_name: "IAA",
+            vehicle_disposition: "SOLD",
+            intended_for_export: "Y",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.equal(iaa.checks.find((entry) => entry.key === "branded")?.status, "clear");
+    assert.equal(iaa.checks.find((entry) => entry.key === "jsi")?.status, "found");
+    assert.match(iaa.headline, /on the title records we have/);
+    assert.ok(iaa.sections.find((section) => section.key === "jsi")?.records.length);
+  });
+
+  it("does not claim Clean when IAA JSI record_type is Junk And Salvage", () => {
+    const iaaJunk = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        clean: false,
+        jsi: [
+          {
+            date: "2026-06-03",
+            record_type: "Junk And Salvage",
+            brander_name: "IAA",
+            vehicle_disposition: "SOLD",
+            intended_for_export: "Y",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.equal(titleHistoryStatus(iaaJunk), "salvage-history");
+    assert.match(iaaJunk.headline, /Junk, salvage or insurance-loss/);
+    assert.ok(iaaJunk.sections.find((section) => section.key === "jsi")?.records.length);
+  });
+
+  it("treats the Beetle IAA + CA salvage-check payload as branded, not Clean", () => {
+    const beetle = normalizeVinAuditReport(BEETLE_PAYLOAD, BEETLE_VIN);
+    const branded = beetle.checks.find((entry) => entry.key === "branded");
+    const jsi = beetle.checks.find((entry) => entry.key === "jsi");
+    const jsiSection = find(beetle.sections, "jsi");
     assert.equal(branded?.status, "found");
-    assert.doesNotMatch(flagged.headline, /no salvage, junk or insurance-loss brand was reported/i);
+    assert.equal(titleHistoryStatus(beetle), "branded");
+    assert.match(beetle.headline, /Branded-title/);
+    assert.doesNotMatch(beetle.headline, /on the title records we have/);
+    assert.ok(jsi && jsi.status === "found" && jsi.count >= 1);
+    assert.equal(
+      jsiSection.records.some((record) =>
+        record.some((field) => /to be determined|^tbd$/i.test(field.value)),
+      ),
+      false,
+    );
+    assert.ok(
+      jsiSection.records.some((record) =>
+        record.some((field) => /^sold$/i.test(field.value)),
+      ),
+    );
   });
 
   it("collapses official vehicle_disposition TBD once Sold is on the same day", () => {

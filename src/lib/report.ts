@@ -1133,10 +1133,15 @@ export function hasOdometerRollback(readings: OdometerReading[]): boolean {
  * VinAudit does not send a certified-clean flag we can trust on its own.
  * `payload.clean === true` is "no brand/salvage/insurance rows in this
  * payload", which is also how an empty titles feed arrives. We only call a
- * title clean when we actually read title rows and those rows, plus junk/
- * salvage, show no brand. Empty titles are unknown, not clean. Salvage or
- * junk records mean the title is not clean even when the title rows
- * themselves carry no brand text.
+ * title clean when we actually read title rows and those rows show no brand,
+ * and no JSI/auction row is a salvage/junk/total-loss/non-repairable brand.
+ * Empty titles are unknown, not clean.
+ *
+ * Copart and IAA also sell fleet, repo and Clean Title Front Line cars.
+ * A JSI or auction row is not salvage-history by itself — only when its
+ * disposition or title type is branded or a true total-loss outcome.
+ * VinAudit's `clean` flag is ignored either way: `true` is how a thin
+ * titles feed arrives, and `false` is often just "a JSI row exists".
  */
 export type TitleHistoryStatus =
   | "clean"
@@ -1144,8 +1149,94 @@ export type TitleHistoryStatus =
   | "salvage-history"
   | "unknown";
 
+export type TitleKind = "clean" | "adverse" | "neutral";
+
 const TITLE_BRAND_TEXT =
   /salvage|junk|rebuilt|flood|lemon|fire|hail|total loss|reconstruct/i;
+
+/** Fields that state a title type, brand or JSI/auction disposition. */
+export const TITLE_KIND_LABELS = [
+  "Disposition",
+  "Vehicle disposition",
+  "Brand",
+  "Brand title",
+  "Event",
+  "Title type",
+  "Title",
+  "Record type",
+  "Sale document",
+  "Document",
+  "Standard claim",
+];
+
+/**
+ * Explicit clean-title language on a disposition or title-type field.
+ * CT / CLR are IAA/Copart sale-document codes, not a VinAudit clean flag.
+ */
+export const CLEAN_TITLE_TYPE =
+  /\b(?:ct|clr)\b|clean[\s-]+title(?:[\s-]+front[\s-]+line)?|clear[\s-]+title/i;
+
+/** Brands and JSI outcomes that mean the title is not clean. */
+export const ADVERSE_TITLE_TYPE =
+  /\bsalvage\b|\bjunk\b|\brebuilt\b|\bflood\b|\blemon\b|\bfire\b|\bhail\b|\btotal(?:ed|led)? loss\b|\breconstruct|\bnon[\s-]?repairable\b|\bscrap\b|\bcrush(?:ed)?\b|\bparts\b|\bdismantled\b/i;
+
+/**
+ * Classifies a disposition / brand / title-type string.
+ *
+ * Adverse wins when both clean-title and salvage language appear. Auction
+ * house names and a bare Sold/TBD disposition are neutral — Copart and IAA
+ * sell clean-title cars too.
+ */
+export function titleKindFromText(text: string): TitleKind {
+  if (ADVERSE_TITLE_TYPE.test(text)) return "adverse";
+  if (CLEAN_TITLE_TYPE.test(text)) return "clean";
+  return "neutral";
+}
+
+function titleKindValues(fields: Field[]): string {
+  return fields
+    .filter((field) => TITLE_KIND_LABELS.includes(field.label))
+    .map((field) => field.value)
+    .join(" ");
+}
+
+export function fieldsTitleKind(fields: Field[]): TitleKind {
+  return titleKindFromText(titleKindValues(fields));
+}
+
+export function jsiRecordLooksAdverse(fields: Field[]): boolean {
+  return fieldsTitleKind(fields) === "adverse";
+}
+
+/**
+ * NMVTIS often lifts `Record type: Junk And Salvage` onto section.shared
+ * while the rows are only Sold / TBD. Classify the shared fields with each
+ * row — otherwise a Beetle-shaped IAA listing looks like a clean sale.
+ */
+export function jsiSectionLooksAdverse(section: ReportSection): boolean {
+  const shared = section.shared ?? [];
+  if (fieldsTitleKind(shared) === "adverse") return true;
+  return section.records.some((record) =>
+    jsiRecordLooksAdverse([...shared, ...record]),
+  );
+}
+
+/**
+ * Same classifier as `fieldsTitleKind`, for brief FACTS rows written as
+ * "Label Value, Label Value". Auction-house names are ignored. Record type
+ * is not — "Junk And Salvage" on that field is adverse.
+ */
+export function factRowTitleKind(row: string): TitleKind {
+  const chunks: string[] = [];
+  for (const label of TITLE_KIND_LABELS) {
+    const match = new RegExp(
+      `${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[:\\s]+([^,]+)`,
+      "i",
+    ).exec(row);
+    if (match?.[1]) chunks.push(match[1]);
+  }
+  return titleKindFromText(chunks.join(" "));
+}
 
 function checkByKey(report: VehicleReport, key: string): ReportCheck | undefined {
   return report.checks.find((entry) => entry.key === key);
@@ -1168,34 +1259,103 @@ function titleRecordsLookBranded(report: VehicleReport): boolean {
   );
 }
 
-function salvageChannelOnFile(report: VehicleReport): boolean {
-  const jsi = checkByKey(report, "jsi");
-  if (jsi?.status === "found" && jsi.count > 0) return true;
-  return (sectionByKey(report, "jsi")?.records.length ?? 0) > 0;
+function rawPayload(report: VehicleReport): Record<string, unknown> | undefined {
+  const raw = report.raw;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  return raw as Record<string, unknown>;
+}
+
+function rawRows(report: VehicleReport, key: string): Record<string, unknown>[] {
+  const value = rawPayload(report)?.[key];
+  if (Array.isArray(value)) {
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null && !Array.isArray(item),
+    );
+  }
+  if (typeof value === "object" && value !== null) {
+    return [value as Record<string, unknown>];
+  }
+  return [];
+}
+
+function rawText(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (typeof value === "string" || typeof value === "number") return String(value);
+  if (typeof value === "boolean") return value ? "Yes" : "No";
+  return "";
+}
+
+function rawField(row: Record<string, unknown>, ...keys: string[]): string {
+  const lowered = new Map(
+    Object.entries(row).map(([key, value]) => [key.toLowerCase().replace(/[^a-z0-9]/g, ""), value]),
+  );
+  for (const key of keys) {
+    const text = rawText(lowered.get(key.toLowerCase().replace(/[^a-z0-9]/g, "")));
+    if (text) return text;
+  }
+  return "";
+}
+
+/**
+ * VinAudit `checks[]` rows are NMVTIS brand records. Title rows often omit
+ * the brand even when a state has already recorded one — the Beetle case.
+ */
+function rawCheckLooksBranded(row: Record<string, unknown>): boolean {
+  const brand = rawField(row, "brand_title", "brandtitle", "brand");
+  const code = rawField(row, "brand_code", "brandcode");
+  if (titleKindFromText(`${brand} ${code}`) === "adverse") return true;
+  return Boolean(brand || code);
+}
+
+function rawJsiLooksAdverse(row: Record<string, unknown>): boolean {
+  return (
+    titleKindFromText(
+      [
+        rawField(row, "record_type", "recordtype"),
+        rawField(row, "type"),
+        rawField(row, "disposition", "vehicle_disposition"),
+        rawField(row, "title"),
+        rawField(row, "saledocument", "sale_document"),
+        rawField(row, "brand"),
+        rawField(row, "standardclaim"),
+      ].join(" "),
+    ) === "adverse"
+  );
+}
+
+function rawSalvageLooksAdverse(row: Record<string, unknown>): boolean {
+  return (
+    titleKindFromText(
+      [
+        rawField(row, "type"),
+        rawField(row, "record_type", "recordtype"),
+        rawField(row, "brand"),
+        rawField(row, "title"),
+        rawField(row, "brand_title", "brandtitle"),
+        rawField(row, "disposition", "vehicle_disposition"),
+      ].join(" "),
+    ) === "adverse"
+  );
 }
 
 function brandedOnFile(report: VehicleReport): boolean {
   const branded = checkByKey(report, "branded");
   if (branded?.status === "found") return true;
-  return titleRecordsLookBranded(report);
+  if (titleRecordsLookBranded(report)) return true;
+  return rawRows(report, "checks").some(rawCheckLooksBranded);
 }
 
-/**
- * VinAudit's `clean` boolean is only a veto: false means do not claim clean.
- * true is ignored — that is also how a thin titles feed is labelled.
- */
-function providerSaysNotClean(report: VehicleReport): boolean {
-  const raw = report.raw;
-  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-  const flag = (raw as Record<string, unknown>).clean;
-  return flag === false || flag === "false" || flag === 0 || flag === "0";
+function salvageChannelOnFile(report: VehicleReport): boolean {
+  const jsi = sectionByKey(report, "jsi");
+  if (jsi && jsiSectionLooksAdverse(jsi)) return true;
+  if (rawRows(report, "jsi").some(rawJsiLooksAdverse)) return true;
+  return rawRows(report, "salvage").some(rawSalvageLooksAdverse);
 }
 
 export function titleHistoryStatus(report: VehicleReport): TitleHistoryStatus {
   if (brandedOnFile(report)) return "branded";
-  if (salvageChannelOnFile(report) || providerSaysNotClean(report)) {
-    return "salvage-history";
-  }
+  if (salvageChannelOnFile(report)) return "salvage-history";
   if (titleRecordCount(report) > 0) return "clean";
   return "unknown";
 }
