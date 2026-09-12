@@ -16,6 +16,14 @@ export {
 /** Shown on unpaid Pending / expired rows so they are never read as orders. */
 export const ABANDONED_CHECKOUT_LABEL = "Abandoned checkout (not paid)";
 
+/**
+ * Customer report page for a fulfilled order. Same path as "View report"
+ * on /admin — never used for unpaid / abandoned checkouts.
+ */
+export function orderReportHref(accessToken: string): string {
+  return `/report/${accessToken}`;
+}
+
 export type AbandonedCheckoutStats = {
   total: number;
   today: number;

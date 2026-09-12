@@ -8,6 +8,7 @@ import {
   FIRST_SALES_GOAL_CENTS,
   abandonedCheckoutStats,
   firstSalesGoal,
+  orderReportHref,
 } from "@/lib/admin-ops";
 import { formatGeneratedAt } from "@/lib/report";
 import {
@@ -202,6 +203,24 @@ describe("admin console", () => {
     assert.match(page, /fetchVendorCredits\(\)\.catch/);
     assert.match(page, /emptyVendorCredits/);
     assert.match(page, /retryFulfillmentAction|OrderActions/);
+  });
+
+  it("links a fulfilled order VIN to the same report URL as View report", async () => {
+    assert.equal(orderReportHref("tok_abc"), "/report/tok_abc");
+
+    const page = await readSrc("app/admin/page.tsx");
+    const vin = await readSrc("app/admin/order-vin.tsx");
+    const actions = await readSrc("app/admin/order-actions.tsx");
+    const abandoned = await readSrc("app/admin/abandoned-checkouts.tsx");
+
+    assert.match(page, /<OrderVin/);
+    assert.match(vin, /orderReportHref\(accessToken\)/);
+    assert.match(vin, /status !== "fulfilled"/);
+    assert.match(vin, /target="_blank"/);
+    assert.match(actions, /orderReportHref\(accessToken\)/);
+    assert.match(actions, /View report/);
+    assert.match(actions, /target="_blank"/);
+    assert.doesNotMatch(abandoned, /OrderVin|orderReportHref|\/report\//);
   });
 });
 

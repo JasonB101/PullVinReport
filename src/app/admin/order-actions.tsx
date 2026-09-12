@@ -10,6 +10,7 @@ import {
   rewriteBriefAction,
   type RetryState,
 } from "@/app/admin/actions";
+import { orderReportHref } from "@/lib/admin-ops";
 import type { OrderStatus } from "@/lib/store";
 
 const INITIAL: RetryState = {};
@@ -68,7 +69,7 @@ export function OrderActions({
       <div className="flex flex-wrap gap-2">
         {status === "fulfilled" && (
           <Link
-            href={`/report/${accessToken}`}
+            href={orderReportHref(accessToken)}
             target="_blank"
             className="rounded-lg border border-slate-200 bg-white px-2.5 py-1.5 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
           >

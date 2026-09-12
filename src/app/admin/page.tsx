@@ -6,6 +6,7 @@ import { logoutAction } from "@/app/admin/actions";
 import { AbandonedCheckouts } from "@/app/admin/abandoned-checkouts";
 import { ApiCredits } from "@/app/admin/api-credits";
 import { OrderActions } from "@/app/admin/order-actions";
+import { OrderVin } from "@/app/admin/order-vin";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
 import {
@@ -180,9 +181,11 @@ export default async function AdminPage() {
                     {formatGeneratedAt(order.createdAt)}
                   </span>
 
-                  <span className="font-mono text-xs text-slate-900">
-                    {order.vin}
-                  </span>
+                  <OrderVin
+                    vin={order.vin}
+                    status={order.status}
+                    accessToken={order.accessToken}
+                  />
 
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-slate-800">
