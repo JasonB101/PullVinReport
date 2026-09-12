@@ -149,7 +149,7 @@ describe("the illustration prompt", () => {
     assert.match(prompt, /2012 Toyota Camry SE/);
     assert.match(prompt, /Super White/);
     assert.match(prompt, /Exact exterior colour/);
-    assert.match(prompt, /Three-quarter/);
+    assert.match(prompt, /three-quarter/i);
     assert.match(prompt, /Closed stock catalog/);
     assert.match(prompt, /Transparent background/i);
     assert.match(prompt, /2\.5L L4/);
