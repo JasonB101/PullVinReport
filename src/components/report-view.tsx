@@ -29,6 +29,7 @@ import {
   headerSpecifications,
   headerSpecSummary,
   reportChips,
+  partitionHistorySections,
   reportNavItems,
   searchedAndEmpty,
   withResolvedDispositions,
@@ -38,7 +39,6 @@ import {
   sectionListingGroups,
   sectionTable,
   stackedRecordRow,
-  sectionsWithRecords,
   vehicleTitle,
 } from "@/lib/report";
 import { heroAlt, heroFacts } from "@/lib/vehicle-hero";
@@ -803,7 +803,7 @@ export function ReportView({
     : "Illustrated vehicle";
   const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
-  const sections = sectionsWithRecords(report);
+  const { titles, later } = partitionHistorySections(report);
 
   return (
     <article
@@ -873,6 +873,13 @@ export function ReportView({
         modelExtras={hasModelExtras(modelExtras)}
       />
 
+      {titles && (
+        <SectionBlock
+          section={titles}
+          odometerRollback={hasOdometerRollback(report.odometer)}
+        />
+      )}
+
       <WhatToKnow
         report={report}
         brief={brief}
@@ -881,14 +888,8 @@ export function ReportView({
         clear={clear}
       />
 
-      {sections.map((section) => (
-        <SectionBlock
-          key={section.key}
-          section={section}
-          odometerRollback={
-            section.key === "titles" && hasOdometerRollback(report.odometer)
-          }
-        />
+      {later.map((section) => (
+        <SectionBlock key={section.key} section={section} />
       ))}
 
       <ModelExtrasCard extras={modelExtras} token={extrasToken} />

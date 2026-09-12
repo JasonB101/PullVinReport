@@ -8,6 +8,7 @@ import {
   groupSpecFields,
   headerSpecifications,
   headerSpecSummary,
+  partitionHistorySections,
   partitionSpecMpg,
   presentableSpecFields,
   specMeasureFigures,
@@ -1139,15 +1140,82 @@ describe("the header of a report", () => {
 
   it("puts nothing in the outline that has nothing to show", () => {
     assert.deepEqual(reportNavItems(report()), [
-      { href: "#brief", label: "What to know" },
       { href: "#titles", label: "Titles" },
+      { href: "#brief", label: "What to know" },
     ]);
+  });
+
+  it("leads the outline with titles so they sit above What to know", () => {
+    const items = reportNavItems(
+      report({
+        sections: [
+          section({
+            key: "titles",
+            navLabel: "Titles & mileage",
+            records: [[{ label: "State", value: "TN" }]],
+          }),
+          section({
+            key: "accidents",
+            navLabel: "Accidents",
+            records: [[{ label: "Date", value: "Nov 3, 2018" }]],
+          }),
+        ],
+      }),
+      { modelExtras: true },
+    );
+    assert.deepEqual(items, [
+      { href: "#titles", label: "Titles & mileage" },
+      { href: "#brief", label: "What to know" },
+      { href: "#accidents", label: "Accidents" },
+      { href: "#model-extras", label: "This model" },
+    ]);
+    assert.deepEqual(partitionHistorySections(report()).titles?.key, "titles");
+    assert.deepEqual(
+      partitionHistorySections(
+        report({
+          sections: [
+            section({
+              key: "titles",
+              navLabel: "Titles & mileage",
+              records: [[{ label: "State", value: "TN" }]],
+            }),
+            section({
+              key: "accidents",
+              navLabel: "Accidents",
+              records: [[{ label: "Date", value: "Nov 3, 2018" }]],
+            }),
+          ],
+        }),
+      ).later.map((section) => section.key),
+      ["accidents"],
+    );
+  });
+
+  it("keeps What to know first when title records did not come back", () => {
+    assert.deepEqual(
+      reportNavItems(
+        report({
+          sections: [
+            section({ key: "titles", navLabel: "Titles", records: [] }),
+            section({
+              key: "accidents",
+              navLabel: "Accidents",
+              records: [[{ label: "Date", value: "Nov 3, 2018" }]],
+            }),
+          ],
+        }),
+      ),
+      [
+        { href: "#brief", label: "What to know" },
+        { href: "#accidents", label: "Accidents" },
+      ],
+    );
   });
 
   it("appends the model zone last when extras are present", () => {
     assert.deepEqual(reportNavItems(report(), { modelExtras: true }), [
-      { href: "#brief", label: "What to know" },
       { href: "#titles", label: "Titles" },
+      { href: "#brief", label: "What to know" },
       { href: "#model-extras", label: "This model" },
     ]);
   });

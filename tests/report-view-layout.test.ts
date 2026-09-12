@@ -4,21 +4,22 @@ import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
 /**
- * Guards the report page's reading order: VIN history first, model extras last.
+ * Guards the report page's reading order: titles first, then What to know
+ * (which includes not-this-VIN model notes), later VIN history, model extras last.
  */
 describe("report view layout", () => {
-  it("places the model zone after every VIN history section and fences it", async () => {
+  it("places titles above What to know and the model zone after later VIN history", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
       "utf8",
     );
     const extras = source.indexOf("<ModelExtrasCard");
-    const sections = source.indexOf("{sections.map((section) =>");
-    assert.ok(extras > 0 && sections > 0);
-    assert.ok(
-      extras > sections,
-      "the model card must follow the VIN history sections, not sit under What to know",
-    );
+    const titles = source.indexOf("{titles && (");
+    const brief = source.indexOf("<WhatToKnow");
+    const later = source.indexOf("{later.map((section) =>");
+    assert.ok(titles > 0 && brief > titles && later > brief && extras > later);
+    assert.match(source, /partitionHistorySections\(report\)/);
+    assert.match(source, /<SectionBlock[\s\S]*?section=\{titles\}/);
     assert.match(source, /THIS_VIN_CHIP/);
     assert.match(source, /modelExtras=\{hasModelExtras\(modelExtras\)\}/);
     assert.doesNotMatch(
@@ -342,12 +343,19 @@ describe("sample and paid extras parity", () => {
     assert.match(pdf, /if \(!hasModelExtras\(extras\)\) return null/);
 
     const extrasAfter = view.indexOf("<ModelExtrasCard");
-    const sections = view.indexOf("{sections.map((section) =>");
-    assert.ok(extrasAfter > sections);
+    const later = view.indexOf("{later.map((section) =>");
+    const titles = view.indexOf("{titles && (");
+    const brief = view.indexOf("<WhatToKnow");
+    assert.ok(titles > 0 && brief > titles && later > brief && extrasAfter > later);
 
     const pdfExtras = pdf.indexOf("<ModelExtrasBlock");
-    const pdfSections = pdf.indexOf("{sections.map((section) =>");
-    assert.ok(pdfExtras > pdfSections, "PDF model extras must follow VIN history");
+    const pdfTitles = pdf.indexOf("{titles && (");
+    const pdfBrief = pdf.indexOf("<Brief ");
+    const pdfLater = pdf.indexOf("{later.map((section) =>");
+    assert.ok(
+      pdfTitles > 0 && pdfBrief > pdfTitles && pdfLater > pdfBrief && pdfExtras > pdfLater,
+      "PDF titles must lead, then What to know, then later VIN history, then model extras",
+    );
     assert.match(pdf, /MODEL_ZONE_TITLE/);
     assert.match(pdf, /complaintSamples\(extras\.complaints\)/);
   });

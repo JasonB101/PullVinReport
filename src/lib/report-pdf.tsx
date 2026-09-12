@@ -97,12 +97,12 @@ import {
   headerSpecifications,
   partitionSpecMpg,
   specMeasureFigures,
+  partitionHistorySections,
   reportChips,
   reportNavItems,
   searchedAndEmpty,
   sectionListingGroups,
   sectionTable,
-  sectionsWithRecords,
   vehicleTitle,
   withResolvedDispositions,
 } from "@/lib/report";
@@ -1071,7 +1071,7 @@ export function ReportDocument({
     : incomingExtras;
   const flags = foundIssueChecks(report);
   const clear = searchedAndEmpty(report);
-  const sections = sectionsWithRecords(report);
+  const { titles, later } = partitionHistorySections(report);
   const specList = headerSpecifications(report);
   const { mpg: specMpg, rest: specRest } = partitionSpecMpg(specList);
   const contents = reportNavItems(report, {
@@ -1125,14 +1125,17 @@ export function ReportDocument({
           <Text>{report.headline}</Text>
         </View>
 
+        {titles && (
+          <Section
+            section={titles}
+            odometerRollback={odometerRollback}
+          />
+        )}
+
         <Brief report={report} brief={brief} flags={flags} clear={clear} />
 
-        {sections.map((section) => (
-          <Section
-            key={section.key}
-            section={section}
-            odometerRollback={section.key === "titles" && odometerRollback}
-          />
+        {later.map((section) => (
+          <Section key={section.key} section={section} />
         ))}
 
         <ModelExtrasBlock extras={modelExtras} />

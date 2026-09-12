@@ -1203,27 +1203,48 @@ export function reportChips(report: VehicleReport): ReportChip[] {
 
 export type ReportNavItem = { href: string; label: string };
 
+export function sectionsWithRecords(report: VehicleReport): ReportSection[] {
+  return report.sections.filter((section) => section.records.length > 0);
+}
+
+/**
+ * Titles & mileage leads the report body so VIN title history sits above
+ * What to know, which includes "common for this model — not this VIN".
+ * Later VIN history (accidents, listings, recalls, …) stays after the brief.
+ * Model extras stay last, after every VIN history section.
+ */
+export function partitionHistorySections(report: VehicleReport): {
+  titles: ReportSection | undefined;
+  later: ReportSection[];
+} {
+  const withRecords = sectionsWithRecords(report);
+  return {
+    titles: withRecords.find((section) => section.key === "titles"),
+    later: withRecords.filter((section) => section.key !== "titles"),
+  };
+}
+
+function navItem(section: ReportSection): ReportNavItem {
+  return {
+    href: `#${section.key}`,
+    label: section.navLabel ?? section.title,
+  };
+}
+
 /** Outline of the report, listing only the parts that came back with content. */
 export function reportNavItems(
   report: VehicleReport,
   options: { modelExtras?: boolean } = {},
 ): ReportNavItem[] {
-  const items: ReportNavItem[] = [{ href: "#brief", label: "What to know" }];
-  for (const section of report.sections) {
-    if (section.records.length === 0) continue;
-    items.push({
-      href: `#${section.key}`,
-      label: section.navLabel ?? section.title,
-    });
-  }
+  const { titles, later } = partitionHistorySections(report);
+  const items: ReportNavItem[] = [];
+  if (titles) items.push(navItem(titles));
+  items.push({ href: "#brief", label: "What to know" });
+  for (const section of later) items.push(navItem(section));
   if (options.modelExtras) {
     items.push({ href: "#model-extras", label: MODEL_ZONE_NAV });
   }
   return items;
-}
-
-export function sectionsWithRecords(report: VehicleReport): ReportSection[] {
-  return report.sections.filter((section) => section.records.length > 0);
 }
 
 /**
