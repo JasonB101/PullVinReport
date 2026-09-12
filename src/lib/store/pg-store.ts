@@ -11,9 +11,14 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  OrderStatus,
   ModelExtrasRecord,
   VehicleHeroRecord,
 } from "@/lib/store/types";
+import {
+  UNPAID_CHECKOUT_STATUSES,
+  unpaidCheckoutWindowCounts,
+} from "@/lib/store/unpaid-checkouts";
 
 const TABLE = "pullvinreport_orders";
 const HEROES = "pullvinreport_vehicle_heroes";
@@ -252,35 +257,59 @@ export class PostgresOrderStore implements OrderStore {
     return toOrder(result.rows[0]);
   }
 
-  async list(limit = 100): Promise<Order[]> {
+  async list(
+    limit = 100,
+    options?: { statuses?: readonly OrderStatus[] },
+  ): Promise<Order[]> {
+    const statuses = options?.statuses;
+    if (!statuses || statuses.length === 0) {
+      const result = await this.query<Row>(
+        `SELECT * FROM ${TABLE} ORDER BY created_at DESC LIMIT $1`,
+        [limit],
+      );
+      return result.rows.map(toOrder);
+    }
     const result = await this.query<Row>(
-      `SELECT * FROM ${TABLE} ORDER BY created_at DESC LIMIT $1`,
-      [limit],
+      `SELECT * FROM ${TABLE} WHERE status = ANY($2::text[]) ORDER BY created_at DESC LIMIT $1`,
+      [limit, [...statuses]],
     );
     return result.rows.map(toOrder);
   }
 
   async stats(): Promise<OrderStats> {
-    const result = await this.query<Record<string, string>>(
-      `SELECT
-         COUNT(*)::text AS total,
-         COUNT(*) FILTER (WHERE status IN ('pending','paid'))::text AS pending,
-         COUNT(*) FILTER (WHERE status = 'fulfilled')::text AS fulfilled,
-         COUNT(*) FILTER (WHERE status = 'failed')::text AS failed,
-         COALESCE(SUM(amount_cents) FILTER (
-           WHERE refunded_at IS NULL
-             AND (status IN ('paid','fulfilled')
-              OR (status = 'failed' AND stripe_payment_intent_id IS NOT NULL))
-         ), 0)::text AS revenue,
-         COALESCE(SUM(amount_cents) FILTER (WHERE refunded_at IS NOT NULL), 0)::text AS refunded
-       FROM ${TABLE}`,
-    );
+    const [result, unpaid] = await Promise.all([
+      this.query<Record<string, string>>(
+        `SELECT
+           COUNT(*) FILTER (WHERE status NOT IN ('pending','expired'))::text AS total,
+           COUNT(*) FILTER (WHERE status = 'paid')::text AS pending,
+           COUNT(*) FILTER (WHERE status = 'fulfilled')::text AS fulfilled,
+           COUNT(*) FILTER (WHERE status = 'failed')::text AS failed,
+           COUNT(*) FILTER (WHERE status IN ('pending','expired'))::text AS abandoned,
+           COALESCE(SUM(amount_cents) FILTER (
+             WHERE refunded_at IS NULL
+               AND (status IN ('paid','fulfilled')
+                OR (status = 'failed' AND stripe_payment_intent_id IS NOT NULL))
+           ), 0)::text AS revenue,
+           COALESCE(SUM(amount_cents) FILTER (WHERE refunded_at IS NOT NULL), 0)::text AS refunded
+         FROM ${TABLE}`,
+      ),
+      this.query<{ created_at: Date | string }>(
+        `SELECT created_at FROM ${TABLE} WHERE status = ANY($1::text[])`,
+        [[...UNPAID_CHECKOUT_STATUSES]],
+      ),
+    ]);
     const row = result.rows[0] ?? {};
+    const windows = unpaidCheckoutWindowCounts(
+      unpaid.rows.map((entry) => iso(entry.created_at) as string),
+    );
     return {
       total: Number(row.total ?? 0),
       pending: Number(row.pending ?? 0),
       fulfilled: Number(row.fulfilled ?? 0),
       failed: Number(row.failed ?? 0),
+      abandoned: Number(row.abandoned ?? 0),
+      abandonedToday: windows.today,
+      abandonedMonth: windows.month,
       revenueCents: Number(row.revenue ?? 0),
       refundedCents: Number(row.refunded ?? 0),
     };

@@ -3,8 +3,19 @@ import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
-import { FIRST_SALES_GOAL_CENTS, firstSalesGoal } from "@/lib/admin-ops";
+import {
+  ABANDONED_CHECKOUT_LABEL,
+  FIRST_SALES_GOAL_CENTS,
+  abandonedCheckoutStats,
+  firstSalesGoal,
+} from "@/lib/admin-ops";
 import { formatGeneratedAt } from "@/lib/report";
+import {
+  checkoutConversionPercent,
+  isMoneyActivityStatus,
+  isUnpaidCheckoutStatus,
+  unpaidCheckoutWindowCounts,
+} from "@/lib/store/unpaid-checkouts";
 
 function readSrc(relative: string) {
   return readFile(
@@ -151,6 +162,30 @@ describe("admin console", () => {
     assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits|Ads spend/);
   });
 
+  it("keeps unpaid Pending checkouts out of the main orders list", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const abandoned = await readSrc("app/admin/abandoned-checkouts.tsx");
+    assert.match(page, /MONEY_ACTIVITY_STATUSES/);
+    assert.match(page, /UNPAID_CHECKOUT_STATUSES/);
+    assert.match(page, /abandonedCheckoutStats\(stats\)/);
+    assert.match(page, /<AbandonedCheckouts orders=\{abandoned\}/);
+    assert.match(page, /No paid orders yet/);
+    assert.doesNotMatch(page, /Orders appear here as soon as a customer starts checkout/);
+    assert.match(abandoned, /Abandoned checkouts/);
+    assert.match(abandoned, /ABANDONED_CHECKOUT_LABEL/);
+    assert.match(abandoned, /Abandoned today/);
+    assert.match(abandoned, /Abandoned MTD/);
+    assert.match(abandoned, /Checkout conversion/);
+    assert.equal(ABANDONED_CHECKOUT_LABEL, "Abandoned checkout (not paid)");
+    assert.doesNotMatch(abandoned, /OrderActions|retryFulfillment|resendEmail|sendReportEmail/);
+    assert.doesNotMatch(page, /sendReportEmail|sendRefundEmail/);
+
+    const webhook = await readSrc("app/api/stripe/webhook/route.ts");
+    assert.match(webhook, /checkout\.session\.expired/);
+    assert.match(webhook, /status: "expired"/);
+    assert.doesNotMatch(webhook, /sendMail|sendReportEmail/);
+  });
+
   it("puts API credits under the stats cards, not in the orders table", async () => {
     const page = await readSrc("app/admin/page.tsx");
     const statsIdx = page.indexOf("lg:grid-cols-6");
@@ -167,5 +202,62 @@ describe("admin console", () => {
     assert.match(page, /fetchVendorCredits\(\)\.catch/);
     assert.match(page, /emptyVendorCredits/);
     assert.match(page, /retryFulfillmentAction|OrderActions/);
+  });
+});
+
+describe("unpaid checkout classification", () => {
+  it("treats pending and expired as unpaid, everything else as money activity", () => {
+    assert.equal(isUnpaidCheckoutStatus("pending"), true);
+    assert.equal(isUnpaidCheckoutStatus("expired"), true);
+    assert.equal(isUnpaidCheckoutStatus("paid"), false);
+    assert.equal(isUnpaidCheckoutStatus("fulfilled"), false);
+    assert.equal(isUnpaidCheckoutStatus("failed"), false);
+
+    assert.equal(isMoneyActivityStatus("paid"), true);
+    assert.equal(isMoneyActivityStatus("fulfilled"), true);
+    assert.equal(isMoneyActivityStatus("failed"), true);
+    assert.equal(isMoneyActivityStatus("pending"), false);
+    assert.equal(isMoneyActivityStatus("expired"), false);
+  });
+
+  it("counts abandoned today and MTD on the Denver calendar", () => {
+    const now = new Date("2026-09-12T18:00:00.000Z"); // 12:00 MDT
+    const windows = unpaidCheckoutWindowCounts(
+      [
+        "2026-09-12T16:00:00.000Z", // today
+        "2026-09-11T16:00:00.000Z", // yesterday, same month
+        "2026-08-12T16:00:00.000Z", // previous month
+        "2026-09-13T05:00:00.000Z", // Sep 12, 11:00 PM MDT
+      ],
+      now,
+    );
+    assert.equal(windows.today, 2);
+    assert.equal(windows.month, 3);
+  });
+
+  it("computes fulfilled / (fulfilled + abandoned) conversion", () => {
+    assert.equal(checkoutConversionPercent(0, 0), null);
+    assert.equal(checkoutConversionPercent(3, 1), 75);
+    assert.equal(checkoutConversionPercent(1, 1), 50);
+
+    const empty = abandonedCheckoutStats({
+      abandoned: 0,
+      abandonedToday: 0,
+      abandonedMonth: 0,
+      fulfilled: 0,
+    });
+    assert.equal(empty.conversionPercent, null);
+    assert.equal(empty.conversionLabel, "No checkouts yet");
+
+    const mixed = abandonedCheckoutStats({
+      abandoned: 2,
+      abandonedToday: 1,
+      abandonedMonth: 2,
+      fulfilled: 6,
+    });
+    assert.equal(mixed.today, 1);
+    assert.equal(mixed.month, 2);
+    assert.equal(mixed.conversionPercent, 75);
+    assert.equal(mixed.conversionLabel, "75% paid");
   });
 });

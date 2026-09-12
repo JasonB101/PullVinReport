@@ -5,6 +5,47 @@
  * private milestone, not a public thermometer.
  */
 import { formatPrice } from "@/lib/config";
+import type { OrderStats } from "@/lib/store";
+import { checkoutConversionPercent } from "@/lib/store/unpaid-checkouts";
+
+export {
+  MONEY_ACTIVITY_STATUSES,
+  UNPAID_CHECKOUT_STATUSES,
+} from "@/lib/store/unpaid-checkouts";
+
+/** Shown on unpaid Pending / expired rows so they are never read as orders. */
+export const ABANDONED_CHECKOUT_LABEL = "Abandoned checkout (not paid)";
+
+export type AbandonedCheckoutStats = {
+  total: number;
+  today: number;
+  month: number;
+  conversionPercent: number | null;
+  conversionLabel: string;
+};
+
+/**
+ * Unpaid-checkout tiles for /admin.
+ *
+ * Conversion is fulfilled / (fulfilled + abandoned). Pending sessions still
+ * waiting on Stripe's expire webhook count as abandoned — they were never paid.
+ */
+export function abandonedCheckoutStats(
+  stats: Pick<
+    OrderStats,
+    "abandoned" | "abandonedToday" | "abandonedMonth" | "fulfilled"
+  >,
+): AbandonedCheckoutStats {
+  const percent = checkoutConversionPercent(stats.fulfilled, stats.abandoned);
+  return {
+    total: stats.abandoned,
+    today: stats.abandonedToday,
+    month: stats.abandonedMonth,
+    conversionPercent: percent,
+    conversionLabel:
+      percent === null ? "No checkouts yet" : `${percent}% paid`,
+  };
+}
 
 /** First live-sales milestone, in cents. */
 export const FIRST_SALES_GOAL_CENTS = 100_000;

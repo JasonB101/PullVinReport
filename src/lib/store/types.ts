@@ -73,10 +73,16 @@ export type VehicleHeroRecord = {
 };
 
 export type OrderStats = {
+  /** Paid / fulfilled / failed rows — unpaid checkouts are excluded. */
   total: number;
+  /** Paid but not yet delivered. Unpaid Pending checkouts are not included. */
   pending: number;
   fulfilled: number;
   failed: number;
+  /** Unpaid Pending or expired checkout sessions — never collected. */
+  abandoned: number;
+  abandonedToday: number;
+  abandonedMonth: number;
   /** Money taken and kept — refunded orders are excluded. */
   revenueCents: number;
   refundedCents: number;
@@ -93,7 +99,10 @@ export interface OrderStore {
   getByStripeSessionId(sessionId: string): Promise<Order | null>;
   getByStripePaymentIntentId(paymentIntentId: string): Promise<Order | null>;
   update(id: string, patch: OrderPatch): Promise<Order>;
-  list(limit?: number): Promise<Order[]>;
+  list(
+    limit?: number,
+    options?: { statuses?: readonly OrderStatus[] },
+  ): Promise<Order[]>;
   stats(): Promise<OrderStats>;
   ping(): Promise<{ ok: boolean; detail: string }>;
   /** Illustrated hero, keyed by year/make/model/trim/color — not by VIN. */

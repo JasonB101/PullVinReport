@@ -8,9 +8,14 @@ import type {
   OrderPatch,
   OrderStats,
   OrderStore,
+  OrderStatus,
   ModelExtrasRecord,
   VehicleHeroRecord,
 } from "@/lib/store/types";
+import {
+  isUnpaidCheckoutStatus,
+  unpaidCheckoutWindowCounts,
+} from "@/lib/store/unpaid-checkouts";
 
 /**
  * JSON-file order store used when DATABASE_URL is not set.
@@ -146,9 +151,14 @@ export class FileOrderStore implements OrderStore {
     });
   }
 
-  async list(limit = 100): Promise<Order[]> {
+  async list(
+    limit = 100,
+    options?: { statuses?: readonly OrderStatus[] },
+  ): Promise<Order[]> {
     const orders = await this.readAll();
+    const allowed = options?.statuses ? new Set(options.statuses) : null;
     return [...orders]
+      .filter((order) => !allowed || allowed.has(order.status))
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
       .slice(0, limit);
   }
@@ -163,12 +173,18 @@ export class FileOrderStore implements OrderStore {
         o.status === "paid" ||
         (o.status === "failed" && Boolean(o.stripePaymentIntentId)),
     );
+    const abandoned = orders.filter((o) => isUnpaidCheckoutStatus(o.status));
+    const windows = unpaidCheckoutWindowCounts(
+      abandoned.map((order) => order.createdAt),
+    );
     return {
-      total: orders.length,
-      pending: orders.filter((o) => o.status === "pending" || o.status === "paid")
-        .length,
+      total: orders.filter((o) => !isUnpaidCheckoutStatus(o.status)).length,
+      pending: orders.filter((o) => o.status === "paid").length,
       fulfilled: orders.filter((o) => o.status === "fulfilled").length,
       failed: orders.filter((o) => o.status === "failed").length,
+      abandoned: abandoned.length,
+      abandonedToday: windows.today,
+      abandonedMonth: windows.month,
       revenueCents: charged
         .filter((o) => !o.refundedAt)
         .reduce((sum, o) => sum + o.amountCents, 0),
