@@ -81,16 +81,25 @@ describe("VIN-first checkout", () => {
     assert.doesNotMatch(identityWrap[1], /(?<![\w:-])order-2(?!\d)/);
   });
 
-  it("does not generate a paid hero or colour before checkout", async () => {
+  it("kicks off the illustrated hero on VIN check, from the same cache as paid reports", async () => {
     const decode = await readSrc("components/vin-decode-card.tsx");
     const preview = await readSrc("app/preview/page.tsx");
+    const route = await readSrc("app/api/vehicle-hero/route.ts");
+    const hero = await readSrc("components/vehicle-hero.tsx");
 
-    assert.doesNotMatch(decode, /heroForOrder|generateVehicleHero|\/api\/vehicle-hero/);
-    assert.doesNotMatch(preview, /heroForOrder|generateVehicleHero|VehicleHero/);
-    assert.match(
-      decode,
-      /Colour and the illustrated hero arrive only on the paid report/,
-    );
+    assert.match(decode, /<VehicleHero/);
+    assert.match(decode, /vin=\{vin\}/);
+    assert.match(decode, /cachedHeroForFacts/);
+    assert.match(decode, /heroFactsFromParts/);
+    assert.match(decode, /HERO_ILLUSTRATION_LABEL/);
+    assert.doesNotMatch(preview, /heroForOrder|generateVehicleHero/);
+    assert.doesNotMatch(decode, /sample-vehicle-hero/);
+    assert.doesNotMatch(decode, /M42 140c6-28|VehicleMark|vin-mark-wash/);
+    assert.match(route, /record\.vin/);
+    assert.match(route, /heroForFacts/);
+    assert.match(route, /heroForOrder/);
+    assert.match(hero, /HeroIdentityPlate/);
+    assert.doesNotMatch(hero, /M42 140c6-28|hero-draft-stroke|hero-draft-pencil/);
   });
 
   it("leaves Google Ads Purchase and GA4 wiring intact", async () => {

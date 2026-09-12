@@ -1,5 +1,12 @@
+import { VehicleHero } from "@/components/vehicle-hero";
 import { VIN_DECODE_UNAVAILABLE } from "@/lib/customer-copy";
+import { cachedHeroForFacts } from "@/lib/order-hero";
 import { decodeVin } from "@/lib/nhtsa";
+import {
+  HERO_ILLUSTRATION_LABEL,
+  heroAlt,
+  heroFactsFromParts,
+} from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 function IdentityFrame({ children }: { children: React.ReactNode }) {
@@ -36,9 +43,10 @@ export function VinDecodeSkeleton() {
  * thinks it does?
  *
  * The decode comes from the public vPIC database rather than the records the
- * paid report is built from — nothing chargeable is pulled before checkout.
- * Colour and the illustrated hero arrive only on the paid report, where the
- * listings actually name the paint.
+ * paid report is built from — nothing chargeable at the records vendor is
+ * pulled before checkout. The illustrated hero uses the same fal cache as a
+ * paid report (year/make/model family). Colour from listings still arrives
+ * only after purchase; a pre-pay drawing without paint is reused then.
  */
 export async function VinDecodeCard({
   vin,
@@ -71,6 +79,16 @@ export async function VinDecodeCard({
   }
 
   const { decode } = result;
+  const facts = heroFactsFromParts({
+    year: decode.vehicle.year ?? (fallbackYear ? String(fallbackYear) : ""),
+    make: decode.vehicle.make,
+    model: decode.vehicle.model,
+    trim: decode.vehicle.trim,
+    bodyStyle: decode.vehicle.bodyStyle,
+    engine: decode.vehicle.engine,
+  });
+  const cached = facts ? await cachedHeroForFacts(facts) : null;
+  const illustrationAlt = facts ? heroAlt(facts) : `Illustrated ${decode.label}`;
 
   return (
     <IdentityFrame>
@@ -105,48 +123,15 @@ export async function VinDecodeCard({
           </p>
         </div>
 
-        <VehicleMark />
+        {facts ? (
+          <VehicleHero
+            src={cached?.src}
+            vin={vin}
+            alt={illustrationAlt}
+            caption={HERO_ILLUSTRATION_LABEL}
+          />
+        ) : null}
       </div>
     </IdentityFrame>
-  );
-}
-
-/** Decorative silhouette so the identified car has a face — not a photo of this VIN. */
-function VehicleMark() {
-  return (
-    <figure
-      className="mx-auto w-full max-w-[13.5rem] shrink-0 sm:max-w-xs md:mx-0 md:w-[min(42%,18rem)]"
-      aria-hidden="true"
-    >
-      <svg viewBox="0 0 320 190" className="h-auto w-full text-slate-400">
-        <defs>
-          <linearGradient id="vin-mark-wash" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stopColor="#dbeafe" stopOpacity="0.55" />
-            <stop offset="55%" stopColor="#f8fafc" stopOpacity="0.2" />
-            <stop offset="100%" stopColor="#e0f2fe" stopOpacity="0.4" />
-          </linearGradient>
-        </defs>
-        <rect width="320" height="190" fill="url(#vin-mark-wash)" rx="16" />
-        <g
-          fill="none"
-          stroke="#64748b"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <circle cx="96" cy="142" r="24" strokeWidth="1.3" />
-          <circle cx="228" cy="142" r="24" strokeWidth="1.3" />
-          <circle cx="96" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-          <circle cx="228" cy="142" r="9" strokeWidth="1" opacity="0.45" />
-          <path
-            strokeWidth="1.7"
-            d="M42 140c6-28 22-44 48-52l28-28c8-8 16-12 36-12h52c22 0 36 8 50 24l22 16c10 4 18 12 22 28 2 8 6 18 8 24"
-          />
-          <path
-            strokeWidth="1.35"
-            d="M54 128h28c6-18 16-30 34-38m48-2c22 4 40 16 54 34h36"
-          />
-        </g>
-      </svg>
-    </figure>
   );
 }

@@ -210,6 +210,16 @@ export class FileOrderStore implements OrderStore {
     return heroes[cacheKey] ?? null;
   }
 
+  async findVehicleHeroByPrefix(prefix: string): Promise<VehicleHeroRecord | null> {
+    if (!prefix) return null;
+    const heroes = await this.readHeroes();
+    const matches = Object.values(heroes).filter((hero) =>
+      hero.cacheKey.startsWith(prefix),
+    );
+    if (matches.length === 0) return null;
+    return matches.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  }
+
   async saveVehicleHero(hero: VehicleHeroRecord): Promise<void> {
     await this.run(async () => {
       const heroes = await this.readHeroes();

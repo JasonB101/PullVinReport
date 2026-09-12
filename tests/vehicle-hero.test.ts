@@ -9,6 +9,8 @@ import {
   generateVehicleHero,
   heroAlt,
   heroFacts,
+  heroFactsFromParts,
+  heroFamilyPrefix,
   heroPrompt,
   HERO_CACHE_VERSION,
   HERO_DRAFT_COPY,
@@ -120,6 +122,22 @@ describe("hero facts", () => {
   it("serves the sample from a static Camry PNG and never a fal draw", () => {
     assert.equal(SAMPLE_HERO_SRC, "/sample-vehicle-hero.png");
   });
+
+  it("builds preview facts from a vPIC decode without a paid report or colour", () => {
+    const facts = heroFactsFromParts({
+      year: "2003",
+      make: "Honda",
+      model: "Accord",
+      trim: "EX-V6",
+      bodyStyle: "Coupe",
+      engine: "3.0L 6-cyl",
+    });
+    assert.ok(facts);
+    assert.equal(facts.color, "");
+    assert.match(facts.cacheKey, new RegExp(`^${HERO_CACHE_VERSION}\\|2003\\|honda\\|accord\\|`));
+    assert.equal(heroFamilyPrefix(facts), `${HERO_CACHE_VERSION}|2003|honda|accord|`);
+    assert.doesNotMatch(facts.cacheKey, /1HGCM82633A004352/i);
+  });
 });
 
 describe("the illustration prompt", () => {
@@ -152,7 +170,7 @@ describe("the drafting placeholder", () => {
     assert.doesNotMatch(HERO_ILLUSTRATION_LABEL, /photograph of this VIN/i);
   });
 
-  it("holds the hero slot with a sketch until pixels arrive, then crossfades", async () => {
+  it("holds the hero slot with a branded plate until pixels arrive, then crossfades", async () => {
     const source = await readFile(
       fileURLToPath(new URL("../src/components/vehicle-hero.tsx", import.meta.url)),
       "utf8",
@@ -168,30 +186,30 @@ describe("the drafting placeholder", () => {
     assert.match(source, /transition-opacity duration-700/);
     assert.match(source, /generating \|\| slowLoad \|\| awaitingGenerated/);
     assert.match(source, /sample \? SAMPLE_HERO_SRC/);
-    assert.match(source, /role="status"/);
-    assert.match(source, /HeroDraftPlaceholder/);
-    assert.match(source, /hero-draft-stroke/);
+    assert.match(source, /HeroIdentityPlate/);
+    assert.match(source, /Factory identity/);
     assert.match(source, /useId\(\)/);
-    assert.match(source, /hero-draft-wash-\$\{uid\}/);
     assert.match(source, /hero-draft-sheen-\$\{uid\}/);
     assert.match(source, /failedEmpty/);
     assert.match(source, /quiet=\{failedEmpty\}/);
     assert.match(source, /reserveHeight \? "min-h-\[11rem\] sm:min-h-\[12\.5rem\]"/);
     assert.match(source, /const reserveHeight = drafting \|\| failedEmpty/);
+    assert.match(source, /JSON\.stringify\(token \? \{ token \} : \{ vin \}\)/);
     assert.doesNotMatch(source, /if \(!src\) return null/);
     assert.doesNotMatch(source, /if \(\(failed && !src\)/);
     assert.doesNotMatch(source, /pixelsReady \? "" : "min-h-/);
     assert.doesNotMatch(source, /Loading…/);
     assert.doesNotMatch(source, /spinner|progress bar|role="progressbar"/i);
     assert.doesNotMatch(source, /vinaudit/i);
+    assert.doesNotMatch(source, /M42 140c6-28|hero-draft-stroke|hero-draft-pencil|HeroDraftPlaceholder/);
     assert.doesNotMatch(
       source,
       /sample-vehicle-hero\.png[\s\S]*drafting|placeholder[\s\S]*sample-vehicle/,
     );
 
-    assert.match(css, /@keyframes hero-draft-dash/);
     assert.match(css, /@keyframes hero-draft-shimmer/);
     assert.match(css, /prefers-reduced-motion/);
+    assert.doesNotMatch(css, /hero-draft-dash|hero-draft-pencil|hero-draft-guide/);
     assert.doesNotMatch(css, /gif/i);
   });
 });

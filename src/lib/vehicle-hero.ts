@@ -68,17 +68,51 @@ function pickRicher(base: string, candidates: string[]): string {
   return cleaned.sort((a, b) => b.length - a.length)[0] ?? "";
 }
 
+export type HeroVehicleParts = {
+  year?: string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+  color?: string | null;
+  bodyStyle?: string | null;
+  engine?: string | null;
+};
+
+/**
+ * Year/make/model family used to reuse a drawing when the exact trim/colour
+ * key is not known yet (pre-pay vPIC has no paint) or differs slightly after
+ * the paid listings arrive. Prevents a second fal bill for the same car.
+ */
+export function heroFamilyPrefix(facts: Pick<HeroFacts, "year" | "make" | "model">): string {
+  return [HERO_CACHE_VERSION, facts.year, facts.make, facts.model]
+    .map((part) => part.toLowerCase())
+    .join("|") + "|";
+}
+
+export function heroFactsFromParts(parts: HeroVehicleParts): HeroFacts | null {
+  const year = normalizePart(parts.year ?? "");
+  const make = normalizePart(parts.make ?? "");
+  const model = normalizePart(parts.model ?? "");
+  if (!year || !make || !model) return null;
+
+  const trim = normalizePart(parts.trim ?? "");
+  const color = normalizePart(parts.color ?? "");
+  const bodyStyle = normalizePart(parts.bodyStyle ?? "");
+  const engine = normalizePart(parts.engine ?? "");
+
+  const cacheKey = [HERO_CACHE_VERSION, year, make, model, trim, color, bodyStyle, engine]
+    .map((part) => part.toLowerCase())
+    .join("|");
+
+  return { year, make, model, trim, color, bodyStyle, engine, cacheKey };
+}
+
 /**
  * The facts an illustration may use — year, make, model, a richer listing
  * trim when one exists, an exterior colour from the build record or listings,
  * body style. The VIN is never part of this.
  */
 export function heroFacts(report: VehicleReport): HeroFacts | null {
-  const year = normalizePart(report.vehicle.year ?? "");
-  const make = normalizePart(report.vehicle.make ?? "");
-  const model = normalizePart(report.vehicle.model ?? "");
-  if (!year || !make || !model) return null;
-
   const listingFields = report.sections
     .filter((section) => section.layout === "listings")
     .flatMap((section) => sectionListings(section))
@@ -88,16 +122,15 @@ export function heroFacts(report: VehicleReport): HeroFacts | null {
   const specFields = report.specifications;
   const allFields = [...listingFields, ...recordFields, ...specFields];
 
-  const trim = pickRicher(report.vehicle.trim ?? "", fieldValues(allFields, TRIM_LABELS));
-  const color = reportPaintColor(report);
-  const bodyStyle = normalizePart(report.vehicle.bodyStyle ?? "");
-  const engine = normalizePart(report.vehicle.engine ?? "");
-
-  const cacheKey = [HERO_CACHE_VERSION, year, make, model, trim, color, bodyStyle, engine]
-    .map((part) => part.toLowerCase())
-    .join("|");
-
-  return { year, make, model, trim, color, bodyStyle, engine, cacheKey };
+  return heroFactsFromParts({
+    year: report.vehicle.year,
+    make: report.vehicle.make,
+    model: report.vehicle.model,
+    trim: pickRicher(report.vehicle.trim ?? "", fieldValues(allFields, TRIM_LABELS)),
+    color: reportPaintColor(report),
+    bodyStyle: report.vehicle.bodyStyle,
+    engine: report.vehicle.engine,
+  });
 }
 
 export function heroPrompt(facts: HeroFacts): string {
@@ -247,9 +280,20 @@ export async function generateVehicleHero(
   report: VehicleReport,
   options: { timeoutMs?: number } = {},
 ): Promise<VehicleHeroRecord | null> {
-  if (!isFalConfigured()) return null;
   const facts = heroFacts(report);
   if (!facts) return null;
+  return generateVehicleHeroFromFacts(facts, options);
+}
+
+/**
+ * Same fal draw as a paid report, from year/make/model facts alone.
+ * Used on the pre-pay preview where we have a vPIC decode but no order.
+ */
+export async function generateVehicleHeroFromFacts(
+  facts: HeroFacts,
+  options: { timeoutMs?: number } = {},
+): Promise<VehicleHeroRecord | null> {
+  if (!isFalConfigured()) return null;
 
   const timeoutMs = options.timeoutMs ?? fal.timeoutMs;
   const controller = new AbortController();

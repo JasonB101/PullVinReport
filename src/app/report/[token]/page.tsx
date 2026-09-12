@@ -14,11 +14,11 @@ import {
   refundPromise,
 } from "@/lib/customer-copy";
 import { extrasForReport } from "@/lib/model-extras";
+import { cachedHeroForReport } from "@/lib/order-hero";
 import { paidReportPdfPath } from "@/lib/report-pdf-serve";
 import { withCurrentLayout } from "@/lib/report-layout";
 import { getStore } from "@/lib/store";
 import type { Order } from "@/lib/store";
-import { HERO_CACHE_VERSION, heroFacts } from "@/lib/vehicle-hero";
 import { prettyVin } from "@/lib/vin";
 
 export const dynamic = "force-dynamic";
@@ -139,14 +139,7 @@ export default async function ReportPage({
   }
 
   const report = withCurrentLayout(order.report);
-  const heroKey = heroFacts(report)?.cacheKey;
-  try {
-    await store.clearStaleVehicleHeroes(`${HERO_CACHE_VERSION}|`);
-  } catch (error) {
-    console.error("[hero] could not drop stale cached drawings", error);
-  }
-  const hero =
-    isFalConfigured() && heroKey ? await store.getVehicleHero(heroKey) : null;
+  const hero = await cachedHeroForReport(report, store);
   // Same fetch as the PDF: a cache peek left the first HTML paint (and the
   // RSC payload) without About this model even when NHTSA had campaigns.
   // extrasToken still lets the client retry if this call fails closed.
