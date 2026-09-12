@@ -12,7 +12,7 @@ import type { Field, VehicleReport } from "@/lib/report";
 import { reportPaintColor, sectionListings } from "@/lib/report";
 import type { VehicleHeroRecord } from "@/lib/store";
 
-export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.svg";
+export const SAMPLE_HERO_SRC = "/sample-vehicle-hero.png";
 /**
  * Bump this when the drawing contract changes (colour source, cutout, prompt)
  * so a cached white studio shot cannot be served as the new hero.

@@ -13,6 +13,7 @@ import {
   HERO_CACHE_VERSION,
   HERO_DRAFT_COPY,
   HERO_ILLUSTRATION_LABEL,
+  SAMPLE_HERO_SRC,
 } from "../src/lib/vehicle-hero.ts";
 import { buildSampleReport } from "../src/lib/sample-report.ts";
 import { fal, isFalConfigured } from "../src/lib/config.ts";
@@ -115,6 +116,10 @@ describe("hero facts", () => {
     assert.match(facts.bodyStyle, /Sedan/i);
     assert.match(facts.engine, /2\.5L L4/);
   });
+
+  it("serves the sample from a static Camry PNG and never a fal draw", () => {
+    assert.equal(SAMPLE_HERO_SRC, "/sample-vehicle-hero.png");
+  });
 });
 
 describe("the illustration prompt", () => {
@@ -181,7 +186,7 @@ describe("the drafting placeholder", () => {
     assert.doesNotMatch(source, /vinaudit/i);
     assert.doesNotMatch(
       source,
-      /sample-vehicle-hero\.svg[\s\S]*drafting|placeholder[\s\S]*sample-vehicle/,
+      /sample-vehicle-hero\.png[\s\S]*drafting|placeholder[\s\S]*sample-vehicle/,
     );
 
     assert.match(css, /@keyframes hero-draft-dash/);

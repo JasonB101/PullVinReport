@@ -33,7 +33,7 @@ export type PaidReportPdf =
 /**
  * One renderer for the receipt attachment and both download endpoints.
  *
- * Looks up a cached hero (or the sample SVG) and soft-fails to no picture.
+ * Looks up a cached hero (or the sample PNG) and soft-fails to no picture.
  * Does not call fal — a PDF must not wait on a drawing that is still drafting.
  */
 export async function renderStoredReportPdf(
