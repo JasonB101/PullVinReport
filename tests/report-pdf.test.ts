@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
+import { inflateSync } from "node:zlib";
 
 import { BRAND } from "@/lib/config";
 import { sendReportEmail } from "@/lib/email";
+import { currentEvent, sectionLead, sectionTable } from "@/lib/report";
 import { renderReportPdf, reportPdfFilename } from "@/lib/report-pdf";
 import { renderStoredReportPdf } from "@/lib/report-pdf-serve";
 import {
@@ -57,6 +59,27 @@ function pageCount(pdf: Buffer): number {
   const match = /\/Count (\d+)/.exec(pdf.toString("latin1"));
   assert.ok(match, "the PDF should declare how many pages it has");
   return Number(match[1]);
+}
+
+/** Visible text from a react-pdf buffer (hex TJ runs in Flate streams). */
+function pdfVisibleText(pdf: Buffer): string {
+  const latin1 = pdf.toString("latin1");
+  const chunks: string[] = [];
+  const header = /\/Length (\d+)\n\/Filter \/FlateDecode\n>>\nstream\n/g;
+  for (const match of latin1.matchAll(header)) {
+    const start = match.index + match[0].length;
+    const raw = pdf.subarray(start, start + Number(match[1]));
+    let decoded: string;
+    try {
+      decoded = inflateSync(raw).toString("latin1");
+    } catch {
+      continue;
+    }
+    for (const hex of decoded.match(/<([0-9A-Fa-f]+)>/g) ?? []) {
+      chunks.push(Buffer.from(hex.slice(1, -1), "hex").toString("latin1"));
+    }
+  }
+  return chunks.join("");
 }
 
 describe("report PDF", () => {
@@ -268,6 +291,104 @@ describe("report PDF", () => {
     assert.ok(
       withBrief.byteLength > withoutBrief.byteLength,
       "the brief should add content, not vanish",
+    );
+  });
+
+  it("prints a shared State chip when every title agrees, and keeps State on rows when they differ", async () => {
+    // HTML SharedFields and the PDF shared note are the same contract: a value
+    // that never varies is stated once for the section, not copied down the
+    // table. Forcing it back onto every PDF row would break that lockstep.
+    const html = await readFile(
+      fileURLToPath(new URL("../src/components/report-view.tsx", import.meta.url)),
+      "utf8",
+    );
+    const pdfSource = await readFile(
+      fileURLToPath(new URL("../src/lib/report-pdf.tsx", import.meta.url)),
+      "utf8",
+    );
+    assert.match(html, /function SharedFields/);
+    assert.match(html, /Same on all \{count\} records/);
+    assert.match(html, /section\.shared && section\.shared\.length > 0/);
+    assert.match(pdfSource, /Same on all \{section\.records\.length\} records/);
+    assert.match(pdfSource, /fieldList\(section\.shared\)/);
+
+    const sameState = normalizeVinAuditReport(
+      {
+        attributes: { Year: "2012", Make: "Ford", Model: "F-150" },
+        titles: [
+          { vin: VIN, date: "2024-09-27", state: "OK", meter: "121477", meterunit: "M", current: true },
+          { vin: VIN, date: "2023-06-01", state: "OK", meter: "98000", meterunit: "M", current: false },
+          { vin: VIN, date: "2022-04-11", state: "OK", meter: "81000", meterunit: "M", current: false },
+          { vin: VIN, date: "2021-03-08", state: "OK", meter: "72000", meterunit: "M", current: false },
+          { vin: VIN, date: "2019-08-19", state: "OK", meter: "51000", meterunit: "M", current: false },
+          { vin: VIN, date: "2017-01-15", state: "OK", meter: "33000", meterunit: "M", current: false },
+        ],
+      },
+      VIN,
+    );
+    const sameTitles = sameState.sections.find((section) => section.key === "titles");
+    assert.ok(sameTitles);
+    assert.deepEqual(sameTitles.shared, [{ label: "State", value: "OK" }]);
+    const sameTable = sectionTable(sameTitles);
+    assert.ok(sameTable);
+    assert.equal(sameTable.columns.includes("State"), false);
+    assert.deepEqual(sameTable.rows[0].cells, ["Sep 27, 2024", "121,477 mi", "Yes"]);
+    assert.deepEqual(currentEvent(sameTitles), {
+      label: "Current title",
+      fields: [
+        { label: "Date", value: "Sep 27, 2024" },
+        { label: "Mileage", value: "121,477 mi" },
+      ],
+    });
+    assert.equal(sectionLead(sameTitles)?.text, "Sep 27, 2024 · 121,477 mi");
+
+    const samePdf = pdfVisibleText(await renderReportPdf(sameState));
+    assert.match(samePdf, /Same on all 6 records/);
+    assert.match(samePdf, /State: OK/);
+    assert.match(samePdf, /Current title: Sep 27, 2024 {2}· {2}121,477 mi/);
+    assert.doesNotMatch(samePdf, /DATE\s*STATE\s*MILEAGE/);
+
+    const mixed = normalizeVinAuditReport(
+      {
+        attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+        titles: [
+          { vin: VIN, date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M", current: true },
+          { vin: VIN, date: "2015-06-19", state: "KY", meter: "41204", meterunit: "M", current: false },
+        ],
+      },
+      VIN,
+    );
+    const mixedTitles = mixed.sections.find((section) => section.key === "titles");
+    assert.ok(mixedTitles);
+    assert.equal(
+      mixedTitles.shared?.some((field) => field.label === "State"),
+      false,
+    );
+    const mixedTable = sectionTable(mixedTitles);
+    assert.ok(mixedTable);
+    assert.deepEqual(mixedTable.columns, ["Date", "State", "Mileage", "Current"]);
+    assert.deepEqual(mixedTable.rows[0].cells, ["Sep 27, 2024", "TN", "121,477 mi", "Yes"]);
+    assert.equal(sectionLead(mixedTitles)?.text, "Sep 27, 2024 · TN · 121,477 mi");
+
+    const mixedPdf = pdfVisibleText(await renderReportPdf(mixed));
+    assert.doesNotMatch(mixedPdf, /Same on all \d+ records — State:/);
+    assert.match(mixedPdf, /DATESTATEMILEAGECURRENT/);
+    assert.match(mixedPdf, /Sep 27, 2024TN121,477 miYes/);
+    assert.match(mixedPdf, /Jun 19, 2015KY41,204 miNo/);
+
+    const sampleTitles = buildSampleReport().sections.find(
+      (section) => section.key === "titles",
+    );
+    assert.ok(sampleTitles);
+    assert.deepEqual(
+      sampleTitles.records.map(
+        (record) => record.find((field) => field.label === "State")?.value,
+      ),
+      ["TN", "TN", "TN", "KY", "KY"],
+    );
+    assert.equal(
+      sampleTitles.shared?.some((field) => field.label === "State"),
+      false,
     );
   });
 });
