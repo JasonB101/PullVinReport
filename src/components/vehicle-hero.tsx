@@ -16,7 +16,7 @@ type Props = {
 
 /**
  * How long a URL may sit in the DOM before we cover it with the draft layer.
- * Cached hits and the sample SVG typically decode before this, so they never
+ * Cached hits and the sample PNG typically decode before this, so they never
  * flash a placeholder. A generate-in-flight has no URL and drafts immediately.
  */
 export const HERO_DRAFT_REVEAL_MS = 120;

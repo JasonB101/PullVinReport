@@ -208,8 +208,9 @@ details.
   on the file store). Another order for the same example reuses the drawing.
   Keys that do not start with `cutout-v1|` are dropped on the next report view
   so a previous white studio shot cannot come back.
-- The sample report uses a static transparent SVG at `/sample-vehicle-hero.svg`
-  and never calls fal.
+- The sample report uses a static transparent PNG cutout at
+  `/sample-vehicle-hero.png` and never calls fal. Paid reports still draw
+  from the year/make/model cache — the Camry file is not used for other VINs.
 - Soft-fail: no key, a timeout or a rejection leaves the report unchanged
   aside from no hero.
 

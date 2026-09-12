@@ -9,8 +9,8 @@ import { cachedHeroForReport } from "@/lib/order-hero";
 import {
   embeddableHeroSrc,
   heroSrcForPdf,
-  SAMPLE_HERO_SVG,
   sampleHeroDataUri,
+  sampleHeroFilePath,
 } from "@/lib/report-pdf-hero";
 import { buildSampleReport } from "@/lib/sample-report";
 import { FileOrderStore } from "@/lib/store/file-store";
@@ -65,30 +65,37 @@ describe("embeddable hero src", () => {
 });
 
 describe("sample hero for the PDF", () => {
-  it("stays in lockstep with the SVG the page serves", async () => {
+  it("stays in lockstep with the PNG the page serves", async () => {
     const file = await readFile(
-      fileURLToPath(new URL("../public/sample-vehicle-hero.svg", import.meta.url)),
-      "utf8",
+      fileURLToPath(new URL("../public/sample-vehicle-hero.png", import.meta.url)),
     );
-    assert.equal(file.trim(), SAMPLE_HERO_SVG.trim());
-    assert.equal(path.basename(SAMPLE_HERO_SRC), "sample-vehicle-hero.svg");
+    assert.equal(path.basename(SAMPLE_HERO_SRC), "sample-vehicle-hero.png");
+    assert.equal(sampleHeroFilePath(), path.join(process.cwd(), "public", "sample-vehicle-hero.png"));
+    assert.ok(
+      file[0] === 0x89 && file[1] === 0x50 && file[2] === 0x4e && file[3] === 0x47,
+      "sample hero must be a real PNG, not a renamed JPEG or SVG",
+    );
+    assert.ok(
+      file.byteLength > 20_000,
+      "sample hero must be a cutout, not a tiny cartoon stub",
+    );
 
     const uri = await sampleHeroDataUri();
-    assert.match(uri, /^data:image\/svg\+xml;base64,/);
-    const decoded = Buffer.from(
-      uri.replace(/^data:image\/svg\+xml;base64,/, ""),
-      "base64",
-    )
-      .toString("utf8")
-      .trim();
-    assert.match(decoded, /<svg width="136" height="52"/);
-    assert.equal(decoded.replace('<svg width="136" height="52"', "<svg"), file.trim());
+    assert.ok(uri);
+    assert.match(uri, /^data:image\/png;base64,/);
+    const decoded = Buffer.from(uri.replace(/^data:image\/png;base64,/, ""), "base64");
+    assert.deepEqual(decoded, file);
   });
 
-  it("always returns the sample drawing for a sample report", async () => {
+  it("always returns the sample cutout for a sample report", async () => {
     const src = await heroSrcForPdf(buildSampleReport());
     assert.ok(src);
-    assert.match(src, /^data:image\/svg\+xml;base64,/);
+    assert.match(src, /^data:image\/png;base64,/);
+  });
+
+  it("does not hardcode the Camry cutout onto a paid Camry report", async () => {
+    const src = await heroSrcForPdf(paidReport());
+    assert.equal(src, null);
   });
 });
 
