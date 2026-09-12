@@ -27,9 +27,17 @@ import {
   mpgFigureRows,
   recallHeaderBadges,
   requestPaidModelExtras,
-  safetyFigureRows,
+  safetyCategoryRows,
+  safetyOverallFigure,
   youSaveSpendCopy,
 } from "@/lib/model-extras";
+import {
+  NHTSA_STAR_MAX,
+  STAR_PATH,
+  nhtsaStarLabel,
+  nhtsaStarScore,
+  nhtsaStarSlots,
+} from "@/lib/safety-stars";
 import {
   EPA_EV_NOTE,
   EPA_EV_TITLE,
@@ -245,9 +253,51 @@ function RecallBadgePills({ badges }: { badges: RecallBadge[] }) {
   );
 }
 
+function StarGlyph({
+  filled,
+  className,
+}: {
+  filled: boolean;
+  className: string;
+}) {
+  return (
+    <svg
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={`shrink-0 ${filled ? "text-slate-800" : "text-sky-200"} ${className}`}
+    >
+      <path d={STAR_PATH} fill="currentColor" />
+    </svg>
+  );
+}
+
+function NhtsaStars({
+  rating,
+  label,
+  size = "sm",
+}: {
+  rating: number;
+  label: string;
+  size?: "lg" | "sm";
+}) {
+  const glyph = size === "lg" ? "h-6 w-6 sm:h-7 sm:w-7" : "h-4 w-4";
+  return (
+    <span
+      className="inline-flex items-center gap-0.5"
+      role="img"
+      aria-label={nhtsaStarLabel(label, rating)}
+    >
+      {nhtsaStarSlots(rating).map((filled, index) => (
+        <StarGlyph key={index} filled={filled} className={glyph} />
+      ))}
+    </span>
+  );
+}
+
 function SafetyRatingsCard({ ratings }: { ratings: ModelSafetyRatings }) {
-  const figures = safetyFigureRows(ratings);
-  if (figures.length === 0) return null;
+  const overall = safetyOverallFigure(ratings);
+  const categories = safetyCategoryRows(ratings);
+  if (!overall && categories.length === 0) return null;
   return (
     <div
       id="model-safety-ratings"
@@ -259,33 +309,43 @@ function SafetyRatingsCard({ ratings }: { ratings: ModelSafetyRatings }) {
       >
         {SAFETY_RATINGS_TITLE}
       </p>
-      <ul
-        aria-labelledby="safety-ratings-heading"
-        className={`mt-2 grid gap-2 ${figures.length > 3 ? "grid-cols-3 sm:grid-cols-5" : "grid-cols-3"}`}
-      >
-        {figures.map((row) => (
-          <li
-            key={row.key}
-            className={`rounded-xl border px-2 py-3 text-center ${
-              row.key === "overall"
-                ? "border-sky-300 bg-white shadow-[0_1px_2px_rgba(15,23,42,0.04)]"
-                : "border-sky-200/80 bg-white/80"
-            }`}
+      {overall && (
+        <div className="mt-3 flex flex-wrap items-end justify-between gap-3 rounded-xl border border-sky-300 bg-white px-3 py-3 shadow-[0_1px_2px_rgba(15,23,42,0.04)] sm:px-4">
+          <div className="min-w-0">
+            <p className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">
+              {overall.label}
+            </p>
+            <div className="mt-1.5">
+              <NhtsaStars rating={overall.value} label={overall.label} size="lg" />
+            </div>
+          </div>
+          <p
+            className="text-3xl font-semibold tabular-nums tracking-tight text-slate-900 sm:text-4xl"
+            aria-label={nhtsaStarScore(overall.value)}
           >
-            <p
-              className={`font-semibold tabular-nums tracking-tight text-slate-900 ${
-                row.key === "overall" ? "text-3xl sm:text-4xl" : "text-2xl sm:text-3xl"
-              }`}
+            {overall.value}
+            <span className="ml-0.5 text-sm font-medium text-slate-400">
+              /{NHTSA_STAR_MAX}
+            </span>
+          </p>
+        </div>
+      )}
+      {categories.length > 0 && (
+        <ul
+          aria-labelledby="safety-ratings-heading"
+          className={`divide-y divide-sky-100 ${overall ? "mt-2" : "mt-3"}`}
+        >
+          {categories.map((row) => (
+            <li
+              key={row.key}
+              className="flex items-center justify-between gap-3 py-2 first:pt-1 last:pb-0"
             >
-              {row.value}
-            </p>
-            <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-              {row.label}
-            </p>
-            <p className="text-[11px] text-slate-400">stars</p>
-          </li>
-        ))}
-      </ul>
+              <span className="text-sm text-slate-700">{row.label}</span>
+              <NhtsaStars rating={row.value} label={row.label} />
+            </li>
+          ))}
+        </ul>
+      )}
       <p className="mt-2.5 text-xs leading-relaxed text-slate-500">
         {ratings.vehicleDescription ? `${ratings.vehicleDescription}. ` : ""}
         {SAFETY_RATINGS_NOTE}

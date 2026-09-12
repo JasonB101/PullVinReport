@@ -38,7 +38,9 @@ import {
   requestPaidModelExtras,
   resetModelExtrasCacheForTests,
   resetModelExtrasRetryForTests,
+  safetyCategoryRows,
   safetyFigureRows,
+  safetyOverallFigure,
   setModelExtrasRetryDelaysForTests,
   ymmCacheKey,
   ymmFromVehicle,
@@ -464,6 +466,19 @@ describe("model extras parsers", () => {
       "rollover",
       "sidePole",
     ]);
+    assert.deepEqual(safetyOverallFigure(parsed), {
+      key: "overall",
+      label: "Overall",
+      value: 5,
+    });
+    assert.deepEqual(safetyCategoryRows(parsed).map((row) => row.key), [
+      "front",
+      "side",
+      "rollover",
+      "sidePole",
+    ]);
+    assert.equal(safetyOverallFigure({ front: 4 }), undefined);
+    assert.deepEqual(safetyCategoryRows({ front: 4 }).map((row) => row.value), [4]);
     assert.equal(hasSafetyRatings(parsed), true);
     assert.equal(pickSafetyRatings([]), undefined);
     assert.deepEqual(pickSafetyRatings([parsed, { ...parsed, front: 3 }])?.overall, 5);

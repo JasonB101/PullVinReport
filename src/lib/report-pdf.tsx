@@ -44,9 +44,15 @@ import {
   modelExtrasCountsLine,
   mpgFigureRows,
   recallHeaderBadges,
-  safetyFigureRows,
+  safetyCategoryRows,
+  safetyOverallFigure,
   youSaveSpendCopy,
 } from "@/lib/model-extras";
+import {
+  NHTSA_STAR_MAX,
+  STAR_PATH,
+  nhtsaStarSlots,
+} from "@/lib/safety-stars";
 import { REPORT_DISCLAIMER } from "@/lib/customer-copy";
 import {
   cleanBrief,
@@ -370,6 +376,32 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     marginTop: 1,
   },
+
+  safetyOverall: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    borderWidth: 1,
+    borderColor: "#bae6fd",
+    backgroundColor: "#ffffff",
+    borderRadius: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 8,
+    marginTop: 2,
+  },
+  safetyOverallCopy: { flexGrow: 1 },
+  safetyStars: { flexDirection: "row", gap: 1.5 },
+  safetyScore: { fontFamily: "Helvetica-Bold", fontSize: 16 },
+  safetyScoreDenom: { fontSize: 8, color: MUTED },
+  safetyCategoryRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 3.5,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f1f5f9",
+  },
+  safetyCategoryLabel: { fontSize: 8, color: INK },
 
   footer: {
     position: "absolute",
@@ -842,20 +874,51 @@ function EpaMpgFigures({ mpg, unit = "mpg" }: { mpg: ModelMpg; unit?: string }) 
   );
 }
 
+function PdfStar({ filled, size = 9 }: { filled: boolean; size?: number }) {
+  return (
+    <Svg viewBox="0 0 24 24" width={size} height={size}>
+      <Path d={STAR_PATH} fill={filled ? INK : "#e2e8f0"} />
+    </Svg>
+  );
+}
+
+function PdfStarRow({ rating, size = 9 }: { rating: number; size?: number }) {
+  return (
+    <View style={styles.safetyStars}>
+      {nhtsaStarSlots(rating).map((filled, index) => (
+        <PdfStar key={index} filled={filled} size={size} />
+      ))}
+    </View>
+  );
+}
+
 function SafetyRatingsBlock({ ratings }: { ratings: ModelSafetyRatings }) {
-  const figures = safetyFigureRows(ratings);
-  if (figures.length === 0) return null;
+  const overall = safetyOverallFigure(ratings);
+  const categories = safetyCategoryRows(ratings);
+  if (!overall && categories.length === 0) return null;
   return (
     <View wrap={false}>
       <Text style={styles.briefHeading}>{SAFETY_RATINGS_TITLE.toUpperCase()}</Text>
-      <View style={styles.mpgRow}>
-        {figures.map((row) => (
-          <View key={row.key} style={styles.specMpgCard}>
-            <Text style={styles.mpgValue}>{row.value}</Text>
-            <Text style={styles.mpgLabel}>{row.label} stars</Text>
+      {overall ? (
+        <View style={styles.safetyOverall}>
+          <View style={styles.safetyOverallCopy}>
+            <Text style={styles.mpgLabel}>{overall.label}</Text>
+            <View style={{ marginTop: 3 }}>
+              <PdfStarRow rating={overall.value} size={11} />
+            </View>
           </View>
-        ))}
-      </View>
+          <Text style={styles.safetyScore}>
+            {overall.value}
+            <Text style={styles.safetyScoreDenom}>/{NHTSA_STAR_MAX}</Text>
+          </Text>
+        </View>
+      ) : null}
+      {categories.map((row) => (
+        <View key={row.key} style={styles.safetyCategoryRow}>
+          <Text style={styles.safetyCategoryLabel}>{row.label}</Text>
+          <PdfStarRow rating={row.value} size={8} />
+        </View>
+      ))}
       <Text style={styles.caveat}>
         {ratings.vehicleDescription ? `${ratings.vehicleDescription}. ` : ""}
         {SAFETY_RATINGS_NOTE}

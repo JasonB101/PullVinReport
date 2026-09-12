@@ -154,6 +154,16 @@ describe("report PDF", () => {
     assert.match(source, /function EpaMpgFigures/);
     assert.match(source, /SAFETY_RATINGS_TITLE/);
     assert.match(source, /function SafetyRatingsBlock/);
+    assert.match(source, /function PdfStar/);
+    assert.match(source, /STAR_PATH/);
+    assert.match(source, /nhtsaStarSlots/);
+    assert.match(source, /safetyOverallFigure/);
+    assert.match(source, /NHTSA_STAR_MAX/);
+    assert.doesNotMatch(
+      source,
+      /\{row\.label\} stars/,
+      "PDF must print SVG stars, not a 'label stars' caption",
+    );
     assert.match(source, /EPA_OWNERSHIP_TITLE/);
     assert.match(source, /function OwnershipBlock/);
     assert.match(source, /function EvBlock/);
