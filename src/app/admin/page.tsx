@@ -3,11 +3,17 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { logoutAction } from "@/app/admin/actions";
+import { AbandonedCheckouts } from "@/app/admin/abandoned-checkouts";
 import { ApiCredits } from "@/app/admin/api-credits";
 import { OrderActions } from "@/app/admin/order-actions";
 import { Logo } from "@/components/logo";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
-import { firstSalesGoal } from "@/lib/admin-ops";
+import {
+  MONEY_ACTIVITY_STATUSES,
+  UNPAID_CHECKOUT_STATUSES,
+  abandonedCheckoutStats,
+  firstSalesGoal,
+} from "@/lib/admin-ops";
 import { formatPrice, isVinAuditConfigured } from "@/lib/config";
 import { formatGeneratedAt } from "@/lib/report";
 import { getStore } from "@/lib/store";
@@ -35,13 +41,15 @@ export default async function AdminPage() {
 
   const store = getStore();
   await store.init();
-  const [orders, stats, credits] = await Promise.all([
-    store.list(200),
+  const [orders, abandoned, stats, credits] = await Promise.all([
+    store.list(200, { statuses: MONEY_ACTIVITY_STATUSES }),
+    store.list(200, { statuses: UNPAID_CHECKOUT_STATUSES }),
     store.stats(),
     fetchVendorCredits().catch(() => emptyVendorCredits()),
   ]);
 
   const goal = firstSalesGoal(stats.revenueCents);
+  const abandonedStats = abandonedCheckoutStats(stats);
   const cards = [
     { label: "Orders", value: String(stats.total) },
     { label: "Awaiting delivery", value: String(stats.pending) },
@@ -145,9 +153,10 @@ export default async function AdminPage() {
 
         {orders.length === 0 ? (
           <div className="mt-8 rounded-2xl border border-dashed border-slate-300 bg-white px-6 py-16 text-center">
-            <p className="text-sm font-medium text-slate-700">No orders yet</p>
+            <p className="text-sm font-medium text-slate-700">No paid orders yet</p>
             <p className="mt-1 text-sm text-slate-500">
-              Orders appear here as soon as a customer starts checkout.
+              Paid, fulfilled, refunded, and failed-after-pay orders appear
+              here. Unpaid checkouts are listed under Abandoned checkouts.
             </p>
           </div>
         ) : (
@@ -238,6 +247,8 @@ export default async function AdminPage() {
             </ul>
           </div>
         )}
+
+        <AbandonedCheckouts orders={abandoned} stats={abandonedStats} />
       </main>
     </div>
   );

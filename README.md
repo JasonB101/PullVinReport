@@ -333,7 +333,10 @@ HMAC derived from the password, so rotating the password signs everyone out.
 The console shows order counts, collected revenue, refunded totals, a compact
 API credits card (Stripe, fal, Resend, Anthropic when an admin key is
 set, and Google Ads when the official Ads API env is complete), and the
-full order list with the provider error for anything that failed. Failed
+paid-order list with the provider error for anything that failed. Unpaid
+Pending checkout sessions are not mixed into that list — they sit under
+**Abandoned checkouts** with today / MTD counts. Stripe already marks a
+Pending row `expired` when the Checkout Session expires (one hour). Failed
 or stuck orders can be retried, a delivered report's email can be re-sent,
 and any charged order can be refunded in place — see [Refunds](#refunds).
 Credit numbers are admin-only and never linked from the customer footer.

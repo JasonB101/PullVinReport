@@ -4,6 +4,15 @@ import { PostgresOrderStore } from "@/lib/store/pg-store";
 import type { OrderStore } from "@/lib/store/types";
 
 export * from "@/lib/store/types";
+export {
+  ADMIN_ZONE,
+  MONEY_ACTIVITY_STATUSES,
+  UNPAID_CHECKOUT_STATUSES,
+  checkoutConversionPercent,
+  isMoneyActivityStatus,
+  isUnpaidCheckoutStatus,
+  unpaidCheckoutWindowCounts,
+} from "@/lib/store/unpaid-checkouts";
 
 declare global {
   // Reused across hot reloads so the Postgres pool isn't recreated every edit.
