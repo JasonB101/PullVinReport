@@ -6,6 +6,7 @@ import {
   groupSpecFields,
   headerSpecifications,
   partitionSpecMpg,
+  reportNavItems,
   sectionListingGroups,
 } from "../src/lib/report.ts";
 import {
@@ -32,6 +33,24 @@ describe("sample report", () => {
     const report = buildSampleReport();
     assert.match(report.sections[0].title, /Title/);
     assert.equal(report.checks.length > 0, true);
+  });
+
+  it("leads the outline with Titles & mileage, then What to know, then later VIN history", () => {
+    const items = reportNavItems(buildSampleReport(), { modelExtras: true });
+    assert.deepEqual(
+      items.map((item) => item.label),
+      [
+        "Titles & mileage",
+        "What to know",
+        "Accidents",
+        "Liens",
+        "Sales",
+        "Recalls",
+        "This model",
+      ],
+    );
+    assert.equal(items[0].href, "#titles");
+    assert.equal(items[1].href, "#brief");
   });
 
   it("never claims VinAudit as its source", () => {

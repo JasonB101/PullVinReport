@@ -121,9 +121,15 @@ describe("report PDF", () => {
     const questions = source.indexOf("brief.questions");
     const common = source.indexOf("brief.commonForModel");
     const extras = source.indexOf("<ModelExtrasBlock");
-    const sections = source.indexOf("{sections.map((section) =>");
+    const titles = source.indexOf("{titles && (");
+    const brief = source.indexOf("<Brief ");
+    const later = source.indexOf("{later.map((section) =>");
     assert.ok(fromReport > 0 && questions > fromReport && common > questions);
-    assert.ok(extras > sections, "PDF model extras must follow VIN history sections");
+    assert.ok(
+      titles > 0 && brief > titles && later > brief && extras > later,
+      "PDF titles must sit above What to know's not-this-VIN brief",
+    );
+    assert.match(source, /partitionHistorySections\(report\)/);
     assert.match(source, /complaintSamples\(extras\.complaints\)/);
     assert.match(source, /clipPdf\(sample\.summary\)/);
     assert.match(source, /owner write-ups[\s\S]*not this VIN/);
