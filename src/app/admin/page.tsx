@@ -180,9 +180,19 @@ export default async function AdminPage() {
                     {formatGeneratedAt(order.createdAt)}
                   </span>
 
-                  <span className="font-mono text-xs text-slate-900">
-                    {order.vin}
-                  </span>
+                  {order.status === "fulfilled" && order.report ? (
+                    <Link
+                      href={`/report/${order.accessToken}`}
+                      target="_blank"
+                      className="font-mono text-xs text-brand-600 hover:underline"
+                    >
+                      {order.vin}
+                    </Link>
+                  ) : (
+                    <span className="font-mono text-xs text-slate-900">
+                      {order.vin}
+                    </span>
+                  )}
 
                   <span className="min-w-0">
                     <span className="block truncate text-sm text-slate-800">

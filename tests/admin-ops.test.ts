@@ -162,6 +162,28 @@ describe("admin console", () => {
     assert.doesNotMatch(statusApi, /fetchVendorCredits|vendor-credits|Ads spend/);
   });
 
+  it("links a fulfilled VIN to the same report View report opens", async () => {
+    const page = await readSrc("app/admin/page.tsx");
+    const actions = await readSrc("app/admin/order-actions.tsx");
+    const abandoned = await readSrc("app/admin/abandoned-checkouts.tsx");
+
+    assert.match(page, /status === "fulfilled" && order\.report/);
+    assert.match(
+      page,
+      /href=\{`\/report\/\$\{order\.accessToken\}`\}\s+target="_blank"/,
+    );
+    assert.match(page, /\{order\.vin\}/);
+
+    assert.match(actions, /status === "fulfilled"/);
+    assert.match(actions, /href=\{`\/report\/\$\{accessToken\}`\}/);
+    assert.match(actions, /target="_blank"/);
+    assert.match(actions, /View report/);
+
+    assert.match(abandoned, /\{order\.vin\}/);
+    assert.doesNotMatch(abandoned, /\/report\//);
+    assert.doesNotMatch(abandoned, /View report/);
+  });
+
   it("keeps unpaid Pending checkouts out of the main orders list", async () => {
     const page = await readSrc("app/admin/page.tsx");
     const abandoned = await readSrc("app/admin/abandoned-checkouts.tsx");
