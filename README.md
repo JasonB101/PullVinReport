@@ -142,7 +142,8 @@ How it is enforced:
 - `VehicleReport` carries `source: "vinaudit" | "sample"` and `isSample`. Both
   travel with the data into storage and into every renderer.
 - `buildSampleReport()` is the only producer of `source: "sample"` and it is
-  imported exclusively by marketing pages (`/`, `/preview`, `/sample`).
+  imported exclusively by marketing pages (`/`, `/preview`, `/sample`,
+  `/is-carfax-worth-it`).
 - `fulfillOrder()` imports only `pullVinAuditReport()`. If credentials are
   missing it marks the order `failed` and throws — there is no fallback branch.
 - `pullVinAuditReport()` throws `ProviderNotConfiguredError` rather than
@@ -292,6 +293,7 @@ you" on its own.
 | `/api/stripe/webhook` | Signature-verified fulfillment webhook. |
 | `/admin`, `/admin/login` | Password-protected order console. |
 | `/privacy`, `/terms`, `/disclaimer` | Legal pages. |
+| `/is-carfax-worth-it` | Public SEO page: honest 2026 Carfax comparison. |
 
 ## Data storage
 

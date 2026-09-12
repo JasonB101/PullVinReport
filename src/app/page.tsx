@@ -354,7 +354,14 @@ export default function HomePage() {
                 <Link href="/disclaimer" className="font-semibold text-brand-600 hover:underline">
                   disclaimer
                 </Link>{" "}
-                — it spells out exactly what a history report can and cannot
+                or the{" "}
+                <Link
+                  href="/is-carfax-worth-it"
+                  className="font-semibold text-brand-600 hover:underline"
+                >
+                  honest 2026 Carfax comparison
+                </Link>{" "}
+                — they spell out exactly what a history report can and cannot
                 tell you.
               </p>
             </div>

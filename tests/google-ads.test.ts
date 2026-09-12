@@ -195,6 +195,7 @@ describe("where the tag is mounted", () => {
       "app/layout.tsx",
       "app/page.tsx",
       "app/sample/page.tsx",
+      "app/is-carfax-worth-it/page.tsx",
       "app/preview/page.tsx",
       "components/checkout-panel.tsx",
       "components/sample-teaser.tsx",
