@@ -1223,7 +1223,8 @@ export function jsiSectionLooksAdverse(section: ReportSection): boolean {
 
 /**
  * Same classifier as `fieldsTitleKind`, for brief FACTS rows written as
- * "Label Value, Label Value". Record type and auction-house names are ignored.
+ * "Label Value, Label Value". Auction-house names are ignored. Record type
+ * is not — "Junk And Salvage" on that field is adverse.
  */
 export function factRowTitleKind(row: string): TitleKind {
   const chunks: string[] = [];
