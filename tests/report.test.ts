@@ -30,6 +30,7 @@ import {
   reportChips,
   reportHeadline,
   titleHistoryStatus,
+  titleKindFromText,
   reportPaintColor,
   reportNavItems,
   searchedAndEmpty,
@@ -1290,7 +1291,7 @@ describe("the header of a report", () => {
         }),
         section({
           key: "jsi",
-          records: [[{ label: "Disposition", value: "Sold" }]],
+          records: [[{ label: "Disposition", value: "Salvage" }]],
         }),
       ],
     });
@@ -1302,6 +1303,48 @@ describe("the header of a report", () => {
       false,
     );
     assert.ok(chips.some((chip) => chip.key === "jsi"));
+  });
+
+  it("says Clean title when Copart JSI is a clear-title sale and titles are unbranded", () => {
+    const copartClean = report({
+      checks: [
+        { key: "titles", label: "Title records", status: "found", count: 4, detail: "" },
+        { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+        { key: "jsi", label: "Junk & salvage", status: "found", count: 1, detail: "" },
+      ],
+      sections: [
+        section({
+          key: "titles",
+          records: [[{ label: "Event", value: "Title transfer" }]],
+        }),
+        section({
+          key: "jsi",
+          records: [
+            [
+              { label: "Obtained from", value: "Copart" },
+              { label: "Disposition", value: "Clear Title" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(titleHistoryStatus(copartClean), "clean");
+    assert.match(reportHeadline(copartClean), /no salvage, junk or insurance-loss brand/i);
+    const chips = reportChips(copartClean);
+    assert.ok(chips.some((chip) => chip.label === "Clean title"));
+    assert.ok(chips.some((chip) => chip.key === "jsi"));
+  });
+
+  it("reads CT, CLR and Clear Title as clean-title language, not salvage", () => {
+    assert.equal(titleKindFromText("CT"), "clean");
+    assert.equal(titleKindFromText("CLR"), "clean");
+    assert.equal(titleKindFromText("Clear Title"), "clean");
+    assert.equal(titleKindFromText("Clean Title Front Line"), "clean");
+    assert.equal(titleKindFromText("Sold"), "neutral");
+    assert.equal(titleKindFromText("Salvage"), "adverse");
+    assert.equal(titleKindFromText("Non-repairable"), "adverse");
+    assert.equal(titleKindFromText("Total loss"), "adverse");
+    assert.equal(titleKindFromText("Clear Title · Salvage"), "adverse");
   });
 
   it("says Title history unknown when the titles feed is empty, not Clean title", () => {

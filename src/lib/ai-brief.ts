@@ -22,9 +22,11 @@ import type {
   VehicleSummary,
 } from "@/lib/report";
 import {
+  factRowTitleKind,
   hasOdometerRollback,
   listingSeller,
   sectionListingGroups,
+  titleHistoryStatus,
   vehicleTitle,
   withResolvedDispositions,
 } from "@/lib/report";
@@ -281,9 +283,9 @@ Rules, in order of importance:
 3. Never estimate a price, market value, condition grade, score or rating. That data does not exist here.
 4. Never mention data providers, databases, agencies or where the records came from.
 5. Never leave a trade term standing on its own. A disposition code, a claim type, a salvage yard's name, an auction house's name and a brand code mean nothing to a buyer. Say what the record is in ordinary words.
-6. A report with nothing on file is good news — except title history. If Title records are nothing on file, that is a thin or missing titles feed, not a clean title. Never say there are no title brands, that brands are nothing on file, or that the title is clean. Say the title records did not come back. If FACTS include junk, salvage, rebuilt, a total loss, or a branded title, never say the title is clean.
+6. A report with nothing on file is good news — except title history. If Title records are nothing on file, that is a thin or missing titles feed, not a clean title. Never say there are no title brands, that brands are nothing on file, or that the title is clean. Say the title records did not come back. If FACTS include a salvage, junk, rebuilt, flood, lemon, total-loss or non-repairable brand, never say the title is clean. A Copart or IAA row that says clear title, clean title, CT or CLR is not a brand — those auction houses also sell fleet, repo and clean-title cars.
 7. Plain English. No preamble, no marketing, no hedging boilerplate.
-8. When FACTS include junk, salvage, rebuilt, a total loss, or a salvage auction house (Copart, IAA, Insurance Auto Auctions), never say there were no accidents, that the picture is clean, or that nothing is worrying on the accident, theft or lien fronts. Those records already mean the vehicle entered the total-loss or salvage channel — even when a separate accident row is absent. You may say no separate accident, theft or lien row appears; do not call that clean.
+8. When FACTS include a salvage, junk, rebuilt or total-loss brand, never say there were no accidents, that the picture is clean, or that nothing is worrying on the accident, theft or lien fronts. Those records already mean the vehicle entered the total-loss or salvage channel — even when a separate accident row is absent. You may say no separate accident, theft or lien row appears; do not call that clean. A Copart or IAA listing by itself is not that channel.
 
 Explaining what a record means:
 
@@ -348,9 +350,8 @@ const AMOUNT_CLAIMS = [
  * place it can be caught.
  */
 /**
- * A "clean accident picture" claim that cannot stand next to junk, salvage
- * or a Copart/IAA record. Those already mean the car entered the total-loss
- * channel, even when a separate accident row is absent.
+ * A "clean accident picture" claim that cannot stand next to a salvage,
+ * junk or total-loss brand. A Copart/IAA name by itself is not that brand.
  */
 const CLEAN_ACCIDENT_FRONT = [
   /\bno accidents?\b/i,
@@ -361,36 +362,21 @@ const CLEAN_ACCIDENT_FRONT = [
   /\bnothing on (?:the )?(?:accident|theft|lien)/i,
 ];
 
-const SALVAGE_CHANNEL = [
-  /\bjunk\b/i,
-  /\bsalvage\b/i,
-  /\brebuilt\b/i,
-  /\btotal(?:ed|led)? loss\b/i,
-  /\bcopart\b/i,
-  /\binsurance auto auctions\b/i,
-  /\biaa\b/i,
-];
-
-/** True when the records already put this car in the salvage / total-loss channel. */
+/** True when FACTS put this car in the salvage / total-loss channel. */
 export function factsIndicateSalvageChannel(facts: BriefFacts): boolean {
-  const haystack = [
-    ...facts.checks
-      .filter((check) => check.result !== "nothing on file")
-      .map((check) => `${check.check} ${check.result}`),
-    ...facts.records.flatMap((entry) => [entry.section, ...entry.rows]),
-    ...(facts.sales
-      ? [
-          ...facts.sales.notes,
-          ...facts.sales.groups.flatMap((group) => [
-            group.headline,
-            ...group.channels,
-            ...group.sellers,
-            ...group.listings,
-          ]),
-        ]
-      : []),
-  ].join("\n");
-  return SALVAGE_CHANNEL.some((pattern) => pattern.test(haystack));
+  const branded = facts.checks.find((check) => /^branded title$/i.test(check.check));
+  if (branded && /\d+\s+record/.test(branded.result)) return true;
+
+  for (const entry of facts.records) {
+    const junkSection = /junk|salvage/i.test(entry.section);
+    const titleSection = /title/i.test(entry.section) && !junkSection;
+    if (!junkSection && !titleSection) continue;
+    for (const row of entry.rows) {
+      if (junkSection && factRowTitleKind(row) === "adverse") return true;
+      if (titleSection && factRowTitleKind(row) === "adverse") return true;
+    }
+  }
+  return false;
 }
 
 function dropCleanFrontWhenSalvage(fromReport: string[], salvage: boolean): string[] {
@@ -462,6 +448,7 @@ function dropCleanTitleWhenSalvage(
  */
 export function presentBrief(brief: VehicleBrief, report: VehicleReport): VehicleBrief {
   const facts = briefFacts(report);
+  const titleStatus = titleHistoryStatus(report);
   return {
     ...brief,
     fromReport: dropCleanTitleWhenSalvage(
@@ -469,7 +456,7 @@ export function presentBrief(brief: VehicleBrief, report: VehicleReport): Vehicl
         brief.fromReport,
         factsIndicateEmptyTitles(facts),
       ),
-      factsIndicateSalvageChannel(facts),
+      titleStatus === "salvage-history" || titleStatus === "branded",
     ),
   };
 }

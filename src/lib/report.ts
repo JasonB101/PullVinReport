@@ -1133,10 +1133,13 @@ export function hasOdometerRollback(readings: OdometerReading[]): boolean {
  * VinAudit does not send a certified-clean flag we can trust on its own.
  * `payload.clean === true` is "no brand/salvage/insurance rows in this
  * payload", which is also how an empty titles feed arrives. We only call a
- * title clean when we actually read title rows and those rows, plus junk/
- * salvage, show no brand. Empty titles are unknown, not clean. Salvage or
- * junk records mean the title is not clean even when the title rows
- * themselves carry no brand text.
+ * title clean when we actually read title rows and those rows show no brand,
+ * and no JSI/auction row is a salvage/junk/total-loss/non-repairable brand.
+ * Empty titles are unknown, not clean.
+ *
+ * Copart and IAA also sell fleet, repo and Clean Title Front Line cars.
+ * A JSI or auction row is not salvage-history by itself — only when its
+ * disposition or title type is branded or a true total-loss outcome.
  */
 export type TitleHistoryStatus =
   | "clean"
@@ -1144,8 +1147,78 @@ export type TitleHistoryStatus =
   | "salvage-history"
   | "unknown";
 
+export type TitleKind = "clean" | "adverse" | "neutral";
+
 const TITLE_BRAND_TEXT =
   /salvage|junk|rebuilt|flood|lemon|fire|hail|total loss|reconstruct/i;
+
+/** Fields that state a title type, brand or JSI/auction disposition. */
+export const TITLE_KIND_LABELS = [
+  "Disposition",
+  "Vehicle disposition",
+  "Brand",
+  "Event",
+  "Title type",
+  "Title",
+  "Sale document",
+  "Document",
+  "Standard claim",
+];
+
+/**
+ * Explicit clean-title language on a disposition or title-type field.
+ * CT / CLR are IAA/Copart sale-document codes, not a VinAudit clean flag.
+ */
+export const CLEAN_TITLE_TYPE =
+  /\b(?:ct|clr)\b|clean[\s-]+title(?:[\s-]+front[\s-]+line)?|clear[\s-]+title/i;
+
+/** Brands and JSI outcomes that mean the title is not clean. */
+export const ADVERSE_TITLE_TYPE =
+  /\bsalvage\b|\bjunk\b|\brebuilt\b|\bflood\b|\blemon\b|\bfire\b|\bhail\b|\btotal(?:ed|led)? loss\b|\breconstruct|\bnon[\s-]?repairable\b|\bscrap\b|\bcrush(?:ed)?\b|\bparts\b|\bdismantled\b/i;
+
+/**
+ * Classifies a disposition / brand / title-type string.
+ *
+ * Adverse wins when both clean-title and salvage language appear. Auction
+ * house names and a bare Sold/TBD disposition are neutral — Copart and IAA
+ * sell clean-title cars too.
+ */
+export function titleKindFromText(text: string): TitleKind {
+  if (ADVERSE_TITLE_TYPE.test(text)) return "adverse";
+  if (CLEAN_TITLE_TYPE.test(text)) return "clean";
+  return "neutral";
+}
+
+function titleKindValues(fields: Field[]): string {
+  return fields
+    .filter((field) => TITLE_KIND_LABELS.includes(field.label))
+    .map((field) => field.value)
+    .join(" ");
+}
+
+export function fieldsTitleKind(fields: Field[]): TitleKind {
+  return titleKindFromText(titleKindValues(fields));
+}
+
+export function jsiRecordLooksAdverse(fields: Field[]): boolean {
+  return fieldsTitleKind(fields) === "adverse";
+}
+
+/**
+ * Same classifier as `fieldsTitleKind`, for brief FACTS rows written as
+ * "Label Value, Label Value". Record type and auction-house names are ignored.
+ */
+export function factRowTitleKind(row: string): TitleKind {
+  const chunks: string[] = [];
+  for (const label of TITLE_KIND_LABELS) {
+    const match = new RegExp(
+      `${label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}[:\\s]+([^,]+)`,
+      "i",
+    ).exec(row);
+    if (match?.[1]) chunks.push(match[1]);
+  }
+  return titleKindFromText(chunks.join(" "));
+}
 
 function checkByKey(report: VehicleReport, key: string): ReportCheck | undefined {
   return report.checks.find((entry) => entry.key === key);
@@ -1169,9 +1242,8 @@ function titleRecordsLookBranded(report: VehicleReport): boolean {
 }
 
 function salvageChannelOnFile(report: VehicleReport): boolean {
-  const jsi = checkByKey(report, "jsi");
-  if (jsi?.status === "found" && jsi.count > 0) return true;
-  return (sectionByKey(report, "jsi")?.records.length ?? 0) > 0;
+  const records = sectionByKey(report, "jsi")?.records ?? [];
+  return records.some((fields) => jsiRecordLooksAdverse(fields));
 }
 
 function brandedOnFile(report: VehicleReport): boolean {

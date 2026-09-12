@@ -102,6 +102,7 @@ const KEY_LABELS: Record<string, string> = {
   brandcode: "Brand",
   brandertype: "Brander type",
   recordtype: "Record type",
+  saledocument: "Sale document",
   intendedforexport: "Intended for export",
   sellertype: "Seller type",
   sellername: "Seller",

@@ -228,6 +228,49 @@ describe("report health", () => {
     assert.doesNotMatch(salvage?.reason ?? "", /no salvage, junk or insurance-loss brand/i);
   });
 
+  it("does not treat a Copart clear-title sale as a salvage-brand hit", () => {
+    const health = reportHealth(
+      report({
+        checks: [
+          { key: "titles", label: "Title records", status: "found", count: 2, detail: "" },
+          { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+          { key: "jsi", label: "Junk & salvage", status: "found", count: 1, detail: "" },
+          { key: "accidents", label: "Accident records", status: "clear", count: 0, detail: "" },
+          { key: "thefts", label: "Theft records", status: "clear", count: 0, detail: "" },
+          { key: "liens", label: "Liens & repossessions", status: "clear", count: 0, detail: "" },
+          { key: "impounds", label: "Impounds", status: "clear", count: 0, detail: "" },
+          { key: "exports", label: "Export records", status: "clear", count: 0, detail: "" },
+          { key: "recalls", label: "Open recalls", status: "clear", count: 0, detail: "" },
+        ],
+        sections: [
+          section({
+            key: "titles",
+            records: [
+              [
+                { label: "Date", value: "Sep 27, 2024" },
+                { label: "Event", value: "Title transfer" },
+              ],
+            ],
+          }),
+          section({
+            key: "jsi",
+            records: [
+              [
+                { label: "Date", value: "May 11, 2026" },
+                { label: "Obtained from", value: "IAA" },
+                { label: "Disposition", value: "Clean Title Front Line" },
+              ],
+            ],
+          }),
+        ],
+      }),
+    );
+    const salvage = health.factors.find((factor) => factor.key === "salvage");
+    assert.equal(health.salvage.present, false);
+    assert.equal(salvage?.impact, "helps");
+    assert.match(salvage?.reason ?? "", /no salvage, junk or insurance-loss brand/i);
+  });
+
   it("labels bands without using a market-value word", () => {
     assert.equal(healthLabel(92), "Strong");
     assert.equal(healthLabel(70), "Mixed");

@@ -11,6 +11,7 @@ import {
   formatEventDate,
   hasOdometerRollback,
   isoDate,
+  jsiRecordLooksAdverse,
   titleHistoryStatus,
   titleRecordCount,
   withResolvedDispositions,
@@ -52,7 +53,7 @@ const MONTHS = [
 ];
 
 const SALVAGE_TEXT =
-  /\bjunk\b|\bsalvage\b|\brebuilt\b|\bflood\b|\blemon\b|\btotal(?:ed|led)? loss\b|\bcopart\b|\binsurance auto auctions\b|\biaa\b/i;
+  /\bjunk\b|\bsalvage\b|\brebuilt\b|\bflood\b|\blemon\b|\btotal(?:ed|led)? loss\b|\bnon[\s-]?repairable\b/i;
 
 /** A year of later title/odometer history is enough to call the window long. */
 export const POST_SALVAGE_LONG_DAYS = 365;
@@ -153,12 +154,16 @@ export function healthLabel(score: number): HealthLabel {
 
 function salvageRecords(report: VehicleReport): Field[][] {
   const jsi = sectionOf(report, "jsi")?.records ?? [];
+  const adverseJsi = jsi.filter(jsiRecordLooksAdverse);
   const titles = sectionOf(report, "titles")?.records ?? [];
   const brandedTitles = titles.filter((fields) =>
     SALVAGE_TEXT.test(
       `${fieldValue(fields, ["Brand", "Event", "Standard claim"])} ${recordBlob(fields)}`,
     ),
   );
+  // Auction-house Sold rows are not salvage by themselves. Once a brand or
+  // adverse JSI outcome is on file, those dates still count for the window.
+  if (adverseJsi.length === 0 && brandedTitles.length === 0) return [];
   return [...jsi, ...brandedTitles];
 }
 

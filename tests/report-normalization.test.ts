@@ -417,7 +417,7 @@ describe("provider report normalization", () => {
           {
             date: "2026-05-11",
             obtainedfrom: "Copart",
-            disposition: "SOLD",
+            disposition: "Salvage",
           },
         ],
       },
@@ -432,6 +432,47 @@ describe("provider report normalization", () => {
     assert.match(salvageOnly.headline, /Junk, salvage or insurance-loss/);
     assert.doesNotMatch(salvageOnly.headline, /Branded-title/);
     assert.doesNotMatch(salvageOnly.headline, /clean/i);
+  });
+
+  it("does not treat a bare Copart Sold row as salvage-history", () => {
+    const auctionOnly = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "SOLD",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.match(auctionOnly.headline, /on the title records we have/);
+    assert.doesNotMatch(auctionOnly.headline, /Junk, salvage or insurance-loss/);
+  });
+
+  it("treats Copart clear-title JSI plus ordinary titles as a clean title", () => {
+    const copartClean = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "CT",
+            sale_document: "Clean Title Front Line",
+          },
+        ],
+      },
+      VIN,
+    );
+    const branded = copartClean.checks.find((entry) => entry.key === "branded");
+    const jsi = copartClean.checks.find((entry) => entry.key === "jsi");
+    assert.equal(branded?.status, "clear");
+    assert.equal(jsi?.status, "found");
+    assert.match(copartClean.headline, /on the title records we have/);
+    assert.doesNotMatch(copartClean.headline, /Junk, salvage or insurance-loss/);
   });
 
   it("does not treat an empty titles feed as a clean title", () => {

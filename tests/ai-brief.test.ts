@@ -293,7 +293,7 @@ describe("reading a brief out of a reply", () => {
         jsi: [
           {
             date: "2023-04-12",
-            disposition: "Sold",
+            disposition: "Salvage",
             obtainedfrom: "Copart",
           },
           {
@@ -369,6 +369,51 @@ describe("reading a brief out of a reply", () => {
     ]);
   });
 
+  it("keeps a clean-title bullet when Copart JSI is a clear-title sale", () => {
+    const report = normalizeVinAuditReport(
+      {
+        attributes: { Year: "2012", Make: "Toyota", Model: "Camry" },
+        titles: [
+          { date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" },
+        ],
+        jsi: [
+          {
+            date: "2026-05-11",
+            obtainedfrom: "Copart",
+            disposition: "Clear Title",
+          },
+        ],
+      },
+      VIN,
+    );
+    const facts = briefFacts(report);
+    assert.equal(factsIndicateSalvageChannel(facts), false);
+
+    const brief = parseBrief(
+      JSON.stringify({
+        fromReport: [
+          "Clean title history.",
+          "A Copart row from May 2026 shows a clear-title sale.",
+        ],
+      }),
+      "test-model",
+      report.vehicle,
+      facts,
+    );
+    assert.match(brief?.fromReport.join(" ") ?? "", /clean title/i);
+
+    const stored = presentBrief(
+      {
+        fromReport: ["Clean title history."],
+        commonForModel: [],
+        questions: [],
+        model: "cached",
+      },
+      report,
+    );
+    assert.deepEqual(stored.fromReport, ["Clean title history."]);
+  });
+
   it("drops a clean-title bullet when junk or salvage is already on file", () => {
     const report = normalizeVinAuditReport(
       {
@@ -376,7 +421,7 @@ describe("reading a brief out of a reply", () => {
         titles: [
           { date: "2024-09-27", state: "TN", meter: "121477", meterunit: "M" },
         ],
-        jsi: [{ date: "2026-05-11", obtainedfrom: "Copart", disposition: "SOLD" }],
+        jsi: [{ date: "2026-05-11", obtainedfrom: "Copart", disposition: "Salvage" }],
       },
       VIN,
     );
@@ -677,7 +722,7 @@ describe("generating a brief", () => {
     assert.match(system, /often repeat or vary asking totals without that meaning/);
     assert.match(system, /FORBIDDEN unless FACTS explicitly records sold vs unsold/);
     assert.match(system, /never say there were no accidents/);
-    assert.match(system, /Copart, IAA/);
+    assert.match(system, /Copart or IAA/);
     assert.doesNotMatch(
       system,
       /usually one car advertised|did not find a buyer at the first price|shopping path/,
