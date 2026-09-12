@@ -11,7 +11,7 @@ import {
   formatEventDate,
   hasOdometerRollback,
   isoDate,
-  jsiRecordLooksAdverse,
+  jsiSectionLooksAdverse,
   titleHistoryStatus,
   titleRecordCount,
   withResolvedDispositions,
@@ -153,8 +153,9 @@ export function healthLabel(score: number): HealthLabel {
 }
 
 function salvageRecords(report: VehicleReport): Field[][] {
-  const jsi = sectionOf(report, "jsi")?.records ?? [];
-  const adverseJsi = jsi.filter(jsiRecordLooksAdverse);
+  const jsiSection = sectionOf(report, "jsi");
+  const jsi = jsiSection?.records ?? [];
+  const adverseJsi = jsiSection && jsiSectionLooksAdverse(jsiSection) ? jsi : [];
   const titles = sectionOf(report, "titles")?.records ?? [];
   const brandedTitles = titles.filter((fields) =>
     SALVAGE_TEXT.test(

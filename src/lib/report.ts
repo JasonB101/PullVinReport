@@ -1163,6 +1163,7 @@ export const TITLE_KIND_LABELS = [
   "Event",
   "Title type",
   "Title",
+  "Record type",
   "Sale document",
   "Document",
   "Standard claim",
@@ -1205,6 +1206,19 @@ export function fieldsTitleKind(fields: Field[]): TitleKind {
 
 export function jsiRecordLooksAdverse(fields: Field[]): boolean {
   return fieldsTitleKind(fields) === "adverse";
+}
+
+/**
+ * NMVTIS often lifts `Record type: Junk And Salvage` onto section.shared
+ * while the rows are only Sold / TBD. Classify the shared fields with each
+ * row — otherwise a Beetle-shaped IAA listing looks like a clean sale.
+ */
+export function jsiSectionLooksAdverse(section: ReportSection): boolean {
+  const shared = section.shared ?? [];
+  if (fieldsTitleKind(shared) === "adverse") return true;
+  return section.records.some((record) =>
+    jsiRecordLooksAdverse([...shared, ...record]),
+  );
 }
 
 /**
@@ -1293,11 +1307,28 @@ function rawCheckLooksBranded(row: Record<string, unknown>): boolean {
   return Boolean(brand || code);
 }
 
+function rawJsiLooksAdverse(row: Record<string, unknown>): boolean {
+  return (
+    titleKindFromText(
+      [
+        rawField(row, "record_type", "recordtype"),
+        rawField(row, "type"),
+        rawField(row, "disposition", "vehicle_disposition"),
+        rawField(row, "title"),
+        rawField(row, "saledocument", "sale_document"),
+        rawField(row, "brand"),
+        rawField(row, "standardclaim"),
+      ].join(" "),
+    ) === "adverse"
+  );
+}
+
 function rawSalvageLooksAdverse(row: Record<string, unknown>): boolean {
   return (
     titleKindFromText(
       [
         rawField(row, "type"),
+        rawField(row, "record_type", "recordtype"),
         rawField(row, "brand"),
         rawField(row, "title"),
         rawField(row, "brand_title", "brandtitle"),
@@ -1315,8 +1346,9 @@ function brandedOnFile(report: VehicleReport): boolean {
 }
 
 function salvageChannelOnFile(report: VehicleReport): boolean {
-  const records = sectionByKey(report, "jsi")?.records ?? [];
-  if (records.some((fields) => jsiRecordLooksAdverse(fields))) return true;
+  const jsi = sectionByKey(report, "jsi");
+  if (jsi && jsiSectionLooksAdverse(jsi)) return true;
+  if (rawRows(report, "jsi").some(rawJsiLooksAdverse)) return true;
   return rawRows(report, "salvage").some(rawSalvageLooksAdverse);
 }
 

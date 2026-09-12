@@ -568,8 +568,30 @@ describe("provider report normalization", () => {
     assert.match(flagged.headline, /on the title records we have/);
   });
 
-  it("keeps Clean on an IAA Sold row when clean:false is only the JSI flag", () => {
+  it("keeps Clean on a bare IAA Sold row when clean:false is only the JSI flag", () => {
     const iaa = normalizeVinAuditReport(
+      {
+        ...PAYLOAD,
+        clean: false,
+        jsi: [
+          {
+            date: "2026-06-03",
+            brander_name: "IAA",
+            vehicle_disposition: "SOLD",
+            intended_for_export: "Y",
+          },
+        ],
+      },
+      VIN,
+    );
+    assert.equal(iaa.checks.find((entry) => entry.key === "branded")?.status, "clear");
+    assert.equal(iaa.checks.find((entry) => entry.key === "jsi")?.status, "found");
+    assert.match(iaa.headline, /on the title records we have/);
+    assert.ok(iaa.sections.find((section) => section.key === "jsi")?.records.length);
+  });
+
+  it("does not claim Clean when IAA JSI record_type is Junk And Salvage", () => {
+    const iaaJunk = normalizeVinAuditReport(
       {
         ...PAYLOAD,
         clean: false,
@@ -585,10 +607,9 @@ describe("provider report normalization", () => {
       },
       VIN,
     );
-    assert.equal(iaa.checks.find((entry) => entry.key === "branded")?.status, "clear");
-    assert.equal(iaa.checks.find((entry) => entry.key === "jsi")?.status, "found");
-    assert.match(iaa.headline, /on the title records we have/);
-    assert.ok(iaa.sections.find((section) => section.key === "jsi")?.records.length);
+    assert.equal(titleHistoryStatus(iaaJunk), "salvage-history");
+    assert.match(iaaJunk.headline, /Junk, salvage or insurance-loss/);
+    assert.ok(iaaJunk.sections.find((section) => section.key === "jsi")?.records.length);
   });
 
   it("treats the Beetle IAA + CA salvage-check payload as branded, not Clean", () => {

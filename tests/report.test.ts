@@ -1340,7 +1340,7 @@ describe("the header of a report", () => {
     assert.ok(chips.some((chip) => chip.key === "jsi"));
   });
 
-  it("still says Clean title when VinAudit clean:false is only the IAA/JSI flag", () => {
+  it("still says Clean title when VinAudit clean:false is only a bare IAA Sold flag", () => {
     const iaaSold = report({
       checks: [
         { key: "titles", label: "Title records", status: "found", count: 5, detail: "" },
@@ -1355,7 +1355,6 @@ describe("the header of a report", () => {
         }),
         section({
           key: "jsi",
-          shared: [{ label: "Record type", value: "Junk And Salvage" }],
           records: [
             [
               { label: "Obtained from", value: "IAA" },
@@ -1368,6 +1367,57 @@ describe("the header of a report", () => {
     assert.equal(titleHistoryStatus(iaaSold), "clean");
     assert.ok(reportChips(iaaSold).some((chip) => chip.label === "Clean title"));
     assert.ok(sectionsWithRecords(iaaSold).some((entry) => entry.key === "jsi"));
+  });
+
+  it("does not chip Clean when Junk And Salvage lives on JSI shared fields", () => {
+    const junkShared = report({
+      checks: [
+        { key: "titles", label: "Title records", status: "found", count: 5, detail: "" },
+        { key: "branded", label: "Branded title", status: "clear", count: 0, detail: "" },
+        { key: "jsi", label: "Junk & salvage", status: "found", count: 2, detail: "" },
+      ],
+      sections: [
+        section({
+          key: "titles",
+          records: [[{ label: "State", value: "CA" }]],
+        }),
+        section({
+          key: "jsi",
+          shared: [
+            { label: "Brander name", value: "IAA" },
+            { label: "Record type", value: "Junk And Salvage" },
+          ],
+          records: [
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "Sold" },
+              { label: "Intended for export", value: "Y" },
+            ],
+            [
+              { label: "Date", value: "Jun 3, 2026" },
+              { label: "Vehicle disposition", value: "To be determined" },
+              { label: "Intended for export", value: "N" },
+            ],
+          ],
+        }),
+      ],
+    });
+    assert.equal(titleHistoryStatus(junkShared), "salvage-history");
+    assert.equal(
+      reportChips(junkShared).some((chip) => /clean title/i.test(chip.label)),
+      false,
+    );
+    const shown = withResolvedDispositions(junkShared).sections.find(
+      (entry) => entry.key === "jsi",
+    );
+    assert.equal(shown?.records.length, 1);
+    assert.equal(
+      shown?.records.some((record) =>
+        record.some((field) => /to be determined|^tbd$/i.test(field.value)),
+      ),
+      false,
+    );
+    assert.ok(sectionsWithRecords(junkShared).some((entry) => entry.key === "jsi"));
   });
 
   it("reads a stored CA salvage check as branded even when title rows and the branded check are clear", () => {
@@ -1465,6 +1515,7 @@ describe("the header of a report", () => {
     assert.equal(titleKindFromText("Clear Title"), "clean");
     assert.equal(titleKindFromText("Clean Title Front Line"), "clean");
     assert.equal(titleKindFromText("Sold"), "neutral");
+    assert.equal(titleKindFromText("Junk And Salvage"), "adverse");
     assert.equal(titleKindFromText("Salvage"), "adverse");
     assert.equal(titleKindFromText("Non-repairable"), "adverse");
     assert.equal(titleKindFromText("Total loss"), "adverse");
